@@ -25,6 +25,7 @@ file(GLOB MERL_VM_SOURCES "src/merl/*.c")
 file(GLOB VFS_SOURCES "src/vfs/*.c")
 file(GLOB SYSCALL_SOURCES "src/syscall/*.c")
 file(GLOB VIRTUALIZATION_SOURCES "src/virtualization/*.c")
+file(GLOB NETWORK_SOURCES "src/network/*.c")  # Add this line
 
 # Include the actual MERL shell sources but exclude merl_main.c
 file(GLOB MERL_SHELL_SOURCES "MERL/*.c")
@@ -42,6 +43,7 @@ include_directories(include/vfs)
 include_directories(include/syscall)
 include_directories(include/virtualization)
 include_directories(MERL)  # Add MERL directory
+include_directories(include/network)  # Add network include directory
 
 # Create executable with all sources
 add_executable(zora_vm 
@@ -56,6 +58,7 @@ add_executable(zora_vm
     ${VFS_SOURCES}              # Add VFS sources
     ${SYSCALL_SOURCES}          # Add syscall interception
     ${VIRTUALIZATION_SOURCES}   # Add virtualization layer
+    ${NETWORK_SOURCES}          # Add network sources
     ${MERL_SHELL_SOURCES}       # Add MERL shell sources (excluding merl_main.c)
     ${HEADERS}
     ${MERL_HEADERS}

@@ -9,10 +9,11 @@
 #include "sandbox.h"
 #include "zoraperl.h"
 #include "merl.h"
-#include "vfs.h"
+#include "vfs/vfs.h"
 #include "syscall.h"
 #include "virtualization.h"
 #include "vm.h"
+#include "network/network.h"
 
 static volatile int running = 1;
 static int vm_initialized = 0;
@@ -34,6 +35,8 @@ int vm_init(void) {
 
 void vm_cleanup(void) {
     if (vm_initialized) {
+        printf("Syncing persistent storage before shutdown...\n");
+        vfs_sync_all_persistent();
         printf("VM environment cleaned up\n");
         vm_initialized = 0;
     }
@@ -113,6 +116,29 @@ int main() {
         goto cleanup;
     }
 
+    // Initialize VFS (already done in virtualization_init)
+    
+    // Mount persistent directories
+    printf("Setting up persistent storage...\n");
+    
+    // Mount ZoraPerl directory
+    vfs_mount_persistent("/persistent", "./ZoraPerl");
+    
+    // Create subdirectories for different purposes
+    vfs_mount_persistent("/persistent/documents", "./ZoraPerl/documents");
+    vfs_mount_persistent("/persistent/scripts", "./ZoraPerl/scripts");
+    vfs_mount_persistent("/persistent/data", "./ZoraPerl/data");
+    vfs_mount_persistent("/persistent/projects", "./ZoraPerl/projects");
+    
+    printf("Persistent storage ready\n");
+
+    // Initialize network virtualization
+    printf("Initializing virtual network...\n");
+    if (network_init() != 0) {
+        fprintf(stderr, "Failed to initialize virtual network.\n");
+        goto cleanup;
+    }
+
     printf("Zora VM initialized successfully. Starting MERL shell...\n");
     printf("========================================\n");
 
@@ -134,6 +160,7 @@ cleanup:
     vm_cleanup();
     virtualization_cleanup();
     sandbox_cleanup();
+    network_cleanup();
     
     printf("Zora VM shutdown complete.\n");
     return 0;

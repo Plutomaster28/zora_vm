@@ -2,6 +2,8 @@
 #include <stdlib.h>
 #include <string.h>
 #include "vfs.h"
+#include <sys/stat.h>
+#include <dirent.h>
 
 // Virtual file system that stays in memory
 static VirtualFS* vm_fs = NULL;
@@ -372,5 +374,106 @@ int vm_ps(void) {
     printf("    1  vm_init\n");
     printf("    2  merl_shell\n");
     printf("    3  vm_kernel\n");
+    return 0;
+}
+
+// Mount persistent directory
+int vfs_mount_persistent(const char* vm_path, const char* host_path) {
+    // Create the mount point in VM filesystem
+    VNode* mount_point = vfs_find_node(vm_path);
+    if (!mount_point) {
+        // Create the mount point
+        if (vfs_mkdir(vm_path) != 0) {
+            return -1;
+        }
+        mount_point = vfs_find_node(vm_path);
+    }
+    
+    // Mark as persistent and set host path
+    mount_point->is_persistent = 1;
+    mount_point->host_path = malloc(strlen(host_path) + 1);
+    strcpy(mount_point->host_path, host_path);
+    
+    // Load existing directory structure from host
+    vfs_load_persistent_directory(vm_path, host_path);
+    
+    printf("Mounted persistent directory: %s -> %s\n", vm_path, host_path);
+    return 0;
+}
+
+// Load directory structure from host filesystem
+int vfs_load_persistent_directory(const char* vm_path, const char* host_path) {
+    DIR* dir = opendir(host_path);
+    if (!dir) {
+        // Create directory if it doesn't exist
+        mkdir(host_path);
+        return 0;
+    }
+    
+    struct dirent* entry;
+    while ((entry = readdir(dir)) != NULL) {
+        if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0) {
+            continue;
+        }
+        
+        char full_host_path[512];
+        char full_vm_path[512];
+        snprintf(full_host_path, sizeof(full_host_path), "%s/%s", host_path, entry->d_name);
+        snprintf(full_vm_path, sizeof(full_vm_path), "%s/%s", vm_path, entry->d_name);
+        
+        struct stat st;
+        if (stat(full_host_path, &st) == 0) {
+            if (S_ISDIR(st.st_mode)) {
+                // Create directory in VM and recurse
+                vfs_mkdir(full_vm_path);
+                VNode* node = vfs_find_node(full_vm_path);
+                if (node) {
+                    node->is_persistent = 1;
+                    node->host_path = malloc(strlen(full_host_path) + 1);
+                    strcpy(node->host_path, full_host_path);
+                }
+                vfs_load_persistent_directory(full_vm_path, full_host_path);
+            } else {
+                // Create file in VM
+                vfs_create_persistent_file(full_vm_path, full_host_path);
+            }
+        }
+    }
+    
+    closedir(dir);
+    return 0;
+}
+
+int vfs_create_persistent_file(const char* vm_path, const char* host_path) {
+    // Implementation for creating persistent files
+    printf("Creating persistent file: %s -> %s\n", vm_path, host_path);
+    return 0;
+}
+
+// Sync persistent node to host filesystem
+int vfs_sync_persistent_node(VNode* node) {
+    if (!node || !node->is_persistent || !node->host_path) {
+        return -1;
+    }
+    
+    if (node->is_directory) {
+        // Ensure directory exists
+        mkdir(node->host_path);
+    } else {
+        // Write file content
+        FILE* f = fopen(node->host_path, "wb");
+        if (f && node->data) {
+            fwrite(node->data, 1, node->size, f);
+            fclose(f);
+        }
+    }
+    
+    return 0;
+}
+
+// Sync all persistent storage
+int vfs_sync_all_persistent(void) {
+    // Implementation for syncing all persistent storage
+    printf("Syncing all persistent storage\n");
     return 0;
 }

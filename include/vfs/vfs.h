@@ -9,6 +9,8 @@
 typedef struct VNode {
     char name[256];
     int is_directory;
+    int is_persistent;        // NEW: Flag for persistent storage
+    char* host_path;          // NEW: Real filesystem path
     size_t size;
     void* data;
     struct VNode* parent;
@@ -30,6 +32,13 @@ int vfs_mkdir(const char* path);
 int vfs_rmdir(const char* path);
 int vfs_create_file(const char* path);
 int vfs_delete_file(const char* path);
+
+// Add persistent filesystem functions
+int vfs_mount_persistent(const char* vm_path, const char* host_path);
+int vfs_sync_persistent_node(VNode* node);
+int vfs_load_persistent_directory(const char* vm_path, const char* host_path);
+int vfs_create_persistent_file(const char* vm_path, const char* host_path);
+int vfs_sync_all_persistent(void);
 
 // Virtual system call replacements
 char* vm_getcwd(void);

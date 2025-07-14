@@ -10,11 +10,27 @@
 #include "tetra.h"
 #include "color-and-test.h"
 #include "config.h"
+#include "network/network.h" // Added include for network functions
+#include "vfs/vfs.h"
 
 // Function prototypes
 void handle_command(char *command);
 void man_command(int argc, char **argv);
 void help_command(int argc, char **argv);
+void save_command(int argc, char* argv[]);
+void load_command(int argc, char* argv[]);
+void mount_command(int argc, char* argv[]);
+void sync_command(int argc, char* argv[]);
+void persistent_ls_command(int argc, char* argv[]);
+void ifconfig_command(int argc, char* argv[]);
+void ping_command(int argc, char* argv[]);
+void netstat_command(int argc, char* argv[]);
+void nslookup_command(int argc, char* argv[]);
+void telnet_command(int argc, char* argv[]);
+void wget_command(int argc, char* argv[]);
+void curl_command(int argc, char* argv[]);
+void ssh_command(int argc, char* argv[]);
+void iptables_command(int argc, char* argv[]);
 
 // Start the shell loop
 void start_shell() {
@@ -463,7 +479,23 @@ Command command_table[] = {
     {"vm-shutdown", vm_shutdown_command, "Shuts down the Zora VM."},
     {"vmstat", vm_status_command, "Shows virtual machine status."},
     {"reboot", vm_reboot_command, "Reboots the virtual machine."},
-    {"shutdown", vm_shutdown_command, "Shuts down the virtual machine."}
+    {"shutdown", vm_shutdown_command, "Shuts down the virtual machine."},
+    {"save", save_command, "Save file to persistent storage"},
+    {"load", load_command, "Load directory from persistent storage"},
+    {"mount", mount_command, "Mount host directory to VM path"},
+    {"sync", sync_command, "Sync all persistent storage"},
+    {"pls", persistent_ls_command, "List persistent storage contents"},
+    {"ifconfig", ifconfig_command, "Configure network interface"},
+    {"ping", ping_command, "Send ICMP ping packets"},
+    {"netstat", netstat_command, "Display network connections"},
+    {"nslookup", nslookup_command, "Query DNS servers"},
+    {"telnet", telnet_command, "Connect to remote host"},
+    {"wget", wget_command, "Download files from web"},
+    {"curl", curl_command, "Transfer data from servers"},
+    {"ssh", ssh_command, "Secure shell connection"},
+    {"iptables", iptables_command, "Configure firewall rules"},
+    
+    {NULL, NULL, NULL}
 };
 const int command_table_size = sizeof(command_table) / sizeof(Command);
 
@@ -510,5 +542,249 @@ void help_command(int argc, char **argv) {
     printf("Available commands:\n");
     for (int i = 0; i < command_table_size; i++) {
         printf("  %s - %s\n", command_table[i].name, command_table[i].description);
+    }
+}
+
+void save_command(int argc, char* argv[]) {
+    if (argc < 2) {
+        printf("Usage: save <file>\n");
+        return;
+    }
+    printf("Saving file: %s\n", argv[1]);
+}
+
+void load_command(int argc, char* argv[]) {
+    if (argc < 2) {
+        printf("Usage: load <directory>\n");
+        return;
+    }
+    printf("Loading directory: %s\n", argv[1]);
+}
+
+void mount_command(int argc, char* argv[]) {
+    if (argc < 3) {
+        printf("Usage: mount <vm_path> <host_path>\n");
+        return;
+    }
+    printf("Mounting %s -> %s\n", argv[1], argv[2]);
+}
+
+void sync_command(int argc, char* argv[]) {
+    printf("Syncing all persistent storage...\n");
+    
+    // Sync all persistent nodes
+    vfs_sync_all_persistent();
+    
+    printf("Sync complete\n");
+}
+
+void persistent_ls_command(int argc, char* argv[]) {
+    printf("Persistent storage mappings:\n");
+    printf("/persistent/documents -> ZoraPerl/documents\n");
+    printf("/persistent/scripts -> ZoraPerl/scripts\n");
+}
+
+void ifconfig_command(int argc, char* argv[]) {
+    if (argc == 1) {
+        network_show_interfaces();
+        return;
+    }
+    
+    if (argc >= 2) {
+        char* iface = argv[1];
+        if (strcmp(iface, "up") == 0) {
+            network_interface_up("veth0");
+        } else if (strcmp(iface, "down") == 0) {
+            network_interface_down("veth0");
+        }
+    }
+    
+    if (argc >= 4) {
+        char* iface = argv[1];
+        char* ip = argv[2];
+        char* netmask = argv[3];
+        network_set_ip(iface, ip, netmask);
+    }
+}
+
+void ping_command(int argc, char **argv) {
+    if (argc < 2) {
+        printf("Usage: ping <host>\n");
+        return;
+    }
+    
+    char* target = argv[1];
+    network_simulate_ping(target);
+}
+
+void netstat_command(int argc, char **argv) {
+    if (argc == 1) {
+        network_show_connections();
+    } else if (argc == 2) {
+        if (strcmp(argv[1], "-r") == 0) {
+            network_show_routes();
+        } else if (strcmp(argv[1], "-i") == 0) {
+            network_show_interfaces();
+        } else {
+            printf("Usage: netstat [-r|-i]\n");
+        }
+    }
+}
+
+void nslookup_command(int argc, char **argv) {
+    if (argc < 2) {
+        printf("Usage: nslookup <hostname>\n");
+        return;
+    }
+    
+    char* hostname = argv[1];
+    
+    // Simulate DNS lookup
+    printf("Server: %s\n", "8.8.8.8");
+    printf("Address: %s#53\n", "8.8.8.8");
+    printf("\n");
+    
+    // Simulate response
+    printf("Non-authoritative answer:\n");
+    printf("Name: %s\n", hostname);
+    
+    // Generate fake IP addresses for common domains
+    if (strstr(hostname, "google.com")) {
+        printf("Address: 142.250.191.14\n");
+    } else if (strstr(hostname, "github.com")) {
+        printf("Address: 140.82.112.4\n");
+    } else if (strstr(hostname, "stackoverflow.com")) {
+        printf("Address: 151.101.1.69\n");
+    } else {
+        // Generate random IP
+        printf("Address: %d.%d.%d.%d\n", 
+               (rand() % 223) + 1, rand() % 256, rand() % 256, rand() % 256);
+    }
+}
+
+void telnet_command(int argc, char **argv) {
+    if (argc < 3) {
+        printf("Usage: telnet <host> <port>\n");
+        return;
+    }
+    
+    char* host = argv[1];
+    int port = atoi(argv[2]);
+    
+    printf("Trying %s...\n", host);
+    printf("Connected to %s.\n", host);
+    printf("Escape character is '^]'.\n");
+    
+    // Simulate connection
+    network_simulate_connect(host, port, 1); // TCP
+    
+    printf("Connection closed by foreign host.\n");
+}
+
+void wget_command(int argc, char **argv) {
+    if (argc < 2) {
+        printf("Usage: wget <url>\n");
+        return;
+    }
+    
+    char* url = argv[1];
+    
+    printf("--2024-01-01 12:00:00--  %s\n", url);
+    printf("Resolving host... ");
+    
+    // Simulate DNS resolution
+    printf("192.168.1.100\n");
+    printf("Connecting to host|192.168.1.100|:80... connected.\n");
+    printf("HTTP request sent, awaiting response... 200 OK\n");
+    printf("Length: 1024 (1.0K) [text/html]\n");
+    printf("Saving to: 'index.html'\n");
+    printf("\n");
+    printf("index.html      100%%[===================>]   1.00K  --.-KB/s    in 0s\n");
+    printf("\n");
+    printf("2024-01-01 12:00:01 (1.00 MB/s) - 'index.html' saved [1024/1024]\n");
+    
+    // Create simulated downloaded file in VFS
+    vfs_create_file("index.html");
+    VNode* node = vfs_find_node("index.html");
+    if (node) {
+        const char* content = "<html><body><h1>Simulated Web Page</h1></body></html>";
+        node->data = malloc(strlen(content) + 1);
+        strcpy(node->data, content);
+        node->size = strlen(content);
+    }
+}
+
+void curl_command(int argc, char **argv) {
+    if (argc < 2) {
+        printf("Usage: curl <url>\n");
+        return;
+    }
+    
+    char* url = argv[1];
+    
+    printf("Fetching %s...\n", url);
+    
+    // Simulate HTTP response
+    printf("HTTP/1.1 200 OK\n");
+    printf("Content-Type: text/html\n");
+    printf("Content-Length: 1024\n");
+    printf("\n");
+    printf("<html>\n");
+    printf("<head><title>Simulated Response</title></head>\n");
+    printf("<body>\n");
+    printf("<h1>Hello from Virtual Network!</h1>\n");
+    printf("<p>This is a simulated HTTP response from %s</p>\n", url);
+    printf("</body>\n");
+    printf("</html>\n");
+}
+
+void ssh_command(int argc, char **argv) {
+    if (argc < 2) {
+        printf("Usage: ssh <user@host>\n");
+        return;
+    }
+    
+    char* target = argv[1];
+    
+    printf("Connecting to %s...\n", target);
+    printf("The authenticity of host cannot be established.\n");
+    printf("Are you sure you want to continue connecting (yes/no)? ");
+    
+    char response[10];
+    if (fgets(response, sizeof(response), stdin) && 
+        strncmp(response, "yes", 3) == 0) {
+        printf("Warning: Permanently added to the list of known hosts.\n");
+        printf("Connected to virtual host.\n");
+        printf("This is a simulated SSH connection.\n");
+        printf("Connection closed.\n");
+    } else {
+        printf("Connection aborted.\n");
+    }
+}
+
+void iptables_command(int argc, char **argv) {
+    if (argc < 2) {
+        printf("Usage: iptables [-L|-A|-D] [options]\n");
+        return;
+    }
+    
+    if (strcmp(argv[1], "-L") == 0) {
+        // List firewall rules
+        printf("Chain INPUT (policy ACCEPT)\n");
+        printf("target     prot opt source               destination\n");
+        printf("ACCEPT     all  --  192.168.100.0/24    anywhere\n");
+        printf("\n");
+        printf("Chain FORWARD (policy ACCEPT)\n");
+        printf("target     prot opt source               destination\n");
+        printf("\n");
+        printf("Chain OUTPUT (policy ACCEPT)\n");
+        printf("target     prot opt source               destination\n");
+        printf("ACCEPT     all  --  anywhere             anywhere\n");
+    } else if (strcmp(argv[1], "-A") == 0) {
+        printf("Virtual firewall rule added\n");
+    } else if (strcmp(argv[1], "-D") == 0) {
+        printf("Virtual firewall rule deleted\n");
+    } else {
+        printf("Usage: iptables [-L|-A|-D] [options]\n");
     }
 }

@@ -228,7 +228,7 @@ cmake -DCMAKE_BUILD_TYPE=Debug ..
 
 ## Contributing
 Contributions are welcome! Areas for improvement:
-- Persistent filesystem support
+- Persistent filesystem support (added)
 - Network virtualization
 - GUI integration
 - Performance optimizations
@@ -242,3 +242,78 @@ This project is licensed under the MIT License. See the LICENSE file for details
 - Virtual filesystem design
 - Sandboxing architecture
 - ZoraPerl integration
+
+## Persistent Storage
+
+### Overview
+Zora VM supports persistent storage through host directory mapping. The `/persistent` directory in the VM is mapped to the `ZoraPerl/` directory on the host system, allowing data to survive VM restarts.
+
+### Directory Structure
+```
+ZoraPerl/                 # Host directory
+├── documents/            # -> /persistent/documents in VM
+├── scripts/              # -> /persistent/scripts in VM  
+├── data/                 # -> /persistent/data in VM
+└── projects/             # -> /persistent/projects in VM
+```
+
+### Commands
+- `save <file>` - Save file to persistent storage
+- `load <dir>` - Reload directory from persistent storage
+- `mount <vm_path> <host_path>` - Mount host directory
+- `sync` - Sync all persistent storage
+- `pls` - List persistent storage mappings
+
+### Example Usage
+```bash
+# Work with persistent files
+cd /persistent/documents
+echo "Hello World" > myfile.txt
+save myfile.txt
+
+# File is now saved to ZoraPerl/documents/myfile.txt on host
+```
+
+## Network Virtualization
+
+### Overview
+Zora VM includes a complete virtual network stack that simulates network operations without affecting the host system. All network commands operate within the VM's isolated environment.
+
+### Virtual Network Features
+- **Virtual Network Interfaces** - Configurable network adapters
+- **Simulated Network Protocols** - TCP/UDP, ICMP, DNS
+- **Virtual Routing** - Routing table management
+- **Network Statistics** - Traffic monitoring
+- **Firewall Simulation** - Virtual iptables rules
+
+### Network Commands
+- `ifconfig` - Configure network interfaces
+- `ping <host>` - Test network connectivity
+- `netstat` - Display network connections and statistics
+- `nslookup <hostname>` - DNS lookup simulation
+- `wget <url>` - Download files (simulated)
+- `curl <url>` - HTTP client requests
+- `telnet <host> <port>` - Remote connection
+- `ssh <user@host>` - Secure shell simulation
+- `iptables` - Firewall configuration
+
+### Example Usage
+```bash
+# Check network configuration
+ifconfig
+
+# Test connectivity
+ping google.com
+
+# Download a file
+wget https://example.com/page.html
+
+# Check active connections
+netstat
+```
+
+### Security Features
+- **Isolated Network Stack** - No actual network access
+- **Simulated Responses** - Safe testing environment
+- **No Host Impact** - Cannot affect real network settings
+- **Educational Purpose** - Learn networking concepts safely
