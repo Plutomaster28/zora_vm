@@ -46,7 +46,7 @@ int vm_is_running(void) {
     return vm_initialized;
 }
 
-int main() {
+int main(int argc, char* argv[]) {
     // Set up signal handlers
     signal(SIGINT, signal_handler);
     signal(SIGTERM, signal_handler);
@@ -116,19 +116,39 @@ int main() {
         goto cleanup;
     }
 
-    // Initialize VFS (already done in virtualization_init)
+    // Initialize VFS
+    printf("Initializing VFS...\n");
+    if (vfs_init() != 0) {
+        fprintf(stderr, "Failed to initialize VFS\n");
+        goto cleanup;
+    }
     
-    // Mount persistent directories
+    // Ensure the entire ZoraPerl directory structure exists
+    printf("Ensuring ZoraPerl directory structure exists...\n");
+    create_directory_recursive("../ZoraPerl");
+    create_directory_recursive("../ZoraPerl/documents");
+    create_directory_recursive("../ZoraPerl/scripts");
+    create_directory_recursive("../ZoraPerl/data");
+    create_directory_recursive("../ZoraPerl/projects");
+    
+    // Initialize persistent directories
     printf("Setting up persistent storage...\n");
     
+    // Create the basic directory structure
+    vfs_create_directory("/persistent");
+    vfs_create_directory("/persistent/documents");
+    vfs_create_directory("/persistent/scripts");
+    vfs_create_directory("/persistent/data");
+    vfs_create_directory("/persistent/projects");
+    
     // Mount ZoraPerl directory
-    vfs_mount_persistent("/persistent", "./ZoraPerl");
+    vfs_mount_persistent("/persistent", "../ZoraPerl");
     
     // Create subdirectories for different purposes
-    vfs_mount_persistent("/persistent/documents", "./ZoraPerl/documents");
-    vfs_mount_persistent("/persistent/scripts", "./ZoraPerl/scripts");
-    vfs_mount_persistent("/persistent/data", "./ZoraPerl/data");
-    vfs_mount_persistent("/persistent/projects", "./ZoraPerl/projects");
+    vfs_mount_persistent("/persistent/documents", "../ZoraPerl/documents");
+    vfs_mount_persistent("/persistent/scripts", "../ZoraPerl/scripts");
+    vfs_mount_persistent("/persistent/data", "../ZoraPerl/data");
+    vfs_mount_persistent("/persistent/projects", "../ZoraPerl/projects");
     
     printf("Persistent storage ready\n");
 

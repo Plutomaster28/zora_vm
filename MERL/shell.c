@@ -31,6 +31,8 @@ void wget_command(int argc, char* argv[]);
 void curl_command(int argc, char* argv[]);
 void ssh_command(int argc, char* argv[]);
 void iptables_command(int argc, char* argv[]);
+void test_vfs_command(int argc, char* argv[]);
+void debug_vfs_command(int argc, char* argv[]);
 
 // Start the shell loop
 void start_shell() {
@@ -73,12 +75,45 @@ void sysinfo_command(int argc, char **argv) {
 }
 
 void pwd_command(int argc, char **argv) {
-    char* cwd = vm_getcwd(); // Instead of _getcwd()
-    printf("Current Directory: %s\n", cwd);
+    char* cwd = vfs_getcwd(); // Use VFS instead of system getcwd
+    if (cwd) {
+        printf("Current Directory: %s\n", cwd);
+    } else {
+        printf("Current Directory: /\n");
+    }
 }
 
 void ls_command(int argc, char **argv) {
-    vm_system("ls"); // Instead of system("dir")
+    char* current_dir = vfs_getcwd();
+    printf("Contents of %s:\n", current_dir);
+    
+    // Get the current directory node
+    VNode* dir_node = vfs_find_node(current_dir);
+    if (!dir_node) {
+        printf("Error: Cannot access current directory\n");
+        return;
+    }
+    
+    if (!dir_node->is_directory) {
+        printf("Error: Not a directory\n");
+        return;
+    }
+    
+    // List children of current directory
+    VNode* child = dir_node->children;
+    if (!child) {
+        printf("(empty directory)\n");
+        return;
+    }
+    
+    while (child) {
+        if (child->is_directory) {
+            printf("%-20s <DIR>\n", child->name);
+        } else {
+            printf("%-20s %zu bytes\n", child->name, child->size);
+        }
+        child = child->next;
+    }
 }
 
 void cd_command(int argc, char **argv) {
@@ -86,7 +121,9 @@ void cd_command(int argc, char **argv) {
         printf("Usage: cd <directory>\n");
         return;
     }
-    if (vm_chdir(argv[1]) == 0) { // Instead of _chdir()
+    
+    // Use VFS chdir instead of system chdir
+    if (vfs_chdir(argv[1]) == 0) {
         printf("Changed directory to: %s\n", argv[1]);
     } else {
         printf("cd: %s: No such directory\n", argv[1]);
@@ -494,6 +531,8 @@ Command command_table[] = {
     {"curl", curl_command, "Transfer data from servers"},
     {"ssh", ssh_command, "Secure shell connection"},
     {"iptables", iptables_command, "Configure firewall rules"},
+    {"testvfs", test_vfs_command, "Test VFS functionality"},
+    {"debugvfs", debug_vfs_command, "Debug VFS structure"},
     
     {NULL, NULL, NULL}
 };
@@ -786,5 +825,47 @@ void iptables_command(int argc, char **argv) {
         printf("Virtual firewall rule deleted\n");
     } else {
         printf("Usage: iptables [-L|-A|-D] [options]\n");
+    }
+}
+
+void test_vfs_command(int argc, char* argv[]) {
+    printf("=== VFS Test ===\n");
+    printf("Current directory: %s\n", vfs_getcwd());
+    printf("Testing cd to /persistent\n");
+    if (vfs_chdir("/persistent") == 0) {
+        printf("Successfully changed to: %s\n", vfs_getcwd());
+        printf("Testing cd to documents\n");
+        if (vfs_chdir("documents") == 0) {
+            printf("Successfully changed to: %s\n", vfs_getcwd());
+        } else {
+            printf("Failed to change to documents\n");
+        }
+    } else {
+        printf("Failed to change directory to /persistent\n");
+    }
+}
+
+void debug_vfs_command(int argc, char* argv[]) {
+    printf("=== VFS Debug Info ===\n");
+    printf("Current directory: %s\n", vfs_getcwd());
+    
+    VNode* current = vfs_find_node(vfs_getcwd());
+    if (current) {
+        printf("Current node exists: %s (is_directory: %d)\n", 
+               current->name, current->is_directory);
+        
+        if (current->children) {
+            printf("Children:\n");
+            VNode* child = current->children;
+            while (child) {
+                printf("  - %s (%s)\n", child->name, 
+                       child->is_directory ? "DIR" : "FILE");
+                child = child->next;
+            }
+        } else {
+            printf("No children found\n");
+        }
+    } else {
+        printf("Current node not found!\n");
     }
 }

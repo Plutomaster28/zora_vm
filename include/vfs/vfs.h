@@ -9,10 +9,10 @@
 typedef struct VNode {
     char name[256];
     int is_directory;
-    int is_persistent;        // NEW: Flag for persistent storage
-    char* host_path;          // NEW: Real filesystem path
+    int is_persistent;      // Add this field
     size_t size;
     void* data;
+    char* host_path;        // Add this field for persistent file mapping
     struct VNode* parent;
     struct VNode* children;
     struct VNode* next;
@@ -54,6 +54,12 @@ int vm_ls(void);
 int vm_clear(void);
 int vm_pwd(void);
 int vm_ps(void);  // Add this declaration
+
+// Add these function declarations:
+int vfs_chdir(const char* path);
+char* vfs_getcwd(void);
+int vfs_create_directory(const char* path);
+void vfs_initialize_persistent_directories(void);
 
 // Getter for VFS instance
 VirtualFS* vfs_get_instance(void);
