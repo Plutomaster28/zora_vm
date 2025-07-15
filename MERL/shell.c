@@ -12,6 +12,7 @@
 #include "config.h"
 #include "network/network.h" // Added include for network functions
 #include "vfs/vfs.h"
+#include "lua/lua_vm.h" // Include Lua VM header
 
 // Function prototypes
 void handle_command(char *command);
@@ -33,6 +34,90 @@ void ssh_command(int argc, char* argv[]);
 void iptables_command(int argc, char* argv[]);
 void test_vfs_command(int argc, char* argv[]);
 void debug_vfs_command(int argc, char* argv[]);
+void lua_command(int argc, char **argv);
+void luacode_command(int argc, char **argv);
+
+#ifdef PYTHON_SCRIPTING
+#include "python/python_vm.h"
+
+void python_command(int argc, char **argv) {
+    if (argc < 2) {
+        printf("Usage: python <script.py>\n");
+        return;
+    }
+    
+    char script_path[256];
+    if (argv[1][0] == '/') {
+        strcpy(script_path, argv[1]);
+    } else {
+        snprintf(script_path, sizeof(script_path), "/persistent/scripts/%s", argv[1]);
+    }
+    
+    printf("Executing Python script: %s\n", script_path);
+    if (python_vm_load_script(script_path) != 0) {
+        printf("Failed to execute Python script\n");
+    }
+}
+
+void pycode_command(int argc, char **argv) {
+    if (argc < 2) {
+        printf("Usage: pycode <python_code>\n");
+        return;
+    }
+    
+    char code[1024] = {0};
+    for (int i = 1; i < argc; i++) {
+        strcat(code, argv[i]);
+        if (i < argc - 1) strcat(code, " ");
+    }
+    
+    printf("Executing Python code: %s\n", code);
+    if (python_vm_execute_string(code) != 0) {
+        printf("Failed to execute Python code\n");
+    }
+}
+#endif
+
+#ifdef PERL_SCRIPTING
+#include "perl/perl_vm.h"
+
+void perl_command(int argc, char **argv) {
+    if (argc < 2) {
+        printf("Usage: perl <script.pl>\n");
+        return;
+    }
+    
+    char script_path[256];
+    if (argv[1][0] == '/') {
+        strcpy(script_path, argv[1]);
+    } else {
+        snprintf(script_path, sizeof(script_path), "/persistent/scripts/%s", argv[1]);
+    }
+    
+    printf("Executing Perl script: %s\n", script_path);
+    if (perl_vm_load_script(script_path) != 0) {
+        printf("Failed to execute Perl script\n");
+    }
+}
+
+void plcode_command(int argc, char **argv) {
+    if (argc < 2) {
+        printf("Usage: plcode <perl_code>\n");
+        return;
+    }
+    
+    char code[1024] = {0};
+    for (int i = 1; i < argc; i++) {
+        strcat(code, argv[i]);
+        if (i < argc - 1) strcat(code, " ");
+    }
+    
+    printf("Executing Perl code: %s\n", code);
+    if (perl_vm_execute_string(code) != 0) {
+        printf("Failed to execute Perl code\n");
+    }
+}
+#endif
 
 // Start the shell loop
 void start_shell() {
@@ -533,7 +618,18 @@ Command command_table[] = {
     {"iptables", iptables_command, "Configure firewall rules"},
     {"testvfs", test_vfs_command, "Test VFS functionality"},
     {"debugvfs", debug_vfs_command, "Debug VFS structure"},
+    {"lua", lua_command, "Execute Lua script from /persistent/scripts/"},
+    {"luacode", luacode_command, "Execute Lua code directly."},
     
+    #ifdef PYTHON_SCRIPTING
+    {"python", python_command, "Execute Python script from /persistent/scripts/"},
+    {"pycode", pycode_command, "Execute Python code directly"},
+    #endif
+    #ifdef PERL_SCRIPTING
+    {"perl", perl_command, "Execute Perl script from /persistent/scripts/"},
+    {"plcode", plcode_command, "Execute Perl code directly"},
+    #endif
+
     {NULL, NULL, NULL}
 };
 const int command_table_size = sizeof(command_table) / sizeof(Command);
@@ -867,5 +963,43 @@ void debug_vfs_command(int argc, char* argv[]) {
         }
     } else {
         printf("Current node not found!\n");
+    }
+}
+
+void lua_command(int argc, char **argv) {
+    if (argc < 2) {
+        printf("Usage: lua <script.lua>\n");
+        return;
+    }
+    
+    char script_path[256];
+    if (argv[1][0] == '/') {
+        strcpy(script_path, argv[1]);
+    } else {
+        snprintf(script_path, sizeof(script_path), "/persistent/scripts/%s", argv[1]);
+    }
+    
+    printf("Executing Lua script: %s\n", script_path);
+    if (lua_vm_load_script(script_path) != 0) {
+        printf("Failed to execute script\n");
+    }
+}
+
+void luacode_command(int argc, char **argv) {
+    if (argc < 2) {
+        printf("Usage: luacode <lua_code>\n");
+        return;
+    }
+    
+    // Combine all arguments into one string
+    char code[1024] = {0};
+    for (int i = 1; i < argc; i++) {
+        strcat(code, argv[i]);
+        if (i < argc - 1) strcat(code, " ");
+    }
+    
+    printf("Executing Lua code: %s\n", code);
+    if (lua_vm_execute_string(code) != 0) {
+        printf("Failed to execute Lua code\n");
     }
 }

@@ -14,6 +14,14 @@
 #include "virtualization.h"
 #include "vm.h"
 #include "network/network.h"
+#include "lua/lua_vm.h"
+
+#ifdef PYTHON_SCRIPTING
+#include "python/python_vm.h"
+#endif
+#ifdef PERL_SCRIPTING
+#include "perl/perl_vm.h"
+#endif
 
 static volatile int running = 1;
 static int vm_initialized = 0;
@@ -159,6 +167,29 @@ int main(int argc, char* argv[]) {
         goto cleanup;
     }
 
+    // Initialize Lua scripting engine
+    printf("Initializing Lua scripting engine...\n");
+    if (lua_vm_init() != 0) {
+        fprintf(stderr, "Failed to initialize Lua VM\n");
+        goto cleanup;
+    }
+
+#ifdef PYTHON_SCRIPTING
+    printf("Initializing Python scripting engine...\n");
+    if (python_vm_init() != 0) {
+        fprintf(stderr, "Failed to initialize Python VM\n");
+        goto cleanup;
+    }
+#endif
+
+#ifdef PERL_SCRIPTING
+    printf("Initializing Perl scripting engine...\n");
+    if (perl_vm_init() != 0) {
+        fprintf(stderr, "Failed to initialize Perl VM\n");
+        goto cleanup;
+    }
+#endif
+
     printf("Zora VM initialized successfully. Starting MERL shell...\n");
     printf("========================================\n");
 
@@ -181,6 +212,15 @@ cleanup:
     virtualization_cleanup();
     sandbox_cleanup();
     network_cleanup();
+    lua_vm_cleanup();
+    vfs_cleanup();
+    
+#ifdef PYTHON_SCRIPTING
+    python_vm_cleanup();
+#endif
+#ifdef PERL_SCRIPTING
+    perl_vm_cleanup();
+#endif
     
     printf("Zora VM shutdown complete.\n");
     return 0;

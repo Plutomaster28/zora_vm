@@ -60,6 +60,7 @@ int vfs_chdir(const char* path);
 char* vfs_getcwd(void);
 int vfs_create_directory(const char* path);
 void vfs_initialize_persistent_directories(void);
+int create_directory_recursive(const char* path); // Add this line
 
 // Getter for VFS instance
 VirtualFS* vfs_get_instance(void);
