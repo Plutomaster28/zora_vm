@@ -81,8 +81,15 @@ include_directories(${LUA_INCLUDE_DIRS})  # Add Lua system includes
 include_directories(include/python)
 include_directories(include/perl)
 include_directories(${PYTHON_INCLUDE_DIRS})
+include_directories(include/binary)  # Add binary include directory
 
-# Create executable with all sources
+# Add binary execution sources
+file(GLOB BINARY_SOURCES "src/binary/*.c")
+
+# Include binary directory
+include_directories(include/binary)
+
+# Add to executable
 add_executable(zora_vm 
     ${MAIN_SOURCES}
     ${CPU_SOURCES}
@@ -96,9 +103,10 @@ add_executable(zora_vm
     ${SYSCALL_SOURCES}
     ${VIRTUALIZATION_SOURCES}
     ${NETWORK_SOURCES}
-    ${LUA_SOURCES}              # Add Lua sources
-    ${PYTHON_SOURCES}      # Add Python sources
-    ${PERL_SOURCES}        # Add Perl sources
+    ${LUA_SOURCES}
+    ${PYTHON_SOURCES}
+    ${PERL_SOURCES}
+    ${BINARY_SOURCES}  # Add this line
     ${MERL_SHELL_SOURCES}
     ${HEADERS}
     ${MERL_HEADERS}

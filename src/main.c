@@ -15,6 +15,7 @@
 #include "vm.h"
 #include "network/network.h"
 #include "lua/lua_vm.h"
+#include "binary/binary_executor.h"
 
 #ifdef PYTHON_SCRIPTING
 #include "python/python_vm.h"
@@ -190,6 +191,12 @@ int main(int argc, char* argv[]) {
     }
 #endif
 
+    printf("Initializing binary executor...\n");
+    if (binary_executor_init() != 0) {
+        fprintf(stderr, "Failed to initialize binary executor\n");
+        goto cleanup;
+    }
+
     printf("Zora VM initialized successfully. Starting MERL shell...\n");
     printf("========================================\n");
 
@@ -214,6 +221,7 @@ cleanup:
     network_cleanup();
     lua_vm_cleanup();
     vfs_cleanup();
+    binary_executor_cleanup();
     
 #ifdef PYTHON_SCRIPTING
     python_vm_cleanup();
