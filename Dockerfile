@@ -23,6 +23,9 @@ RUN apt-get update && apt-get install -y \
     perl \
     # Networking dependencies
     libssl-dev \
+    # Additional libraries that might be needed
+    libreadline-dev \
+    zlib1g-dev \
     && rm -rf /var/lib/apt/lists/*
 
 # Create build directory
@@ -31,17 +34,27 @@ WORKDIR /build
 # Copy source code
 COPY . .
 
-# Build Zora VM with maximum optimizations
-RUN echo "Building Zora VM with Meisei Virtual Silicon..." && \
+# Debug: Show what we have
+RUN echo "Checking source files..." && \
+    ls -la && \
+    echo "CMakeLists.txt content:" && \
+    head -20 CMakeLists.txt || echo "No CMakeLists.txt found"
+
+# Configure and build with error handling
+RUN echo "Configuring Zora VM..." && \
     cmake -DCMAKE_BUILD_TYPE=Release \
-          -DENABLE_MEISEI_PGO=OFF \
-          -DCMAKE_C_FLAGS="-O3 -march=x86-64 -mtune=generic" \
+          -DCMAKE_C_FLAGS="-O2" \
+          -DLUA_SCRIPTING=ON \
+          -DPYTHON_SCRIPTING=ON \
+          -DPERL_SCRIPTING=ON \
           . && \
-    ninja -v
+    echo "Building Zora VM..." && \
+    ninja -v || (echo "Build failed, showing error details:" && cat CMakeFiles/CMakeError.log 2>/dev/null || echo "No error log found" && exit 1)
 
 # Verify the build worked
 RUN echo "Build verification..." && \
     ls -la zora_vm* && \
+    file zora_vm && \
     ldd zora_vm || true
 
 # Runtime stage - minimal image for distribution
@@ -66,16 +79,19 @@ RUN apt-get update && apt-get install -y \
     curl \
     wget \
     nano \
+    # Additional runtime libraries
+    libreadline8 \
     && rm -rf /var/lib/apt/lists/* \
     && apt-get clean
 
 # Create zora user for security (don't run as root)
-RUN useradd -m -s /bin/bash -u 1000 zora && \
-    echo "zora ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers
+RUN useradd -m -s /bin/bash -u 1000 zora
 
 # Copy the built VM from builder stage
 COPY --from=builder /build/zora_vm /usr/local/bin/zora_vm
-COPY --from=builder /build/include /usr/local/include/zora/
+
+# Make sure it's executable
+RUN chmod +x /usr/local/bin/zora_vm
 
 # Create VM directory structure
 RUN mkdir -p /home/zora/ZoraPerl/{documents,scripts,data,projects} && \
@@ -105,20 +121,18 @@ RUN echo '#!/bin/bash' > /home/zora/welcome.sh && \
     echo 'echo "  lua ZoraPerl/scripts/hello.lua"' >> /home/zora/welcome.sh && \
     echo 'echo "  python ZoraPerl/scripts/hello.py"' >> /home/zora/welcome.sh && \
     echo 'echo "  perl ZoraPerl/scripts/hello.pl"' >> /home/zora/welcome.sh && \
-    echo 'echo "  network show interfaces"' >> /home/zora/welcome.sh && \
     echo 'echo "  help"' >> /home/zora/welcome.sh && \
     echo 'echo ""' >> /home/zora/welcome.sh && \
     chmod +x /home/zora/welcome.sh
 
 # Health check to verify VM is working
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-    CMD echo "help" | timeout 5 zora_vm --batch-mode 2>/dev/null || exit 1
+    CMD echo "test" | timeout 5 zora_vm --batch-mode 2>/dev/null || exit 1
 
 # Labels for metadata
-LABEL maintainer="theni" \
+LABEL maintainer="plutomaster28" \
       description="Zora VM - Advanced Virtual Machine with Meisei Virtual Silicon" \
-      version="1.0" \
-      architecture="x86_64"
+      version="1.0"
 
 # Default command - start Zora VM
 CMD ["/bin/bash", "-c", "/home/zora/welcome.sh && exec zora_vm"]

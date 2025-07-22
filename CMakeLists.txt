@@ -219,3 +219,25 @@ message(STATUS "All scripts (Lua/Python/Perl) will automatically be accelerated"
 message(STATUS "No user intervention required - acceleration is transparent")
 message(STATUS "Expected performance: 700%+ faster script execution")
 message(STATUS "===============================================")
+
+# Add Docker-friendly settings
+if(DEFINED ENV{DOCKER_BUILD})
+    message(STATUS "Building in Docker environment")
+    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fPIC")
+endif()
+
+# Make sure we find Lua properly in Ubuntu
+find_package(PkgConfig QUIET)
+if(PkgConfig_FOUND)
+    pkg_check_modules(LUA lua5.4 QUIET)
+    if(NOT LUA_FOUND)
+        pkg_check_modules(LUA lua QUIET)
+    endif()
+endif()
+
+# Fallback to find_package if pkg-config fails
+if(NOT LUA_FOUND)
+    find_package(Lua REQUIRED)
+    set(LUA_LIBRARIES ${LUA_LIBRARIES})
+    set(LUA_INCLUDE_DIRS ${LUA_INCLUDE_DIR})
+endif()
