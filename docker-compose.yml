@@ -4,7 +4,7 @@ version: '3.8'
 services:
   zora-vm:
     build: .
-    image: zora-vm:latest
+    image: ghcr.io/plutomaster28/zora-vm:latest  # Updated to lowercase
     container_name: zora-vm-instance
     stdin_open: true
     tty: true
@@ -26,7 +26,7 @@ services:
     build: 
       context: .
       target: builder  # Use the builder stage with more tools
-    image: zora-vm:dev
+    image: ghcr.io/plutomaster28/zora-vm:dev  # Updated to lowercase
     container_name: zora-vm-dev
     stdin_open: true
     tty: true

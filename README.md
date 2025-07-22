@@ -45,7 +45,7 @@ It boots, it runs stuff, it throws errors when it should — and sometimes when 
 *No dependencies, no compilation, just run it:*
 
 ```bash
-# Pull and run instantly
+# Pull and run instantly (note: lowercase repository name)
 docker run -it ghcr.io/plutomaster28/zora-vm:latest
 
 # Or with persistent storage
