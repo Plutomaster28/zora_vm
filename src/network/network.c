@@ -5,7 +5,8 @@
 #include "network/network.h"
 
 int network_init(void) {
-    printf("Network subsystem initialized\n");
+    // Initialize virtual network stack only
+    printf("Initializing virtual network (no real network access)\n");
     return 0;
 }
 
@@ -69,5 +70,12 @@ int network_simulate_connect(const char* host, int port, int protocol) {
     printf("Attempting %s connection to %s:%d...\n", proto_name, host, port);
     printf("Connected to %s.\n", host);
     printf("Escape character is '^]'.\n");
+    return 0;
+}
+
+int network_simulate_request(const char* url) {
+    // Simulate network request without real network access
+    printf("Simulating network request to: %s\n", url);
+    printf("Response: Simulated data (no actual network access)\n");
     return 0;
 }

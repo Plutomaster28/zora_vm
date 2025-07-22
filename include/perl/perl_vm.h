@@ -6,8 +6,11 @@ typedef struct {
     char* current_script;
 } PerlVM;
 
+// Initialize and cleanup
 int perl_vm_init(void);
 void perl_vm_cleanup(void);
+
+// Execution functions
 int perl_vm_execute_string(const char* code);
 int perl_vm_load_script(const char* vm_path);
 

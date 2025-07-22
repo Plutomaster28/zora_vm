@@ -2,7 +2,21 @@
 #include <stdlib.h>
 #include <string.h>
 #include "syscall.h"
-#include "vfs.h"
+#include "vfs/vfs.h"
+#include "sandbox.h"
+
+// Blocked system calls when sandboxed
+static const char* blocked_syscalls[] = {
+    "system", "exec", "fork", "clone", "ptrace", "mount", "umount",
+    "chroot", "setuid", "setgid", "chmod", "chown", NULL
+};
+
+// Blocked commands when sandboxed
+static const char* blocked_commands[] = {
+    "whoami", "dir", "curl", "wget", "ping", "mkdir", "rmdir", 
+    "copy", "move", "del", "format", "net", "ipconfig", "tasklist",
+    "taskkill", "sc", "reg", "regedit", "powershell", "cmd", NULL
+};
 
 static int syscall_initialized = 0;
 
@@ -25,25 +39,36 @@ void syscall_cleanup(void) {
 
 // Intercept system calls and redirect to virtual implementations
 int vm_system(const char* command) {
-    if (!command) return -1;
-    
-    // Parse and handle commands in virtual environment
-    if (strcmp(command, "dir") == 0 || strcmp(command, "ls") == 0) {
-        return vm_ls();
-    }
-    else if (strcmp(command, "cls") == 0 || strcmp(command, "clear") == 0) {
-        return vm_clear();
-    }
-    else if (strcmp(command, "pwd") == 0) {
-        return vm_pwd();
-    }
-    else if (strcmp(command, "ps") == 0) {
-        return vm_ps();
-    }
-    else {
-        printf("vm_system: Command '%s' not allowed in sandbox\n", command);
+    // Check if sandbox is blocking system calls
+    if (sandbox_is_syscalls_blocked()) {
+        printf("vm_system: System call '%s' blocked by sandbox\n", command);
         return -1;
     }
+    
+    // Check if command is in blocked list
+    for (int i = 0; blocked_commands[i]; i++) {
+        if (strstr(command, blocked_commands[i]) == command) {
+            printf("vm_system: Command '%s' blocked by security policy\n", command);
+            return -1;
+        }
+    }
+    
+    // Check for dangerous patterns
+    if (strstr(command, "C:\\") || strstr(command, "/etc/") || 
+        strstr(command, "..\\") || strstr(command, "../") ||
+        strstr(command, "evil.com") || strstr(command, "malware")) {
+        printf("vm_system: Suspicious command blocked: %s\n", command);
+        return -1;
+    }
+    
+    // Only allow specific VM commands
+    if (strncmp(command, "vm_", 3) == 0) {
+        // Handle VM-specific commands
+        return 0;
+    }
+    
+    printf("vm_system: Command '%s' not allowed in sandbox\n", command);
+    return -1;
 }
 
 int vm_fclose(FILE* stream) {

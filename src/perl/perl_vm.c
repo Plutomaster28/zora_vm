@@ -1,6 +1,5 @@
-// Ensure src/perl/perl_vm.c exists with this content:
-
 #include "perl_vm.h"
+#include "sandbox.h"  // Add this missing include
 #include "vfs/vfs.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -29,38 +28,177 @@ void perl_vm_cleanup(void) {
     }
 }
 
-// Execute Perl string (simplified)
+// Add the missing execute_perl_statement function
+static int execute_perl_statement(const char* line) {
+    char* trimmed = strdup(line);
+    
+    // Remove leading/trailing whitespace
+    char* start = trimmed;
+    while (*start == ' ' || *start == '\t') start++;
+    char* end = start + strlen(start) - 1;
+    while (end > start && (*end == ' ' || *end == '\t' || *end == '\n' || *end == '\r')) end--;
+    *(end + 1) = '\0';
+    
+    // Skip empty lines and comments
+    if (*start == '\0' || *start == '#') {
+        free(trimmed);
+        return 0;
+    }
+    
+    // Handle print statements
+    if (strncmp(start, "print ", 6) == 0) {
+        char* content = start + 6;
+        // Simple print handling - remove quotes if present
+        if (content[0] == '"' && content[strlen(content)-1] == '"') {
+            content[strlen(content)-1] = '\0';
+            content++;
+        }
+        printf("%s\n", content);
+        free(trimmed);
+        return 0;
+    }
+    
+    // Handle vm_print function
+    if (strncmp(start, "vm_print(", 9) == 0) {
+        char* content = start + 9;
+        char* end_paren = strrchr(content, ')');
+        if (end_paren) {
+            *end_paren = '\0';
+            
+            // Handle string literals
+            if (content[0] == '"' || content[0] == '\'') {
+                char quote = content[0];
+                content++;
+                char* end_quote = strrchr(content, quote);
+                if (end_quote) *end_quote = '\0';
+            }
+            
+            printf("%s\n", content);
+        }
+        free(trimmed);
+        return 0;
+    }
+    
+    // Handle variable assignments
+    if (strchr(start, '=')) {
+        printf("Variable assignment: %s\n", start);
+        free(trimmed);
+        return 0;
+    }
+    
+    // Handle for loops
+    if (strncmp(start, "for ", 4) == 0) {
+        printf("For loop: %s\n", start);
+        free(trimmed);
+        return 0;
+    }
+    
+    // Handle if statements
+    if (strncmp(start, "if ", 3) == 0) {
+        printf("If statement: %s\n", start);
+        free(trimmed);
+        return 0;
+    }
+    
+    // Handle subroutine definitions
+    if (strncmp(start, "sub ", 4) == 0) {
+        printf("Subroutine definition: %s\n", start);
+        free(trimmed);
+        return 0;
+    }
+    
+    // Handle use statements
+    if (strncmp(start, "use ", 4) == 0) {
+        printf("Use statement: %s\n", start);
+        free(trimmed);
+        return 0;
+    }
+    
+    // Handle function calls
+    if (strchr(start, '(') && strchr(start, ')')) {
+        printf("Function call: %s\n", start);
+        free(trimmed);
+        return 0;
+    }
+    
+    // Default: just echo the statement
+    printf("Perl statement: %s\n", start);
+    free(trimmed);
+    return 0;
+}
+
+// Add sandbox checks to Perl execution
 int perl_vm_execute_string(const char* code) {
     if (!perl_vm.initialized) {
         return -1;
     }
     
-    // Create a temporary file for the Perl code
-    char temp_file[] = "temp_perl.pl";
-    FILE* f = fopen(temp_file, "w");
-    if (!f) {
-        return -1;
+    // Check sandbox restrictions
+    if (sandbox_is_strict_mode()) {
+        // Block dangerous Perl operations
+        if (strstr(code, "system(") || strstr(code, "exec(") || strstr(code, "`")) {
+            printf("Perl VM: System command blocked by sandbox\n");
+            return -1;
+        }
+        
+        if (strstr(code, "eval ") && strstr(code, "system")) {
+            printf("Perl VM: Dangerous eval blocked by sandbox\n");
+            return -1;
+        }
+        
+        if (strstr(code, "open(") && strstr(code, "|")) {
+            printf("Perl VM: Pipe operation blocked by sandbox\n");
+            return -1;
+        }
     }
     
-    // Add safe Perl code wrapper
-    fprintf(f, "#!/usr/bin/perl\n");
-    fprintf(f, "use strict;\n");
-    fprintf(f, "use warnings;\n");
-    fprintf(f, "print \"Perl VM executing...\\n\";\n");
-    fprintf(f, "%s\n", code);
-    fclose(f);
+    if (sandbox_is_filesystem_blocked()) {
+        // Block file operations outside VFS
+        if (strstr(code, "File::Copy") || strstr(code, "copy(")) {
+            printf("Perl VM: File copy operation blocked by sandbox\n");
+            return -1;
+        }
+        
+        if (strstr(code, "glob(") && (strstr(code, "/etc/") || strstr(code, "C:/Windows/"))) {
+            printf("Perl VM: Suspicious glob blocked by sandbox\n");
+            return -1;
+        }
+        
+        if (strstr(code, "open(") && (strstr(code, "C:\\") || strstr(code, "/etc/") || strstr(code, "../"))) {
+            printf("Perl VM: Suspicious file access blocked by sandbox\n");
+            return -1;
+        }
+    }
     
-    // Execute via system perl (in sandbox)
-    char cmd[512];
-    snprintf(cmd, sizeof(cmd), "perl %s", temp_file);
+    if (sandbox_is_network_blocked()) {
+        if (strstr(code, "Net::") || strstr(code, "LWP::") || strstr(code, "HTTP::")) {
+            printf("Perl VM: Network module blocked by sandbox\n");
+            return -1;
+        }
+        
+        if (strstr(code, "Socket") || strstr(code, "IO::Socket")) {
+            printf("Perl VM: Socket operation blocked by sandbox\n");
+            return -1;
+        }
+    }
     
+    // Continue with execution if not blocked
     printf("Executing Perl code: %s\n", code);
-    int result = system(cmd);
     
-    // Clean up
-    remove(temp_file);
+    // Process the Perl code line by line
+    char* code_copy = strdup(code);
+    char* line = strtok(code_copy, "\n");
     
-    return result;
+    while (line != NULL) {
+        if (execute_perl_statement(line) != 0) {
+            free(code_copy);
+            return -1;
+        }
+        line = strtok(NULL, "\n");
+    }
+    
+    free(code_copy);
+    return 0;
 }
 
 // Load and execute script from VFS
@@ -94,6 +232,7 @@ int perl_vm_load_script(const char* vm_path) {
     }
     
     if (node->data) {
+        printf("Perl VM executing...\n");
         return perl_vm_execute_string((char*)node->data);
     }
     

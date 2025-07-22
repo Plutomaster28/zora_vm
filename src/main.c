@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <signal.h>
 #include <string.h>
+#include <setjmp.h>  // Add this include
 #include "cpu.h"
 #include "memory.h"
 #include "device.h"
@@ -27,10 +28,49 @@
 static volatile int running = 1;
 static int vm_initialized = 0;
 
-// Signal handler for graceful shutdown
+// Add crash protection variables
+static volatile int vm_crash_guard = 0;
+static jmp_buf vm_main_loop;
+
+// Enhanced signal handler with crash protection
 void signal_handler(int sig) {
     printf("\nReceived signal %d, shutting down...\n", sig);
     running = 0;
+}
+
+// VM crash protection handler
+void vm_crash_handler(int sig) {
+    if (vm_crash_guard) {
+        printf("CRITICAL: VM crash guard triggered - preventing VM death\n");
+        printf("Signal: %d\n", sig);
+        printf("This indicates a serious bug in binary execution\n");
+        
+        // Force cleanup and return to VM shell
+        binary_executor_cleanup();
+        // Note: cleanup_sandbox_environment() might not exist, so use sandbox_cleanup()
+        sandbox_cleanup();
+        
+        // Reset crash guard temporarily to prevent infinite loops
+        vm_crash_guard = 0;
+        
+        // Don't exit - return to VM shell
+        printf("Attempting to recover and return to VM shell...\n");
+        longjmp(vm_main_loop, 1);
+    } else {
+        // If crash guard is off, use normal signal handler
+        signal_handler(sig);
+    }
+}
+
+// Initialize crash protection
+void vm_init_crash_protection() {
+    printf("Initializing VM crash protection...\n");
+    signal(SIGSEGV, vm_crash_handler);
+    signal(SIGABRT, vm_crash_handler);
+    signal(SIGFPE, vm_crash_handler);
+    signal(SIGILL, vm_crash_handler);  // Add illegal instruction
+    vm_crash_guard = 1;
+    printf("VM crash protection enabled\n");
 }
 
 int vm_init(void) {
@@ -56,11 +96,21 @@ int vm_is_running(void) {
 }
 
 int main(int argc, char* argv[]) {
-    // Set up signal handlers
+    // Set up signal handlers first
     signal(SIGINT, signal_handler);
     signal(SIGTERM, signal_handler);
 
     printf("Starting Zora VM...\n");
+
+    // Initialize crash protection early
+    vm_init_crash_protection();
+
+    // Set jump point for crash recovery
+    if (setjmp(vm_main_loop) != 0) {
+        printf("VM recovered from crash, reinitializing...\n");
+        // Re-enable crash guard after recovery
+        vm_crash_guard = 1;
+    }
 
     // Initialize sandboxing first
     printf("Initializing sandbox...\n");
@@ -73,6 +123,13 @@ int main(int argc, char* argv[]) {
     printf("Setting memory limit to %d MB...\n", MEMORY_SIZE / (1024 * 1024));
     sandbox_set_memory_limit(MEMORY_SIZE);
     sandbox_set_cpu_limit(80); // 80% CPU limit
+    
+    // Enable strict sandbox mode
+    printf("Enabling strict sandbox mode...\n");
+    sandbox_set_strict_mode(1);
+    sandbox_block_network_access(1);
+    sandbox_block_file_system_access(1);
+    sandbox_block_system_calls(1);
     
     // Initialize virtualization layer
     printf("Initializing virtualization layer...\n");
@@ -200,14 +257,28 @@ int main(int argc, char* argv[]) {
     printf("Zora VM initialized successfully. Starting MERL shell...\n");
     printf("========================================\n");
 
-    // Start the MERL shell as the "OS"
-    int result = merl_run();
-    
-    if (result != 0) {
-        fprintf(stderr, "MERL shell execution failed with code: %d\n", result);
+    // Start the MERL shell as the "OS" with crash protection
+    int result = 0;
+    while (running) {
+        if (setjmp(vm_main_loop) != 0) {
+            printf("Recovered from crash in MERL shell, restarting...\n");
+            // Re-enable crash guard
+            vm_crash_guard = 1;
+            continue;
+        }
+        
+        result = merl_run();
+        
+        if (result != 0) {
+            fprintf(stderr, "MERL shell execution failed with code: %d\n", result);
+        }
+        break; // Normal exit
     }
 
 cleanup:
+    // Disable crash guard during cleanup
+    vm_crash_guard = 0;
+    
     // Clean up resources before exiting
     printf("\nShutting down Zora VM...\n");
     merl_cleanup();

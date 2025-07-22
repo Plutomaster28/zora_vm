@@ -177,14 +177,22 @@ void python_command(int argc, char **argv) {
         return;
     }
     
+    // Ensure script is only from VFS
     char script_path[256];
-    if (argv[1][0] == '/') {
-        strcpy(script_path, argv[1]);
-    } else {
+    if (argv[1][0] != '/') {
         snprintf(script_path, sizeof(script_path), "/persistent/scripts/%s", argv[1]);
+    } else {
+        strncpy(script_path, argv[1], sizeof(script_path) - 1);
     }
     
-    printf("Executing Python script: %s\n", script_path);
+    // Verify the script exists in VFS only
+    VNode* script_node = vfs_find_node(script_path);
+    if (!script_node) {
+        printf("Python script not found in VFS: %s\n", script_path);
+        return;
+    }
+    
+    printf("Executing Python script (sandboxed): %s\n", script_path);
     if (python_vm_load_script(script_path) != 0) {
         printf("Failed to execute Python script\n");
     }
