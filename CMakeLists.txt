@@ -124,11 +124,17 @@ add_executable(zora_vm
     ${MERL_HEADERS}
 )
 
-# Link libraries (Windows specific + threading support for Meisei)
+# Link libraries (Windows specific + threading support for Meisei + networking)
 if(WIN32)
-    target_link_libraries(zora_vm kernel32 user32 advapi32 ${LUA_LIBRARIES})
+    # Add all required Windows libraries for VM functionality
+    target_link_libraries(zora_vm 
+        kernel32 user32 advapi32    # Basic Windows APIs
+        ws2_32                      # Windows Sockets (networking)
+        iphlpapi                    # IP Helper API (network info)
+        ${LUA_LIBRARIES}            # Lua scripting
+    )
 else()
-    # Add pthread support for Meisei Virtual Silicon parallel processing
+    # 🚀 Add pthread support for Meisei Virtual Silicon parallel processing
     find_package(Threads REQUIRED)
     target_link_libraries(zora_vm ${LUA_LIBRARIES} Threads::Threads)
 endif()
