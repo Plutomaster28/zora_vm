@@ -17,6 +17,7 @@
 #include "network/network.h"
 #include "lua/lua_vm.h"
 #include "binary/binary_executor.h"
+#include "meisei/virtual_silicon.h"
 
 #ifdef PYTHON_SCRIPTING
 #include "python/python_vm.h"
@@ -254,6 +255,12 @@ int main(int argc, char* argv[]) {
         goto cleanup;
     }
 
+    printf("Initializing Meisei Virtual Silicon...\n");
+    if (meisei_silicon_init() != 0) {
+        fprintf(stderr, "Failed to initialize Meisei Virtual Silicon\n");
+        goto cleanup;
+    }
+
     printf("Zora VM initialized successfully. Starting MERL shell...\n");
     printf("========================================\n");
 
@@ -293,6 +300,7 @@ cleanup:
     lua_vm_cleanup();
     vfs_cleanup();
     binary_executor_cleanup();
+    meisei_silicon_cleanup();
     
 #ifdef PYTHON_SCRIPTING
     python_vm_cleanup();
