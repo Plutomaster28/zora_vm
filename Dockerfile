@@ -113,12 +113,12 @@ COPY --from=builder /build/zora_vm /usr/local/bin/zora_vm
 # Make sure it's executable
 RUN chmod +x /usr/local/bin/zora_vm
 
-# Create VM directory structure
+# Create VM directory structure (fresh every time)
 RUN mkdir -p /home/zora/ZoraPerl/{documents,scripts,data,projects} && \
     mkdir -p /home/zora/.zora/{config,cache,logs} && \
     chown -R zora:zora /home/zora
 
-# Set up sample files for demo
+# Set up sample files for demo (will be overridden by volumes if mounted)
 RUN echo 'print("Hello from Zora VM in Docker!")' > /home/zora/ZoraPerl/scripts/hello.lua && \
     echo 'print("Python works too!")' > /home/zora/ZoraPerl/scripts/hello.py && \
     echo 'print "Perl is ready!\n";' > /home/zora/ZoraPerl/scripts/hello.pl && \

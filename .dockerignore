@@ -44,3 +44,15 @@ tmp/
 temp/
 *.tmp
 *.log
+
+# VM-generated directories (VM creates these automatically)
+ZoraPerl/
+ZoraPerl-data/
+my-zora-data/
+.zora/
+
+# User data directories (these are mounted as volumes anyway)
+scripts/
+data/
+projects/
+documents/
