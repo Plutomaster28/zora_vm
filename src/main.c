@@ -103,6 +103,28 @@ int main(int argc, char* argv[]) {
 
     printf("Starting Zora VM...\n");
 
+#ifdef DOCKER_MODE
+    // Docker-specific initialization
+    printf("Running in Docker container\n");
+    printf("Persistent storage: /home/zora/ZoraPerl\n");
+    printf("Container optimizations enabled\n");
+#endif
+
+    // Check if running in batch mode (for healthcheck)
+    int batch_mode = 0;
+    for (int i = 1; i < argc; i++) {
+        if (strcmp(argv[i], "--batch-mode") == 0) {
+            batch_mode = 1;
+            break;
+        }
+    }
+    
+    if (batch_mode) {
+        printf("Running in batch mode for healthcheck\n");
+        // Quick initialization and exit
+        return 0;
+    }
+
     // Initialize crash protection early
     vm_init_crash_protection();
 

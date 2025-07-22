@@ -1,0 +1,46 @@
+# Create .dockerignore in project root
+# Build artifacts
+build/
+cmake_build/
+*.exe
+*.dll
+*.so
+*.dylib
+*.obj
+*.o
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Git
+.git/
+.gitignore
+
+# Documentation (optional - comment out if you want docs in container)
+README.md
+docs/
+*.md
+
+# Windows specific
+*.bat
+*.cmd
+
+# Don't need these in container
+.github/
+tests/
+benchmarks/
+examples/
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+*.log
