@@ -22,19 +22,12 @@ WORKDIR /build
 COPY . .
 
 # Debug: Show what we have and find libraries
-RUN echo "Checking source files..." && \
+RUN echo "=== FILES COPIED ===" && \
     ls -la && \
-    echo "CMakeLists.txt exists:" && \
-    test -f CMakeLists.txt && echo "Yes" || echo "No" && \
-    echo "Finding Lua..." && \
-    pkg-config --cflags lua5.4 2>/dev/null && \
-    pkg-config --libs lua5.4 2>/dev/null && \
-    echo "Finding Python..." && \
-    python3-config --cflags 2>/dev/null && \
-    python3-config --ldflags 2>/dev/null && \
-    echo "Finding Perl..." && \
-    perl -MExtUtils::Embed -e ccopts 2>/dev/null && \
-    perl -MExtUtils::Embed -e ldopts 2>/dev/null
+    echo "=== SOURCE STRUCTURE ===" && \
+    find src -name "*.c" | head -5 2>/dev/null || echo "No src/*.c found" && \
+    echo "=== CMAKE EXISTS ===" && \
+    ls -la CMakeLists.txt
 
 # Configure with verbose output
 RUN echo "Configuring Zora VM..." && \
