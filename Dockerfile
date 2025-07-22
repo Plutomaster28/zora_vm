@@ -8,26 +8,11 @@ ENV DOCKER_BUILD=1
 
 # Install build dependencies
 RUN apt-get update && apt-get install -y \
-    build-essential \
-    cmake \
-    ninja-build \
-    pkg-config \
-    git \
-    # Lua dependencies
-    liblua5.4-dev \
-    lua5.4 \
-    # Python dependencies  
-    python3-dev \
-    python3 \
-    libpython3-dev \
-    # Perl dependencies
-    libperl-dev \
-    perl \
-    # Networking dependencies
-    libssl-dev \
-    # Additional libraries
-    libreadline-dev \
-    zlib1g-dev \
+    build-essential cmake ninja-build \
+    liblua5.4-dev lua5.4 \
+    python3-dev python3 \
+    libperl-dev perl \
+    libssl-dev pkg-config \
     && rm -rf /var/lib/apt/lists/*
 
 # Create build directory
