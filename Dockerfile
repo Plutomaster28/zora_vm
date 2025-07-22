@@ -4,6 +4,7 @@ FROM ubuntu:22.04 AS builder
 
 # Set environment to avoid interactive prompts
 ENV DEBIAN_FRONTEND=noninteractive
+ENV DOCKER_BUILD=1
 
 # Install build dependencies
 RUN apt-get update && apt-get install -y \
@@ -18,12 +19,13 @@ RUN apt-get update && apt-get install -y \
     # Python dependencies  
     python3-dev \
     python3 \
+    libpython3-dev \
     # Perl dependencies
     libperl-dev \
     perl \
     # Networking dependencies
     libssl-dev \
-    # Additional libraries that might be needed
+    # Additional libraries
     libreadline-dev \
     zlib1g-dev \
     && rm -rf /var/lib/apt/lists/*
@@ -34,22 +36,40 @@ WORKDIR /build
 # Copy source code
 COPY . .
 
-# Debug: Show what we have
+# Debug: Show what we have and find libraries
 RUN echo "Checking source files..." && \
     ls -la && \
-    echo "CMakeLists.txt content:" && \
-    head -20 CMakeLists.txt || echo "No CMakeLists.txt found"
+    echo "CMakeLists.txt exists:" && \
+    test -f CMakeLists.txt && echo "Yes" || echo "No" && \
+    echo "Finding Lua..." && \
+    pkg-config --cflags lua5.4 2>/dev/null && \
+    pkg-config --libs lua5.4 2>/dev/null && \
+    echo "Finding Python..." && \
+    python3-config --cflags 2>/dev/null && \
+    python3-config --ldflags 2>/dev/null && \
+    echo "Finding Perl..." && \
+    perl -MExtUtils::Embed -e ccopts 2>/dev/null && \
+    perl -MExtUtils::Embed -e ldopts 2>/dev/null
 
-# Configure and build with error handling
+# Configure with verbose output
 RUN echo "Configuring Zora VM..." && \
     cmake -DCMAKE_BUILD_TYPE=Release \
+          -DCMAKE_VERBOSE_MAKEFILE=ON \
           -DCMAKE_C_FLAGS="-O2" \
-          -DLUA_SCRIPTING=ON \
-          -DPYTHON_SCRIPTING=ON \
-          -DPERL_SCRIPTING=ON \
-          . && \
-    echo "Building Zora VM..." && \
-    ninja -v || (echo "Build failed, showing error details:" && cat CMakeFiles/CMakeError.log 2>/dev/null || echo "No error log found" && exit 1)
+          . 2>&1 | tee cmake_output.log || \
+    (echo "CMake configuration failed!" && \
+     echo "CMake output:" && cat cmake_output.log && \
+     echo "CMake error log:" && cat CMakeFiles/CMakeError.log 2>/dev/null && \
+     echo "CMake output log:" && cat CMakeFiles/CMakeOutput.log 2>/dev/null && \
+     exit 1)
+
+# Build with verbose output
+RUN echo "Building Zora VM..." && \
+    ninja -v 2>&1 | tee build_output.log || \
+    (echo "Build failed!" && \
+     echo "Build output:" && cat build_output.log && \
+     echo "Last 50 lines of build:" && tail -50 build_output.log && \
+     exit 1)
 
 # Verify the build worked
 RUN echo "Build verification..." && \
@@ -124,10 +144,6 @@ RUN echo '#!/bin/bash' > /home/zora/welcome.sh && \
     echo 'echo "  help"' >> /home/zora/welcome.sh && \
     echo 'echo ""' >> /home/zora/welcome.sh && \
     chmod +x /home/zora/welcome.sh
-
-# Health check to verify VM is working
-HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-    CMD echo "test" | timeout 5 zora_vm --batch-mode 2>/dev/null || exit 1
 
 # Labels for metadata
 LABEL maintainer="plutomaster28" \

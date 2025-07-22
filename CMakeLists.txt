@@ -11,29 +11,47 @@ else()
     add_compile_options(-fstack-protector-strong -D_FORTIFY_SOURCE=2)
 endif()
 
-# Find Lua
-find_package(PkgConfig REQUIRED)
-pkg_check_modules(LUA REQUIRED lua5.4)
-
-# If Lua is not found via pkg-config, try manual search
-if(NOT LUA_FOUND)
-    find_path(LUA_INCLUDE_DIR lua.h
-        HINTS
-        /usr/include/lua5.4
-        /usr/include/lua
-        /usr/local/include/lua5.4
-        /usr/local/include/lua
-        C:/msys64/ucrt64/include/lua5.4
-        C:/msys64/ucrt64/include/lua
-    )
+# Docker-friendly Lua detection
+if(DEFINED ENV{DOCKER_BUILD})
+    message(STATUS "Building in Docker environment")
+    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fPIC")
     
-    find_library(LUA_LIBRARIES
-        NAMES lua5.4 lua54 lua
-        HINTS
-        /usr/lib
-        /usr/local/lib
-        C:/msys64/ucrt64/lib
-    )
+    # Use pkg-config for Docker builds (more reliable in Ubuntu)
+    find_package(PkgConfig REQUIRED)
+    pkg_check_modules(LUA REQUIRED lua5.4)
+    
+    if(LUA_FOUND)
+        message(STATUS "Found Lua via pkg-config: ${LUA_VERSION}")
+        include_directories(${LUA_INCLUDE_DIRS})
+        link_directories(${LUA_LIBRARY_DIRS})
+    else()
+        message(FATAL_ERROR "Lua not found via pkg-config in Docker")
+    endif()
+else()
+    # Windows/MSYS2 detection (your existing logic)
+    find_package(PkgConfig REQUIRED)
+    pkg_check_modules(LUA REQUIRED lua5.4)
+
+    # If Lua is not found via pkg-config, try manual search
+    if(NOT LUA_FOUND)
+        find_path(LUA_INCLUDE_DIR lua.h
+            HINTS
+            /usr/include/lua5.4
+            /usr/include/lua
+            /usr/local/include/lua5.4
+            /usr/local/include/lua
+            C:/msys64/ucrt64/include/lua5.4
+            C:/msys64/ucrt64/include/lua
+        )
+        
+        find_library(LUA_LIBRARIES
+            NAMES lua5.4 lua54 lua
+            HINTS
+            /usr/lib
+            /usr/local/lib
+            C:/msys64/ucrt64/lib
+        )
+    endif()
 endif()
 
 # Simple scripting support (no embedding)
