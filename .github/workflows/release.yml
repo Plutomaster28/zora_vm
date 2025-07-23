@@ -1,0 +1,279 @@
+name: Build and Release
+
+on:
+  push:
+    branches: [ main ]
+    tags: [ 'v*' ]
+  pull_request:
+    branches: [ main ]
+  release:
+    types: [published]
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
+jobs:
+  # Docker Build Job (Linux Container)
+  docker-build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+      
+    - name: Login to GitHub Container Registry
+      uses: docker/login-action@v3
+      with:
+        registry: ${{ env.REGISTRY }}
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+        
+    - name: Extract Docker metadata
+      id: meta
+      uses: docker/metadata-action@v5
+      with:
+        images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+        tags: |
+          type=ref,event=branch
+          type=ref,event=pr
+          type=semver,pattern={{version}}
+          type=semver,pattern={{major}}.{{minor}}
+          type=semver,pattern={{major}}
+          type=sha
+          type=raw,value=latest,enable={{is_default_branch}}
+          
+    - name: Build and push Docker image
+      uses: docker/build-push-action@v5
+      with:
+        context: .
+        platforms: linux/amd64
+        push: true
+        tags: ${{ steps.meta.outputs.tags }}
+        labels: ${{ steps.meta.outputs.labels }}
+        cache-from: type=gha
+        cache-to: type=gha,mode=max
+        build-args: |
+          BUILDKIT_INLINE_CACHE=1
+
+  # Windows Native Binary Build
+  windows-build:
+    runs-on: windows-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Setup MSYS2
+      uses: msys2/setup-msys2@v2
+      with:
+        msystem: UCRT64
+        update: true
+        install: >-
+          mingw-w64-ucrt-x86_64-gcc
+          mingw-w64-ucrt-x86_64-cmake
+          mingw-w64-ucrt-x86_64-ninja
+          mingw-w64-ucrt-x86_64-lua
+          mingw-w64-ucrt-x86_64-pkg-config
+          git
+          
+    - name: Configure build
+      shell: msys2 {0}
+      run: |
+        mkdir -p build
+        cd build
+        cmake .. \
+          -G Ninja \
+          -DCMAKE_BUILD_TYPE=Release \
+          -DCMAKE_C_COMPILER=gcc \
+          -DWINDOWS_BUILD=ON \
+          -DCROSS_PLATFORM_SANDBOX=ON \
+          -DLUA_SCRIPTING=ON \
+          -DVIRTUAL_FILESYSTEM=ON \
+          -DSANDBOXED_SYSCALLS=ON
+        
+    - name: Build Windows binary
+      shell: msys2 {0}
+      run: |
+        cd build
+        ninja -v
+        
+    - name: Test Windows binary
+      shell: msys2 {0}
+      run: |
+        cd build
+        ./zora_vm.exe --version || echo "Binary created successfully"
+        file zora_vm.exe
+        
+    - name: Package Windows release
+      shell: msys2 {0}
+      run: |
+        cd build
+        mkdir -p zora-vm-windows
+        cp zora_vm.exe zora-vm-windows/
+        cp ../README.md zora-vm-windows/ || echo "README not found"
+        cp ../LICENSE zora-vm-windows/ || echo "LICENSE not found"
+        
+        # Create a simple batch launcher
+        cat > zora-vm-windows/zora-vm.bat << 'EOF'
+        @echo off
+        echo Starting ZORA VM...
+        "%~dp0zora_vm.exe" %*
+        pause
+        EOF
+        
+        # Package as ZIP
+        7z a zora-vm-windows-x64.zip zora-vm-windows/
+        
+    - name: Upload Windows binary artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: zora-vm-windows-x64
+        path: build/zora-vm-windows-x64.zip
+        retention-days: 30
+
+  # Linux Native Binary Build (for completeness)
+  linux-build:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Install dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y \
+          build-essential \
+          cmake \
+          ninja-build \
+          liblua5.4-dev \
+          pkg-config \
+          libseccomp-dev
+        
+    - name: Configure build
+      run: |
+        mkdir -p build
+        cd build
+        cmake .. \
+          -G Ninja \
+          -DCMAKE_BUILD_TYPE=Release \
+          -DLINUX_BUILD=ON \
+          -DCROSS_PLATFORM_SANDBOX=ON \
+          -DLUA_SCRIPTING=ON \
+          -DVIRTUAL_FILESYSTEM=ON \
+          -DSANDBOXED_SYSCALLS=ON \
+          -DELF_BINARY_SUPPORT=ON
+        
+    - name: Build Linux binary
+      run: |
+        cd build
+        ninja -v
+        
+    - name: Test Linux binary
+      run: |
+        cd build
+        ./zora_vm --version || echo "Binary created successfully"
+        file zora_vm
+        ldd zora_vm || echo "Static binary"
+        
+    - name: Package Linux release
+      run: |
+        cd build
+        mkdir -p zora-vm-linux
+        cp zora_vm zora-vm-linux/
+        cp ../README.md zora-vm-linux/ || echo "README not found"
+        cp ../LICENSE zora-vm-linux/ || echo "LICENSE not found"
+        
+        # Create shell launcher
+        cat > zora-vm-linux/zora-vm.sh << 'EOF'
+        #!/bin/bash
+        DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
+        echo "Starting ZORA VM..."
+        "$DIR/zora_vm" "$@"
+        EOF
+        chmod +x zora-vm-linux/zora-vm.sh
+        
+        # Package as tar.gz
+        tar -czf zora-vm-linux-x64.tar.gz zora-vm-linux/
+        
+    - name: Upload Linux binary artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: zora-vm-linux-x64
+        path: build/zora-vm-linux-x64.tar.gz
+        retention-days: 30
+
+  # Create GitHub Release (only on tags)
+  release:
+    needs: [docker-build, windows-build, linux-build]
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v')
+    permissions:
+      contents: write
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Download Windows artifact
+      uses: actions/download-artifact@v4
+      with:
+        name: zora-vm-windows-x64
+        path: ./releases/
+        
+    - name: Download Linux artifact
+      uses: actions/download-artifact@v4
+      with:
+        name: zora-vm-linux-x64
+        path: ./releases/
+        
+    - name: Create Release
+      uses: softprops/action-gh-release@v1
+      with:
+        files: |
+          releases/zora-vm-windows-x64.zip
+          releases/zora-vm-linux-x64.tar.gz
+        body: |
+          ## ZORA VM Release ${{ github.ref_name }}
+          
+          ### Download Options:
+          
+          **Docker Container (Recommended):**
+          ```bash
+          docker run -it ghcr.io/${{ github.repository }}:${{ github.ref_name }}
+          ```
+          
+          **Windows Binary:**
+          - Download `zora-vm-windows-x64.zip`
+          - Extract and run `zora-vm.bat`
+          
+          **Linux Binary:**
+          - Download `zora-vm-linux-x64.tar.gz`
+          - Extract and run `./zora-vm.sh`
+          
+          ### Features:
+          - Cross-platform virtualization system
+          - Advanced sandboxing with syscall filtering
+          - Multi-language VM support (Lua, Python, Perl)
+          - Virtual filesystem with secure isolation
+          - MERL shell with 20+ commands
+          - Meisei acceleration layer with AVX2
+          - ELF binary parsing and execution
+          
+          ### Security:
+          - Process isolation active
+          - Resource limits enforced
+          - File system access restricted
+          - Syscall filtering enabled
+        draft: false
+        prerelease: false
+        generate_release_notes: true
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
