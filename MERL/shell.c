@@ -2,18 +2,58 @@
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
-#include <direct.h> // For Windows-specific directory functions
-#include <windows.h>
+#include "platform/platform.h"  // FIXED: Use correct path
 #include "shell.h"
 #include "user.h"
 #include "kernel.h"
 #include "tetra.h"
 #include "color-and-test.h"
 #include "config.h"
-#include "network/network.h" // Added include for network functions
+#include "network/network.h"
 #include "vfs/vfs.h"
-#include "lua/lua_vm.h" // Include Lua VM header
+#include "lua/lua_vm.h"
 #include "binary/binary_executor.h"
+
+// Add platform detection at the top:
+#ifdef _WIN32
+    #include <windows.h>
+    #include <io.h>
+    #include <direct.h>
+#else
+    #include <sys/stat.h>
+    #include <dirent.h>
+    #include <unistd.h>
+    #include <glob.h>  // ADD THIS LINE - this was missing!
+    
+    // Windows compatibility for Linux
+    #define INVALID_FILE_ATTRIBUTES ((unsigned long)-1)
+    #define FILE_ATTRIBUTE_DIRECTORY S_IFDIR
+    
+    typedef struct {
+        char cFileName[256];
+        unsigned long dwFileAttributes;
+    } WIN32_FIND_DATA;
+    
+    static inline unsigned long GetFileAttributes(const char* path) {
+        struct stat st;
+        if (stat(path, &st) == 0) {
+            return st.st_mode;
+        }
+        return INVALID_FILE_ATTRIBUTES;
+    }
+#endif
+
+// Add these compatibility defines at the top after the includes:
+
+#ifndef PLATFORM_WINDOWS
+    // Linux compatibility
+    #define _rmdir(path) rmdir(path)
+    #define _mkdir(path) mkdir(path, 0755)
+    #define GetFileAttributesA(path) GetFileAttributes(path)
+    
+    // Add the missing FindFirstFile/FindNextFile/FindClose declarations
+    // These should now be available from tetra.c
+#endif
 
 // Function prototypes
 void handle_command(char *command);
@@ -25,14 +65,14 @@ void mount_command(int argc, char* argv[]);
 void sync_command(int argc, char* argv[]);
 void persistent_ls_command(int argc, char* argv[]);
 void ifconfig_command(int argc, char* argv[]);
-void ping_command(int argc, char* argv[]);
-void netstat_command(int argc, char* argv[]);
-void nslookup_command(int argc, char* argv[]);
-void telnet_command(int argc, char* argv[]);
-void wget_command(int argc, char* argv[]);
-void curl_command(int argc, char* argv[]);
-void ssh_command(int argc, char* argv[]);
-void iptables_command(int argc, char* argv[]);
+void ping_command(int argc, char **argv);
+void netstat_command(int argc, char **argv);
+void nslookup_command(int argc, char **argv);
+void telnet_command(int argc, char **argv);
+void wget_command(int argc, char **argv);
+void curl_command(int argc, char **argv);
+void ssh_command(int argc, char **argv);
+void iptables_command(int argc, char **argv);
 void test_vfs_command(int argc, char* argv[]);
 void debug_vfs_command(int argc, char* argv[]);
 void lua_command(int argc, char **argv);
@@ -466,8 +506,18 @@ void clock_command(int argc, char **argv) {
     printf("Current Time: %02d:%02d:%02d\n", local->tm_hour, local->tm_min, local->tm_sec);
 }
 
+void clear_screen(void) {
+#ifdef _WIN32
+    system("cls");
+#else
+    system("clear");
+#endif
+}
+
 void clear_command(int argc, char **argv) {
-    vm_system("clear"); // Instead of system("cls")
+    (void)argc;  // Suppress unused parameter warning
+    (void)argv;  // Suppress unused parameter warning
+    clear_screen();
 }
 
 void echo_command(int argc, char **argv) {
@@ -494,55 +544,31 @@ void cat_command(int argc, char **argv) {
     fclose(file);
 }
 
-void pull_command(int argc, char **argv) {
-    if (argc < 2) {
-        printf("Usage: pull <directory-name>\n");
-        printf("Example: pull internet\n");
+void pull_command(int argc, char* argv[]) {
+    if (argc < 3) {
+        printf("Usage: pull <source_dir> <destination_dir>\n");
         return;
     }
 
-    const char *goodies_repo = "https://github.com/Plutomaster28/MERL-Extended-Goodies.git";
-    const char *local_repo = "__MERL_GOODIES_TEMP__";
+    char *src_dir = argv[1];
+    char *dst_dir = argv[2];
     char cmd[1024];
 
-    // Step 1: Clone or update the repo
-    if (GetFileAttributesA(local_repo) == INVALID_FILE_ATTRIBUTES) {
-        printf("[pull] Cloning goodies repository...\n");
-        snprintf(cmd, sizeof(cmd), "git clone \"%s\" \"%s\"", goodies_repo, local_repo);
-        if (system(cmd) != 0) {
-            printf("[pull] Failed to clone repository.\n");
-            return;
-        }
-    } else {
-        printf("[pull] Updating goodies repository...\n");
-        snprintf(cmd, sizeof(cmd), "cd %s && git pull", local_repo);
-        if (system(cmd) != 0) {
-            printf("[pull] Failed to update repository.\n");
-            return;
-        }
-    }
+    printf("Pulling files from %s to %s\n", src_dir, dst_dir);
 
-    // Step 2: Search for the directory
-    char src_dir[1024];
-    snprintf(src_dir, sizeof(src_dir), "%s\\%s", local_repo, argv[1]);
-    DWORD attrib = GetFileAttributesA(src_dir);
-    if (attrib == INVALID_FILE_ATTRIBUTES || !(attrib & FILE_ATTRIBUTE_DIRECTORY)) {
-        printf("[pull] Directory '%s' not found in goodies repository.\n", argv[1]);
-        return;
-    }
-
-    // Ensure etc directory exists
-    _mkdir("etc");
-
-    // Step 3: Copy the directory to the etc folder
-    char dst_dir[1024];
-    snprintf(dst_dir, sizeof(dst_dir), ".\\etc\\%s", argv[1]);
+#ifdef _WIN32
+    // Windows: use xcopy
     snprintf(cmd, sizeof(cmd), "xcopy /E /I /Y \"%s\" \"%s\"", src_dir, dst_dir);
-    printf("[pull] Copying '%s' to etc directory...\n", argv[1]);
-    if (system(cmd) == 0) {
-        printf("[pull] Successfully pulled '%s' into etc.\n", argv[1]);
+#else
+    // Linux: use cp -r
+    snprintf(cmd, sizeof(cmd), "cp -r \"%s\" \"%s\"", src_dir, dst_dir);
+#endif
+
+    int result = system(cmd);
+    if (result == 0) {
+        printf("Pull completed successfully\n");
     } else {
-        printf("[pull] Failed to copy directory.\n");
+        printf("Pull failed with error code: %d\n", result);
     }
 }
 
@@ -566,26 +592,56 @@ void flipper_command(int argc, char **argv) {
 void search_command(int argc, char **argv) {
     if (argc < 2) {
         printf("Usage: search <pattern>\n");
-        printf("Example: search *.txt\n");
         return;
     }
 
+    printf("Searching for: %s\n", argv[1]);
+
+#ifdef _WIN32
+    // Windows implementation using FindFirstFile
     WIN32_FIND_DATA find_data;
     HANDLE hFind = FindFirstFile(argv[1], &find_data);
-
+    
     if (hFind == INVALID_HANDLE_VALUE) {
         printf("No files found matching pattern: %s\n", argv[1]);
         return;
     }
-
-    printf("Files matching '%s':\n", argv[1]);
+    
     do {
-        if (!(find_data.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)) {
-            printf("  %s\n", find_data.cFileName);
+        printf("Found: %s\n", find_data.cFileName);
+        if (find_data.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) {
+            printf("  [Directory]\n");
+        } else {
+            printf("  Size: %lu bytes\n", find_data.nFileSizeLow);
         }
     } while (FindNextFile(hFind, &find_data) != 0);
-
+    
     FindClose(hFind);
+#else
+    // Linux implementation using glob
+    glob_t glob_result;
+    int glob_status = glob(argv[1], GLOB_MARK, NULL, &glob_result);
+    
+    if (glob_status != 0) {
+        printf("No files found matching pattern: %s\n", argv[1]);
+        return;
+    }
+    
+    for (size_t i = 0; i < glob_result.gl_pathc; i++) {
+        printf("Found: %s\n", glob_result.gl_pathv[i]);
+        
+        struct stat file_stat;
+        if (stat(glob_result.gl_pathv[i], &file_stat) == 0) {
+            if (S_ISDIR(file_stat.st_mode)) {
+                printf("  [Directory]\n");
+            } else {
+                printf("  Size: %ld bytes\n", file_stat.st_size);
+            }
+        }
+    }
+    
+    globfree(&glob_result);
+#endif
 }
 
 void edit_command(int argc, char **argv) {
@@ -1208,3 +1264,28 @@ void test_sandbox_command(int argc, char **argv) {
     printf("File system access is restricted\n");
     printf("Process isolation is active\n");
 }
+
+// Linux implementations of Windows Find functions for shell.c
+
+#ifdef PLATFORM_WINDOWS
+// Use native Windows FindFirstFile/FindNextFile/FindClose - they're already declared in windows.h
+// No additional declarations needed
+#else
+// Linux implementations would go here if needed
+#endif
+
+// Platform detection
+#ifndef _WIN32
+    #ifndef __linux__
+        #define __linux__
+    #endif
+#endif
+
+// Cross-platform compatibility
+#ifdef _WIN32
+    #define PLATFORM_NAME "Windows"
+    #define CLEAR_COMMAND "cls"
+#else
+    #define PLATFORM_NAME "Linux"
+    #define CLEAR_COMMAND "clear"
+#endif

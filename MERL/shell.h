@@ -35,9 +35,9 @@ void clock_command(int argc, char **argv);
 void clear_command(int argc, char **argv);
 void echo_command(int argc, char **argv);
 void cat_command(int argc, char **argv);
-void pull_command(int argc, char **argv);
+void pull_command(int argc, char **argv);   // Changed from int to void
 void flipper_command(int argc, char **argv);
-void search_command(int argc, char **argv);
+void search_command(int argc, char **argv); // Changed from int to void
 void edit_command(int argc, char **argv);
 void run_command(int argc, char **argv);
 

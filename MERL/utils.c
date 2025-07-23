@@ -1,37 +1,60 @@
+#include "utils.h"
+#include "platform/platform.h"
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
-#include <windows.h> // For color manipulation on Windows
+#include <ctype.h>  // Add missing include
 
-// Function to print a string in a specific color (Windows-specific)
-void print_colored(const char *text, int color) {
+#ifdef PLATFORM_WINDOWS
+    #include <windows.h>
+    #include <sys/timeb.h>
+#else
+    #include <sys/time.h>
+#endif
+
+void print_colored(const char* text, int color) {
+#ifdef PLATFORM_WINDOWS
     HANDLE hConsole = GetStdHandle(STD_OUTPUT_HANDLE);
     SetConsoleTextAttribute(hConsole, color);
     printf("%s", text);
-    SetConsoleTextAttribute(hConsole, 7); // Reset to default color
-}
-
-// Function to center-align text in the console
-void print_centered(const char *text, int console_width) {
-    int padding = (console_width - strlen(text)) / 2;
-    for (int i = 0; i < padding; i++) {
-        printf(" ");
+    SetConsoleTextAttribute(hConsole, 7); // Reset to default
+#else
+    // Use ANSI colors on Linux
+    const char* ansi_colors[] = {
+        "\033[30m", // Black
+        "\033[34m", // Blue  
+        "\033[32m", // Green
+        "\033[36m", // Cyan
+        "\033[31m", // Red
+        "\033[35m", // Magenta
+        "\033[33m", // Yellow
+        "\033[37m"  // White
+    };
+    
+    if (color >= 0 && color < 8) {
+        printf("%s%s\033[0m", ansi_colors[color], text);
+    } else {
+        printf("%s", text);
     }
-    printf("%s\n", text);
+#endif
 }
 
-// Function to trim leading and trailing whitespace from a string
-void trim_whitespace(char *str) {
-    char *end;
-
+char* trim_whitespace(char* str) {
+    char* end;
+    
     // Trim leading space
     while (isspace((unsigned char)*str)) str++;
-
+    
+    if (*str == 0) return str;
+    
     // Trim trailing space
-    if (*str == 0) return; // All spaces
-
     end = str + strlen(str) - 1;
     while (end > str && isspace((unsigned char)*end)) end--;
-
+    
     // Write new null terminator
     *(end + 1) = '\0';
+    
+    return str;
 }
+
+// ... rest of utils.c

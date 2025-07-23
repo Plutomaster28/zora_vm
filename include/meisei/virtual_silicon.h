@@ -4,6 +4,7 @@
 
 #include <stdint.h>
 #include <stdbool.h>
+#include <stddef.h>  // Add this line for size_t
 
 // Meisei Virtual Silicon Core
 typedef struct {

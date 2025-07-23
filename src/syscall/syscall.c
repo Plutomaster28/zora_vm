@@ -61,6 +61,13 @@ int vm_system(const char* command) {
         return -1;
     }
     
+    // Allow specific safe commands
+    if (strcmp(command, "clear") == 0) {
+        printf("\033[2J\033[H");
+        fflush(stdout);
+        return 0;
+    }
+    
     // Only allow specific VM commands
     if (strncmp(command, "vm_", 3) == 0) {
         // Handle VM-specific commands

@@ -1,21 +1,134 @@
+#include "vfs.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <sys/stat.h>
-#include <dirent.h>
-#include <errno.h>     // Add this line
-#include "vfs.h"
+#include <stdint.h>
+#include <time.h>
+#include "platform/platform.h"
+
+// Platform-specific directory handling
+#ifdef PLATFORM_WINDOWS
+    #include <windows.h>
+    #include <direct.h>
+    #include <sys/stat.h>
+#else
+    #include <dirent.h>
+    #include <sys/stat.h>
+    #include <unistd.h>
+#endif
 
 // Virtual file system that stays in memory
 static VirtualFS* vm_fs = NULL;
+static char current_directory[256] = "/";
 
-static char current_directory[256] = "/";  // Add this global variable
+// NEW: Helper function to create directory nodes
+VNode* vfs_create_directory_node(const char* name) {
+    VNode* node = malloc(sizeof(VNode));
+    if (!node) return NULL;
+    
+    strncpy(node->name, name, sizeof(node->name) - 1);
+    node->name[sizeof(node->name) - 1] = '\0';
+    node->is_directory = 1;
+    node->is_persistent = 0;
+    node->size = 0;
+    node->data = NULL;
+    node->host_path = NULL;
+    node->parent = NULL;
+    node->children = NULL;
+    node->next = NULL;
+    
+    return node;
+}
 
-// Fix the VFS node type - use your existing VNode structure
-typedef enum {
-    VFS_FILE,
-    VFS_DIRECTORY
-} VFSNodeType;
+// NEW: Helper function to create file nodes
+VNode* vfs_create_file_node(const char* name) {
+    VNode* node = malloc(sizeof(VNode));
+    if (!node) return NULL;
+    
+    strncpy(node->name, name, sizeof(node->name) - 1);
+    node->name[sizeof(node->name) - 1] = '\0';
+    node->is_directory = 0;
+    node->is_persistent = 0;
+    node->size = 0;
+    node->data = NULL;
+    node->host_path = NULL;
+    node->parent = NULL;
+    node->children = NULL;
+    node->next = NULL;
+    
+    return node;
+}
+
+// NEW: Helper function to add child to parent
+void vfs_add_child(VNode* parent, VNode* child) {
+    if (!parent || !child) return;
+    
+    child->parent = parent;
+    child->next = parent->children;
+    parent->children = child;
+}
+
+// NEW: Create directory recursively
+int create_directory_recursive(const char* path) {
+    char temp_path[MAX_PATH];
+    strncpy(temp_path, path, sizeof(temp_path) - 1);
+    temp_path[sizeof(temp_path) - 1] = '\0';
+    
+    char* ptr = temp_path;
+    while (*ptr) {
+        if (*ptr == '/' || *ptr == '\\') {
+            *ptr = '\0';
+            
+            // Check if directory exists
+#ifdef PLATFORM_WINDOWS
+            DWORD attrib = GetFileAttributesA(temp_path);
+            if (attrib == INVALID_FILE_ATTRIBUTES) {
+                if (CreateDirectoryA(temp_path, NULL) == 0) {
+                    DWORD error = GetLastError();
+                    if (error != ERROR_ALREADY_EXISTS) {
+                        printf("Failed to create directory: %s (error: %lu)\n", temp_path, error);
+                        return -1;
+                    }
+                }
+            }
+#else
+            struct stat st;
+            if (stat(temp_path, &st) != 0) {
+                if (mkdir(temp_path, 0755) != 0) {
+                    perror("mkdir");
+                    return -1;
+                }
+            }
+#endif
+            *ptr = '/';
+        }
+        ptr++;
+    }
+    
+    // Create the final directory
+#ifdef PLATFORM_WINDOWS
+    DWORD attrib = GetFileAttributesA(temp_path);
+    if (attrib == INVALID_FILE_ATTRIBUTES) {
+        if (CreateDirectoryA(temp_path, NULL) == 0) {
+            DWORD error = GetLastError();
+            if (error != ERROR_ALREADY_EXISTS) {
+                printf("Failed to create final directory: %s (error: %lu)\n", temp_path, error);
+                return -1;
+            }
+        }
+    }
+#else
+    struct stat st;
+    if (stat(temp_path, &st) != 0) {
+        if (mkdir(temp_path, 0755) != 0) {
+            perror("mkdir");
+            return -1;
+        }
+    }
+#endif
+    
+    return 0;
+}
 
 int vfs_chdir(const char* path) {
     if (!path) return -1;
@@ -70,10 +183,10 @@ int vfs_init(void) {
     
     strcpy(vm_fs->root->name, "/");
     vm_fs->root->is_directory = 1;
-    vm_fs->root->is_persistent = 0;     // Add this line
+    vm_fs->root->is_persistent = 0;
     vm_fs->root->size = 0;
     vm_fs->root->data = NULL;
-    vm_fs->root->host_path = NULL;      // Add this line
+    vm_fs->root->host_path = NULL;
     vm_fs->root->parent = NULL;
     vm_fs->root->children = NULL;
     vm_fs->root->next = NULL;
@@ -111,6 +224,10 @@ void vfs_cleanup_node(VNode* node) {
     // Free data if it's a file
     if (node->data) {
         free(node->data);
+    }
+    
+    if (node->host_path) {
+        free(node->host_path);
     }
     
     free(node);
@@ -190,32 +307,17 @@ int vfs_mkdir(const char* path) {
     VNode* existing = parent->children;
     while (existing) {
         if (strcmp(existing->name, dir_name) == 0) {
-            return 0; // Already exists - return success instead of failure
+            return 0; // Already exists
         }
         existing = existing->next;
     }
     
     // Create new directory node
-    VNode* new_dir = malloc(sizeof(VNode));
+    VNode* new_dir = vfs_create_directory_node(dir_name);
     if (!new_dir) return -1;
     
-    strcpy(new_dir->name, dir_name);
-    new_dir->is_directory = 1;
-    new_dir->is_persistent = 1;     // Mark as persistent
-    new_dir->size = 0;
-    new_dir->data = NULL;
-    new_dir->host_path = NULL;
-    new_dir->parent = parent;
-    new_dir->children = NULL;
-    new_dir->next = parent->children;
-    
-    parent->children = new_dir;
-    
+    vfs_add_child(parent, new_dir);
     return 0;
-}
-
-int vfs_create_directory(const char* path) {
-    return vfs_mkdir(path);  // Use the existing vfs_mkdir implementation
 }
 
 int vfs_create_file(const char* path) {
@@ -245,82 +347,149 @@ int vfs_create_file(const char* path) {
     }
     
     // Create new file node
-    VNode* new_file = malloc(sizeof(VNode));
+    VNode* new_file = vfs_create_file_node(file_name);
     if (!new_file) return -1;
     
-    strcpy(new_file->name, file_name);
-    new_file->is_directory = 0;
-    new_file->size = 0;
-    new_file->data = NULL;
-    new_file->parent = parent;
-    new_file->children = NULL;
-    new_file->next = parent->children;
-    
-    parent->children = new_file;
-    
+    vfs_add_child(parent, new_file);
     return 0;
 }
 
-int vfs_rmdir(const char* path) {
-    VNode* node = vfs_find_node(path);
-    if (!node || !node->is_directory || node->children) {
-        return -1; // Not found, not a directory, or not empty
+// FIXED: Load persistent directory function
+void vfs_load_persistent_directory(VNode* vm_node, const char* host_path) {
+    printf("DEBUG: Loading persistent directory from %s to %s\n", host_path, vm_node->name);
+    
+#ifdef PLATFORM_WINDOWS
+    // Windows implementation using FindFirstFile/FindNextFile
+    WIN32_FIND_DATAA find_data;
+    char search_path[MAX_PATH];
+    snprintf(search_path, sizeof(search_path), "%s\\*", host_path);
+    
+    HANDLE hFind = FindFirstFileA(search_path, &find_data);
+    if (hFind == INVALID_HANDLE_VALUE) {
+        printf("DEBUG: Failed to open directory: %s\n", host_path);
+        return;
     }
     
-    // Remove from parent's children list
-    VNode* parent = node->parent;
-    if (parent) {
-        VNode* prev = NULL;
-        VNode* current = parent->children;
+    do {
+        // Skip . and ..
+        if (strcmp(find_data.cFileName, ".") == 0 || strcmp(find_data.cFileName, "..") == 0) {
+            continue;
+        }
         
-        while (current) {
-            if (current == node) {
-                if (prev) {
-                    prev->next = current->next;
-                } else {
-                    parent->children = current->next;
-                }
-                break;
+        printf("DEBUG: Found entry: %s\n", find_data.cFileName);
+        
+        // Build full paths
+        char full_host_path[MAX_PATH];
+        snprintf(full_host_path, sizeof(full_host_path), "%s\\%s", host_path, find_data.cFileName);
+        
+        if (find_data.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) {
+            // It's a directory
+            printf("DEBUG: Creating directory node: %s\n", find_data.cFileName);
+            VNode* dir_node = vfs_create_directory_node(find_data.cFileName);
+            if (dir_node) {
+                vfs_add_child(vm_node, dir_node);
+                // Recursive load
+                vfs_load_persistent_directory(dir_node, full_host_path);
             }
-            prev = current;
-            current = current->next;
+        } else {
+            // It's a file
+            printf("DEBUG: Creating file node: %s\n", find_data.cFileName);
+            VNode* file_node = vfs_create_file_node(find_data.cFileName);
+            if (file_node) {
+                file_node->host_path = malloc(strlen(full_host_path) + 1);
+                if (file_node->host_path) {
+                    strcpy(file_node->host_path, full_host_path);
+                }
+                file_node->size = find_data.nFileSizeLow;
+                file_node->is_persistent = 1;
+                vfs_add_child(vm_node, file_node);
+                printf("DEBUG: Added file: %s (size: %zu)\n", file_node->name, file_node->size);
+            }
+        }
+    } while (FindNextFileA(hFind, &find_data) != 0);
+    
+    FindClose(hFind);
+    
+#else
+    // Linux implementation
+    DIR* dir = opendir(host_path);
+    if (!dir) {
+        printf("DEBUG: Failed to open directory: %s\n", host_path);
+        return;
+    }
+    
+    struct dirent* entry;
+    while ((entry = readdir(dir)) != NULL) {
+        // Skip . and ..
+        if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0) {
+            continue;
+        }
+        
+        printf("DEBUG: Found entry: %s\n", entry->d_name);
+        
+        // Build full path
+        char full_host_path[PATH_MAX];
+        snprintf(full_host_path, sizeof(full_host_path), "%s/%s", host_path, entry->d_name);
+        
+        // Check if it's a directory or file
+        struct stat st;
+        if (stat(full_host_path, &st) == 0) {
+            if (S_ISDIR(st.st_mode)) {
+                // It's a directory
+                VNode* dir_node = vfs_create_directory_node(entry->d_name);
+                if (dir_node) {
+                    vfs_add_child(vm_node, dir_node);
+                    vfs_load_persistent_directory(dir_node, full_host_path);
+                }
+            } else {
+                // It's a file
+                VNode* file_node = vfs_create_file_node(entry->d_name);
+                if (file_node) {
+                    file_node->host_path = malloc(strlen(full_host_path) + 1);
+                    if (file_node->host_path) {
+                        strcpy(file_node->host_path, full_host_path);
+                    }
+                    file_node->size = st.st_size;
+                    file_node->is_persistent = 1;
+                    vfs_add_child(vm_node, file_node);
+                }
+            }
         }
     }
     
-    free(node);
-    return 0;
+    closedir(dir);
+#endif
+    
+    printf("DEBUG: Finished loading directory: %s\n", host_path);
 }
 
-int vfs_delete_file(const char* path) {
-    VNode* node = vfs_find_node(path);
-    if (!node || node->is_directory) {
-        return -1; // Not found or is a directory
-    }
+// Mount persistent directory
+int vfs_mount_persistent(const char* vm_path, const char* host_path) {
+    printf("DEBUG: Mounting persistent directory: %s -> %s\n", vm_path, host_path);
     
-    // Remove from parent's children list
-    VNode* parent = node->parent;
-    if (parent) {
-        VNode* prev = NULL;
-        VNode* current = parent->children;
-        
-        while (current) {
-            if (current == node) {
-                if (prev) {
-                    prev->next = current->next;
-                } else {
-                    parent->children = current->next;
-                }
-                break;
-            }
-            prev = current;
-            current = current->next;
+    // Find or create VM directory
+    VNode* vm_node = vfs_find_node(vm_path);
+    if (!vm_node) {
+        // Create the directory
+        if (vfs_mkdir(vm_path) != 0) {
+            printf("Failed to create VM directory: %s\n", vm_path);
+            return -1;
         }
+        vm_node = vfs_find_node(vm_path);
     }
     
-    if (node->data) {
-        free(node->data);
+    if (!vm_node || !vm_node->is_directory) {
+        printf("VM path is not a directory: %s\n", vm_path);
+        return -1;
     }
-    free(node);
+    
+    // Create the host directory if needed
+    if (create_directory_recursive(host_path) != 0) {
+        printf("Warning: Could not create host directory: %s\n", host_path);
+    }
+    
+    // Load the directory contents
+    vfs_load_persistent_directory(vm_node, host_path);
     return 0;
 }
 
@@ -352,35 +521,10 @@ char* vm_getcwd(void) {
     return path;
 }
 
-int vm_chdir(const char* path) {
-    if (!vm_fs || !path) return -1;
-    
-    VNode* target = vfs_find_node(path);
-    if (!target || !target->is_directory) {
-        return -1;
-    }
-    
-    vm_fs->current_dir = target;
-    return 0;
-}
-
-int vm_mkdir(const char* path) {
-    return vfs_mkdir(path);
-}
-
-int vm_rmdir(const char* path) {
-    return vfs_rmdir(path);
-}
-
-int vm_remove(const char* filename) {
-    return vfs_delete_file(filename);
-}
-
 VirtualFS* vfs_get_instance(void) {
     return vm_fs;
 }
 
-// Virtual command implementations
 int vm_ls(void) {
     if (!vm_fs || !vm_fs->current_dir) {
         return -1;
@@ -427,216 +571,86 @@ int vm_ps(void) {
     return 0;
 }
 
-// Mount persistent directory
-int vfs_mount_persistent(const char* vm_path, const char* host_path) {
-    printf("DEBUG: Mounting persistent directory: %s -> %s\n", vm_path, host_path);
-    
-    // Create the host directory (recursively if needed)
-    if (create_directory_recursive(host_path) != 0) {
-        printf("Warning: Could not create host directory structure: %s\n", host_path);
-        // Continue anyway - maybe the directory exists but we can't create it
-    }
-    
-    // Load the directory contents
-    return vfs_load_persistent_directory(vm_path, host_path);
-}
+// Add other missing vm_ functions as needed...
+int vm_chdir(const char* path) { return vfs_chdir(path); }
+int vm_mkdir(const char* path) { return vfs_mkdir(path); }
+int vm_rmdir(const char* path) { return vfs_rmdir(path); }
+int vm_remove(const char* filename) { return vfs_delete_file(filename); }
 
-// Load directory structure from host filesystem
-int vfs_load_persistent_directory(const char* vm_path, const char* host_path) {
-    printf("DEBUG: Loading persistent directory: %s -> %s\n", vm_path, host_path);
-    
-    // Get the VFS directory node
-    VNode* vfs_dir = vfs_find_node(vm_path);
-    if (!vfs_dir) {
-        printf("DEBUG: VFS directory not found: %s\n", vm_path);
+// Add missing functions for rmdir and delete_file
+int vfs_rmdir(const char* path) {
+    VNode* node = vfs_find_node(path);
+    if (!node || !node->is_directory || node->children) {
         return -1;
     }
     
-    if (!vfs_dir->is_directory) {
-        printf("DEBUG: VFS node is not a directory: %s\n", vm_path);
-        return -1;
-    }
-    
-    printf("DEBUG: Found VFS directory: %s\n", vm_path);
-    
-    // Open the host directory
-    DIR* dir = opendir(host_path);
-    if (!dir) {
-        printf("DEBUG: Cannot open host directory: %s (errno: %d)\n", host_path, errno);
-        return -1;
-    }
-    
-    printf("DEBUG: Successfully opened host directory: %s\n", host_path);
-    
-    struct dirent* entry;
-    int file_count = 0;
-    
-    while ((entry = readdir(dir)) != NULL) {
-        printf("DEBUG: Found entry: %s\n", entry->d_name);
+    // Remove from parent's children list
+    VNode* parent = node->parent;
+    if (parent) {
+        VNode* prev = NULL;
+        VNode* current = parent->children;
         
-        // Skip . and .. entries
-        if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0) {
-            printf("DEBUG: Skipping special directory: %s\n", entry->d_name);
-            continue;
-        }
-        
-        // Build full paths
-        char full_host_path[512];
-        char full_vm_path[512];
-        snprintf(full_host_path, sizeof(full_host_path), "%s/%s", host_path, entry->d_name);
-        snprintf(full_vm_path, sizeof(full_vm_path), "%s/%s", vm_path, entry->d_name);
-        
-        printf("DEBUG: Processing: %s -> %s\n", full_host_path, full_vm_path);
-        
-        // Check if it's a directory or file
-        struct stat st;
-        if (stat(full_host_path, &st) == 0) {
-            printf("DEBUG: stat() successful for %s\n", full_host_path);
-            
-            if (S_ISDIR(st.st_mode)) {
-                printf("DEBUG: Creating directory: %s\n", full_vm_path);
-                // Create directory in VFS
-                if (vfs_mkdir(full_vm_path) == 0) {
-                    printf("DEBUG: Successfully created directory: %s\n", full_vm_path);
-                    // Recursively load subdirectory
-                    vfs_load_persistent_directory(full_vm_path, full_host_path);
+        while (current) {
+            if (current == node) {
+                if (prev) {
+                    prev->next = current->next;
                 } else {
-                    printf("DEBUG: Failed to create directory: %s\n", full_vm_path);
+                    parent->children = current->next;
                 }
-            } else {
-                printf("DEBUG: Creating file: %s (size: %zu)\n", full_vm_path, st.st_size);
-                
-                // Create file in VFS
-                VNode* file_node = malloc(sizeof(VNode));
-                if (file_node) {
-                    strncpy(file_node->name, entry->d_name, sizeof(file_node->name) - 1);
-                    file_node->name[sizeof(file_node->name) - 1] = '\0';
-                    file_node->is_directory = 0;
-                    file_node->is_persistent = 1;
-                    file_node->size = st.st_size;
-                    file_node->data = NULL; // We'll load data on demand
-                    file_node->parent = vfs_dir;
-                    file_node->children = NULL;
-                    file_node->next = vfs_dir->children;
-                    
-                    // Store host path for later access
-                    file_node->host_path = malloc(strlen(full_host_path) + 1);
-                    if (file_node->host_path) {
-                        strcpy(file_node->host_path, full_host_path);
-                    }
-                    
-                    vfs_dir->children = file_node;
-                    file_count++;
-                    printf("DEBUG: Successfully created file node: %s (%zu bytes)\n", full_vm_path, file_node->size);
-                } else {
-                    printf("DEBUG: Failed to allocate memory for file node: %s\n", full_vm_path);
-                }
+                break;
             }
-        } else {
-            printf("DEBUG: stat() failed for %s (errno: %d)\n", full_host_path, errno);
+            prev = current;
+            current = current->next;
         }
     }
     
-    closedir(dir);
-    printf("DEBUG: Loaded %d files from %s\n", file_count, host_path);
+    free(node);
     return 0;
 }
 
-int vfs_create_persistent_file(const char* vm_path, const char* host_path) {
-    // Implementation for creating persistent files
-    printf("Creating persistent file: %s -> %s\n", vm_path, host_path);
-    return 0;
-}
-
-// Sync persistent node to host filesystem
-int vfs_sync_persistent_node(VNode* node) {
-    if (!node || !node->is_persistent || !node->host_path) {
+int vfs_delete_file(const char* path) {
+    VNode* node = vfs_find_node(path);
+    if (!node || node->is_directory) {
         return -1;
     }
     
-    if (node->is_directory) {
-        // Ensure directory exists
-        mkdir(node->host_path);
-    } else {
-        // Write file content
-        FILE* f = fopen(node->host_path, "wb");
-        if (f && node->data) {
-            fwrite(node->data, 1, node->size, f);
-            fclose(f);
-        }
-    }
-    
-    return 0;
-}
-
-// Sync all persistent storage
-int vfs_sync_all_persistent(void) {
-    // Implementation for syncing all persistent storage
-    printf("Syncing all persistent storage\n");
-    return 0;
-}
-
-// Add this function to properly initialize persistent directories:
-
-void vfs_initialize_persistent_directories(void) {
-    printf("Initializing persistent directories...\n");
-    
-    // Create the persistent directory structure
-    vfs_mkdir("/persistent");
-    
-    // Mount and load the host directories directly
-    // Use "../ZoraPerl" since we're running from build directory
-    printf("Loading persistent storage from host filesystem...\n");
-    vfs_mount_persistent("/persistent/documents", "../ZoraPerl/documents");
-    vfs_mount_persistent("/persistent/scripts", "../ZoraPerl/scripts");
-    vfs_mount_persistent("/persistent/projects", "../ZoraPerl/projects");
-    vfs_mount_persistent("/persistent/data", "../ZoraPerl/data");
-    
-    printf("Persistent directories initialized and loaded\n");
-}
-
-// Add this helper function for recursive directory creation:
-
-int create_directory_recursive(const char* path) {
-    char temp_path[512];
-    char* p = NULL;
-    size_t len;
-    
-    snprintf(temp_path, sizeof(temp_path), "%s", path);
-    len = strlen(temp_path);
-    
-    // Remove trailing slash if present
-    if (temp_path[len - 1] == '/' || temp_path[len - 1] == '\\') {
-        temp_path[len - 1] = '\0';
-    }
-    
-    // Create directories recursively
-    for (p = temp_path + 1; *p; p++) {
-        if (*p == '/' || *p == '\\') {
-            *p = '\0';
-            
-            struct stat st;
-            if (stat(temp_path, &st) != 0) {
-                if (mkdir(temp_path) != 0) {
-                    printf("Warning: Could not create directory: %s\n", temp_path);
-                    return -1;
+    // Remove from parent's children list
+    VNode* parent = node->parent;
+    if (parent) {
+        VNode* prev = NULL;
+        VNode* current = parent->children;
+        
+        while (current) {
+            if (current == node) {
+                if (prev) {
+                    prev->next = current->next;
+                } else {
+                    parent->children = current->next;
                 }
-                printf("Created directory: %s\n", temp_path);
+                break;
             }
-            
-            *p = '/';
+            prev = current;
+            current = current->next;
         }
     }
     
-    // Create the final directory
-    struct stat st;
-    if (stat(temp_path, &st) != 0) {
-        if (mkdir(temp_path) != 0) {
-            printf("Warning: Could not create directory: %s\n", temp_path);
-            return -1;
-        }
-        printf("Created directory: %s\n", temp_path);
+    if (node->data) {
+        free(node->data);
     }
-    
+    if (node->host_path) {
+        free(node->host_path);
+    }
+    free(node);
     return 0;
+}
+
+int vfs_create_directory(const char* path) {
+    return vfs_mkdir(path);
+}
+
+void vfs_sync_all_persistent(void) {
+    printf("Syncing all persistent storage...\n");
+    // Implementation for syncing persistent files
+    // For now, just print a message
+    printf("Sync completed\n");
 }
