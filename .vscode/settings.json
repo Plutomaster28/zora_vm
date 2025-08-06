@@ -4,5 +4,8 @@
         "*.kairos": "code-text-binary",
         "*.exe": "code-text-binary",
         "string.h": "c"
-    }
+    },
+    "robloxLsp.diagnostics.disable": [
+        "undefined-global"
+    ]
 }
