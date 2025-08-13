@@ -74,6 +74,11 @@ int vfs_create_directory(const char* path);
 void vfs_sync_all_persistent(void);
 int vm_system(const char* command);  // Add this for shell.c
 
+// Root host mapping (treat a host directory tree as "/")
+int vfs_mount_root_directories(const char* host_root, const char* const* dirs, size_t count);
+int vfs_set_host_root(const char* host_root); // Optionally remember a host root (future use)
+int vfs_mount_root_autodiscover(const char* host_root); // Scan host_root and mount all first-level dirs
+
 // Add other missing vm_ function declarations:
 int vm_clear(void);
 int vm_pwd(void);

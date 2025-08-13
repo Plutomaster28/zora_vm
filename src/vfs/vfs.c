@@ -20,6 +20,7 @@
 // Virtual file system that stays in memory
 static VirtualFS* vm_fs = NULL;
 static char current_directory[256] = "/";
+static char host_root_directory[512] = {0};
 
 // NEW: Helper function to create directory nodes
 VNode* vfs_create_directory_node(const char* name) {
@@ -653,4 +654,82 @@ void vfs_sync_all_persistent(void) {
     // Implementation for syncing persistent files
     // For now, just print a message
     printf("Sync completed\n");
+}
+
+int vfs_set_host_root(const char* host_root) {
+    if (!host_root) return -1;
+    strncpy(host_root_directory, host_root, sizeof(host_root_directory)-1);
+    host_root_directory[sizeof(host_root_directory)-1] = '\0';
+    return 0;
+}
+
+// Mount a set of standard root directories from a host tree into the VM root
+int vfs_mount_root_directories(const char* host_root, const char* const* dirs, size_t count) {
+    if (!host_root || !dirs || count == 0) return -1;
+    vfs_set_host_root(host_root);
+    for (size_t i = 0; i < count; ++i) {
+        char vm_path[256];
+        char host_path[512];
+        const char* name = dirs[i];
+        if (!name || !*name) continue;
+        // Ensure the directory exists in VM
+        snprintf(vm_path, sizeof(vm_path), "/%s", name);
+        vfs_create_directory(vm_path);
+        // Build host path
+#ifdef PLATFORM_WINDOWS
+        snprintf(host_path, sizeof(host_path), "%s\\%s", host_root, name);
+#else
+        snprintf(host_path, sizeof(host_path), "%s/%s", host_root, name);
+#endif
+        create_directory_recursive(host_path);
+        vfs_mount_persistent(vm_path, host_path);
+    }
+    return 0;
+}
+
+int vfs_mount_root_autodiscover(const char* host_root) {
+    if (!host_root) return -1;
+    vfs_set_host_root(host_root);
+    printf("Autodiscovering host root directories in %s...\n", host_root);
+#ifdef PLATFORM_WINDOWS
+    WIN32_FIND_DATAA find_data;
+    char search[MAX_PATH];
+    snprintf(search, sizeof(search), "%s\\*", host_root);
+    HANDLE hFind = FindFirstFileA(search, &find_data);
+    if (hFind == INVALID_HANDLE_VALUE) {
+        printf("No entries found in host root.\n");
+        return -1;
+    }
+    do {
+        if (strcmp(find_data.cFileName,".") == 0 || strcmp(find_data.cFileName,"..") == 0) continue;
+        if (find_data.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) {
+            char vm_path[256];
+            char host_path[MAX_PATH];
+            snprintf(vm_path, sizeof(vm_path), "/%s", find_data.cFileName);
+            snprintf(host_path, sizeof(host_path), "%s\\%s", host_root, find_data.cFileName);
+            vfs_create_directory(vm_path);
+            vfs_mount_persistent(vm_path, host_path);
+        }
+    } while (FindNextFileA(hFind, &find_data));
+    FindClose(hFind);
+#else
+    DIR* dir = opendir(host_root);
+    if (!dir) return -1;
+    struct dirent* entry;
+    while ((entry = readdir(dir)) != NULL) {
+        if (strcmp(entry->d_name,".") == 0 || strcmp(entry->d_name,"..") == 0) continue;
+        char host_path[PATH_MAX];
+        snprintf(host_path, sizeof(host_path), "%s/%s", host_root, entry->d_name);
+        struct stat st; if (stat(host_path, &st) != 0) continue;
+        if (S_ISDIR(st.st_mode)) {
+            char vm_path[256];
+            snprintf(vm_path, sizeof(vm_path), "/%s", entry->d_name);
+            vfs_create_directory(vm_path);
+            vfs_mount_persistent(vm_path, host_path);
+        }
+    }
+    closedir(dir);
+#endif
+    printf("Autodiscovery complete.\n");
+    return 0;
 }

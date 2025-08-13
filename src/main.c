@@ -18,6 +18,7 @@
 #include "lua/lua_vm.h"
 #include "binary/binary_executor.h"
 #include "meisei/virtual_silicon.h"
+#include "desktop/desktop.h"
 
 #ifdef PYTHON_SCRIPTING
 #include "python/python_vm.h"
@@ -220,26 +221,14 @@ int main(int argc, char* argv[]) {
     create_directory_recursive("../ZoraPerl/data");
     create_directory_recursive("../ZoraPerl/projects");
     
-    // Initialize persistent directories
-    printf("Setting up persistent storage...\n");
-    
-    // Create the basic directory structure
-    vfs_create_directory("/persistent");
-    vfs_create_directory("/persistent/documents");
-    vfs_create_directory("/persistent/scripts");
-    vfs_create_directory("/persistent/data");
-    vfs_create_directory("/persistent/projects");
-    
-    // Mount ZoraPerl directory
-    vfs_mount_persistent("/persistent", "../ZoraPerl");
-    
-    // Create subdirectories for different purposes
-    vfs_mount_persistent("/persistent/documents", "../ZoraPerl/documents");
-    vfs_mount_persistent("/persistent/scripts", "../ZoraPerl/scripts");
-    vfs_mount_persistent("/persistent/data", "../ZoraPerl/data");
-    vfs_mount_persistent("/persistent/projects", "../ZoraPerl/projects");
-    
-    printf("Persistent storage ready\n");
+    // Autodiscover host root-style directories directly under /
+    printf("Mapping host ZoraPerl tree (autodiscover) as VM root...\n");
+    create_directory_recursive("../ZoraPerl");
+    vfs_mount_root_autodiscover("../ZoraPerl");
+    printf("Root mapping complete.\n");
+
+    // Optionally place a starter desktop script in /usr/bin or /bin
+    // Later we will execute a Perl 'desktop.pl' script to start the GUI environment.
 
     // Initialize network virtualization
     printf("Initializing virtual network...\n");
@@ -285,6 +274,18 @@ int main(int argc, char* argv[]) {
 
     printf("Zora VM initialized successfully. Starting MERL shell...\n");
     printf("========================================\n");
+
+    // Desktop bootstrap (before shell for now)
+    desktop_init();
+    // Attempt to load /bin/desktop.pl if Perl scripting available
+#ifdef PERL_SCRIPTING
+    if (vfs_find_node("/bin/desktop.pl")) {
+        printf("Launching desktop.pl...\n");
+        perl_vm_load_script("/bin/desktop.pl");
+    } else {
+        printf("desktop.pl not found in /bin; skipping desktop launch.\n");
+    }
+#endif
 
     // Start the MERL shell as the "OS" with crash protection
     int result = 0;

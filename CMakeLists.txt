@@ -92,6 +92,7 @@ include_directories(include/lua)
 include_directories(include/python)
 include_directories(include/perl)
 include_directories(include/meisei)
+include_directories(include/desktop)
 include_directories(MERL)
 include_directories(${LUA_INCLUDE_DIRS})
 
@@ -154,6 +155,7 @@ file(GLOB LUA_SOURCES "src/lua/*.c")
 file(GLOB PYTHON_SOURCES "src/python/*.c")
 file(GLOB PERL_SOURCES "src/perl/*.c")
 file(GLOB MEISEI_SOURCES "src/meisei/*.c")
+file(GLOB DESKTOP_SOURCES "src/desktop/*.c")
 
 # MERL shell sources (excluding main)
 file(GLOB MERL_SHELL_SOURCES "MERL/*.c")
@@ -256,6 +258,7 @@ add_executable(zora_vm
     ${PYTHON_SOURCES}
     ${PERL_SOURCES}
     ${MEISEI_SOURCES}
+    ${DESKTOP_SOURCES}
     ${MERL_SHELL_SOURCES}
     ${HEADERS}
     ${MERL_HEADERS}

@@ -1,11 +1,13 @@
 #include "perl_vm.h"
 #include "sandbox.h"  // Add this missing include
 #include "vfs/vfs.h"
+#include "desktop/desktop.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
 static PerlVM perl_vm = {0};
+static int perl_last_window_id = 0; // Track last created desktop window
 
 // Initialize Perl VM (simplified)
 int perl_vm_init(void) {
@@ -45,6 +47,57 @@ static int execute_perl_statement(const char* line) {
         return 0;
     }
     
+    // Desktop integration commands (simple line-based DSL)
+    if (strncmp(start, "desktop_create_window", 22) == 0) {
+        // Format: desktop_create_window "Title" WIDTH HEIGHT
+        const char* p = start + 22;
+        while (*p == ' ' || *p == '\t') p++;
+        char title[128] = "Window";
+        int width = 640, height = 480;
+        if (*p == '"') {
+            p++;
+            const char* q = strchr(p, '"');
+            if (q) {
+                size_t len = q - p; if (len >= sizeof(title)) len = sizeof(title)-1;
+                strncpy(title, p, len); title[len] = '\0';
+                p = q + 1;
+            }
+        }
+        sscanf(p, "%d %d", &width, &height);
+        perl_last_window_id = desktop_create_window(title, width, height);
+        printf("Perl: Created window id=%d title='%s'\n", perl_last_window_id, title);
+        free(trimmed); return 0;
+    }
+    if (strncmp(start, "desktop_add_label", 18) == 0) {
+        // Format: desktop_add_label ID "Text"
+        int id = perl_last_window_id; // default to last
+        const char* p = start + 18; while (*p==' '||*p=='\t') p++;
+        if (*p >= '0' && *p <= '9') { id = atoi(p); while (*p && *p!=' ' && *p!='\t') p++; }
+        while (*p==' '||*p=='\t') p++;
+        char text[256] = "Label";
+        if (*p == '"') { p++; const char* q = strchr(p,'"'); if (q) { size_t len = q-p; if(len>=sizeof(text)) len=sizeof(text)-1; strncpy(text,p,len); text[len]='\0'; } }
+        desktop_add_label(id, text);
+        free(trimmed); return 0;
+    }
+    if (strncmp(start, "desktop_show_window", 20) == 0) {
+        int id = perl_last_window_id;
+        const char* p = start + 20; while (*p==' '||*p=='\t') p++;
+        if (*p >= '0' && *p <= '9') id = atoi(p);
+        desktop_show_window(id);
+        free(trimmed); return 0;
+    }
+    if (strncmp(start, "desktop_run_loop", 16) == 0) {
+        desktop_run_loop();
+        free(trimmed); return 0;
+    }
+    if (strncmp(start, "desktop_theme", 13) == 0) {
+        const char* p = start + 13; while (*p==' '||*p=='\t') p++;
+        if (*p) { desktop_switch_theme(p); }
+        free(trimmed); return 0;
+    }
+    if (strncmp(start, "desktop_list_themes", 20) == 0) {
+        desktop_list_themes(); free(trimmed); return 0; }
+
     // Handle print statements
     if (strncmp(start, "print ", 6) == 0) {
         char* content = start + 6;
@@ -79,7 +132,7 @@ static int execute_perl_statement(const char* line) {
         return 0;
     }
     
-    // Handle variable assignments
+    // Handle variable assignments (placeholder, no storage)
     if (strchr(start, '=')) {
         printf("Variable assignment: %s\n", start);
         free(trimmed);

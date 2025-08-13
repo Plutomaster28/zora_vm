@@ -13,6 +13,7 @@
 #include "vfs/vfs.h"
 #include "lua/lua_vm.h"
 #include "binary/binary_executor.h"
+#include "desktop/desktop.h"
 
 // Add platform detection at the top:
 #ifdef _WIN32
@@ -78,6 +79,9 @@ void debug_vfs_command(int argc, char* argv[]);
 void lua_command(int argc, char **argv);
 void luacode_command(int argc, char **argv);
 void test_sandbox_command(int argc, char **argv);
+void desktop_command(int argc, char **argv);
+void theme_command(int argc, char **argv);
+void themes_command(int argc, char **argv);
 
 // Binary execution commands
 void exec_command(int argc, char **argv) {
@@ -208,6 +212,33 @@ void sandbox_status_command(int argc, char **argv) {
     printf("   • Real machine code execution with syscall interception\n");
 }
 
+void desktop_command(int argc, char **argv) {
+    if (argc < 2) {
+        printf("Usage: desktop <restart|status>\n");
+        return;
+    }
+    if (strcmp(argv[1], "restart") == 0) {
+        desktop_restart();
+        printf("Desktop restarted.\n");
+    } else if (strcmp(argv[1], "status") == 0) {
+        printf("Desktop theme: %s\n", desktop_current_theme());
+        desktop_list_themes();
+    } else {
+        printf("Unknown desktop subcommand.\n");
+    }
+}
+
+void theme_command(int argc, char **argv) {
+    if (argc < 2) { printf("Usage: theme <name>\n"); return; }
+    if (desktop_switch_theme(argv[1]) == 0) {
+        printf("Theme switched to %s\n", argv[1]);
+    }
+}
+
+void themes_command(int argc, char **argv) {
+    (void)argc; (void)argv; desktop_list_themes();
+}
+
 #ifdef PYTHON_SCRIPTING
 #include "python/python_vm.h"
 
@@ -217,25 +248,14 @@ void python_command(int argc, char **argv) {
         return;
     }
     
-    // Ensure script is only from VFS
     char script_path[256];
-    if (argv[1][0] != '/') {
-        snprintf(script_path, sizeof(script_path), "/persistent/scripts/%s", argv[1]);
-    } else {
-        strncpy(script_path, argv[1], sizeof(script_path) - 1);
-    }
-    
-    // Verify the script exists in VFS only
-    VNode* script_node = vfs_find_node(script_path);
-    if (!script_node) {
-        printf("Python script not found in VFS: %s\n", script_path);
+    resolve_script_path(argv[1], script_path, sizeof(script_path));
+    if (!vfs_find_node(script_path)) {
+        printf("Python script not found: %s\n", script_path);
         return;
     }
-    
     printf("Executing Python script (sandboxed): %s\n", script_path);
-    if (python_vm_load_script(script_path) != 0) {
-        printf("Failed to execute Python script\n");
-    }
+    if (python_vm_load_script(script_path) != 0) printf("Failed to execute Python script\n");
 }
 
 void pycode_command(int argc, char **argv) {
@@ -267,16 +287,10 @@ void perl_command(int argc, char **argv) {
     }
     
     char script_path[256];
-    if (argv[1][0] == '/') {
-        strcpy(script_path, argv[1]);
-    } else {
-        snprintf(script_path, sizeof(script_path), "/persistent/scripts/%s", argv[1]);
-    }
-    
+    resolve_script_path(argv[1], script_path, sizeof(script_path));
+    if (!vfs_find_node(script_path)) { printf("Perl script not found: %s\n", script_path); return; }
     printf("Executing Perl script: %s\n", script_path);
-    if (perl_vm_load_script(script_path) != 0) {
-        printf("Failed to execute Perl script\n");
-    }
+    if (perl_vm_load_script(script_path) != 0) printf("Failed to execute Perl script\n");
 }
 
 void plcode_command(int argc, char **argv) {
@@ -813,20 +827,23 @@ Command command_table[] = {
     {"iptables", iptables_command, "Configure firewall rules"},
     {"testvfs", test_vfs_command, "Test VFS functionality"},
     {"debugvfs", debug_vfs_command, "Debug VFS structure"},
-    {"lua", lua_command, "Execute Lua script from /persistent/scripts/"},
+    {"lua", lua_command, "Execute Lua script from /scripts (fallback /persistent/scripts)"},
     {"luacode", luacode_command, "Execute Lua code directly."},
     {"exec", exec_command, "Execute binary from /persistent/data/"},
     {"run-windows", run_windows_command, "Execute Windows binary with sandboxing"},
     {"run-linux", run_linux_command, "Execute Linux binary via QEMU"},
     {"list-binaries", list_binaries_command, "List available binaries and their types"},
     {"sandbox-status", sandbox_status_command, "Show sandbox execution status"},
+    {"desktop", desktop_command, "Desktop control (restart/status)"},
+    {"theme", theme_command, "Switch desktop theme"},
+    {"themes", themes_command, "List available desktop themes"},
     
     #ifdef PYTHON_SCRIPTING
-    {"python", python_command, "Execute Python script from /persistent/scripts/"},
+    {"python", python_command, "Execute Python script from /scripts (fallback legacy path)"},
     {"pycode", pycode_command, "Execute Python code directly"},
     #endif
     #ifdef PERL_SCRIPTING
-    {"perl", perl_command, "Execute Perl script from /persistent/scripts/"},
+    {"perl", perl_command, "Execute Perl script from /scripts (fallback legacy path)"},
     {"plcode", plcode_command, "Execute Perl code directly"},
     #endif
 
@@ -1168,22 +1185,26 @@ void debug_vfs_command(int argc, char* argv[]) {
     }
 }
 
+// Helper: resolve script path considering new root layout (/scripts) then legacy (/persistent/scripts)
+static void resolve_script_path(const char* name, char* out, size_t out_sz) {
+    if (!name || !out || out_sz == 0) return;
+    if (name[0] == '/') { strncpy(out, name, out_sz-1); out[out_sz-1] = '\0'; return; }
+    snprintf(out, out_sz, "/scripts/%s", name);
+    if (!vfs_find_node(out)) {
+        snprintf(out, out_sz, "/persistent/scripts/%s", name);
+    }
+}
+
 void lua_command(int argc, char **argv) {
     if (argc < 2) {
         printf("Usage: lua <script.lua>\n");
         return;
     }
-    
     char script_path[256];
-    if (argv[1][0] == '/') {
-        strcpy(script_path, argv[1]);
-    } else {
-        snprintf(script_path, sizeof(script_path), "/persistent/scripts/%s", argv[1]);
-    }
-    
+    resolve_script_path(argv[1], script_path, sizeof(script_path));
     printf("Executing Lua script: %s\n", script_path);
     if (lua_vm_load_script(script_path) != 0) {
-        printf("Failed to execute script\n");
+        printf("Failed to execute script (not found or error)\n");
     }
 }
 
