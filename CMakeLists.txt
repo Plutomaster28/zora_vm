@@ -1,3 +1,4 @@
+#remember to make it so that dependencies are baked in or bundled in
 cmake_minimum_required(VERSION 3.20)
 project(zora_vm C)
 
