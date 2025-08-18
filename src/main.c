@@ -220,6 +220,12 @@ int main(int argc, char* argv[]) {
     create_directory_recursive("../ZoraPerl/scripts");
     create_directory_recursive("../ZoraPerl/data");
     create_directory_recursive("../ZoraPerl/projects");
+    create_directory_recursive("../ZoraPerl/bin");
+    create_directory_recursive("../ZoraPerl/home");
+    create_directory_recursive("../ZoraPerl/tmp");
+    create_directory_recursive("../ZoraPerl/etc");
+    create_directory_recursive("../ZoraPerl/usr");
+    create_directory_recursive("../ZoraPerl/var");
     
     // Autodiscover host root-style directories directly under /
     printf("Mapping host ZoraPerl tree (autodiscover) as VM root...\n");
