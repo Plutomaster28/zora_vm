@@ -3,12 +3,21 @@
 #include <signal.h>
 #include <string.h>
 #include <setjmp.h>  // Add this include
+
+// Platform-specific includes for directory handling
+#ifdef PLATFORM_WINDOWS
+    #include <windows.h>
+    #include <direct.h>
+#else
+    #include <sys/stat.h>
+    #include <unistd.h>
+#endif
+
 #include "cpu.h"
 #include "memory.h"
 #include "device.h"
 #include "kernel.h"
 #include "sandbox.h"
-#include "zoraperl.h"
 #include "merl.h"
 #include "vfs/vfs.h"
 #include "syscall.h"
@@ -192,13 +201,6 @@ int main(int argc, char* argv[]) {
         goto cleanup;
     }
 
-    // Initialize ZoraPerl runtime within the VM
-    printf("Initializing ZoraPerl runtime...\n");
-    if (zoraperl_init() != 0) {
-        fprintf(stderr, "Failed to initialize ZoraPerl runtime.\n");
-        goto cleanup;
-    }
-
     // Initialize MERL shell within the VM
     printf("Initializing MERL shell...\n");
     if (merl_init() != 0) {
@@ -213,24 +215,77 @@ int main(int argc, char* argv[]) {
         goto cleanup;
     }
     
+    // Find the correct path to ZoraPerl directory
+    char zora_perl_path[512];
+    char current_dir[512];
+    
+#ifdef PLATFORM_WINDOWS
+    GetCurrentDirectoryA(sizeof(current_dir), current_dir);
+#else
+    if (!getcwd(current_dir, sizeof(current_dir))) {
+        strcpy(current_dir, ".");
+    }
+#endif
+    
+    printf("Current working directory: %s\n", current_dir);
+    
+    // Try multiple possible paths to find ZoraPerl
+    const char* possible_paths[] = {
+        "../ZoraPerl",           // from build directory
+        "../../ZoraPerl",        // if running from deeper build
+        "./ZoraPerl",            // if running from project root
+        "ZoraPerl"               // if ZoraPerl is in current dir
+    };
+    
+    int path_found = 0;
+    for (int i = 0; i < 4; i++) {
+        strcpy(zora_perl_path, possible_paths[i]);
+        
+#ifdef PLATFORM_WINDOWS
+        DWORD attrib = GetFileAttributesA(zora_perl_path);
+        if (attrib != INVALID_FILE_ATTRIBUTES && (attrib & FILE_ATTRIBUTE_DIRECTORY)) {
+            path_found = 1;
+            break;
+        }
+#else
+        struct stat st;
+        if (stat(zora_perl_path, &st) == 0 && S_ISDIR(st.st_mode)) {
+            path_found = 1;
+            break;
+        }
+#endif
+    }
+    
+    if (!path_found) {
+        fprintf(stderr, "ERROR: Could not find ZoraPerl directory in any expected location!\n");
+        fprintf(stderr, "Searched paths:\n");
+        for (int i = 0; i < 4; i++) {
+            fprintf(stderr, "  - %s\n", possible_paths[i]);
+        }
+        goto cleanup;
+    }
+    
+    printf("Found ZoraPerl directory at: %s\n", zora_perl_path);
+    
     // Ensure the entire ZoraPerl directory structure exists
     printf("Ensuring ZoraPerl directory structure exists...\n");
-    create_directory_recursive("../ZoraPerl");
-    create_directory_recursive("../ZoraPerl/documents");
-    create_directory_recursive("../ZoraPerl/scripts");
-    create_directory_recursive("../ZoraPerl/data");
-    create_directory_recursive("../ZoraPerl/projects");
-    create_directory_recursive("../ZoraPerl/bin");
-    create_directory_recursive("../ZoraPerl/home");
-    create_directory_recursive("../ZoraPerl/tmp");
-    create_directory_recursive("../ZoraPerl/etc");
-    create_directory_recursive("../ZoraPerl/usr");
-    create_directory_recursive("../ZoraPerl/var");
+    create_directory_recursive(zora_perl_path);
+    
+    // Create subdirectories using the found path
+    char subdir_path[600];
+    const char* subdirs[] = {"documents", "scripts", "data", "projects", "bin", "home", "tmp", "etc", "usr", "var"};
+    for (int i = 0; i < 10; i++) {
+#ifdef PLATFORM_WINDOWS
+        snprintf(subdir_path, sizeof(subdir_path), "%s\\%s", zora_perl_path, subdirs[i]);
+#else
+        snprintf(subdir_path, sizeof(subdir_path), "%s/%s", zora_perl_path, subdirs[i]);
+#endif
+        create_directory_recursive(subdir_path);
+    }
     
     // Autodiscover host root-style directories directly under /
     printf("Mapping host ZoraPerl tree (autodiscover) as VM root...\n");
-    create_directory_recursive("../ZoraPerl");
-    vfs_mount_root_autodiscover("../ZoraPerl");
+    vfs_mount_root_autodiscover(zora_perl_path);
     printf("Root mapping complete.\n");
 
     // Optionally place a starter desktop script in /usr/bin or /bin
@@ -318,7 +373,6 @@ cleanup:
     // Clean up resources before exiting
     printf("\nShutting down Zora VM...\n");
     merl_cleanup();
-    zoraperl_cleanup();
     device_cleanup();
     memory_cleanup();
     cpu_cleanup();

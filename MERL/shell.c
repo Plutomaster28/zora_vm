@@ -82,6 +82,10 @@ void test_sandbox_command(int argc, char **argv);
 void desktop_command(int argc, char **argv);
 void theme_command(int argc, char **argv);
 void themes_command(int argc, char **argv);
+void find_command(int argc, char **argv);
+void find_files_recursive(const char* dir_path, const char* pattern);
+void tree_command(int argc, char **argv);
+void print_tree_recursive(const char* dir_path, int depth);
 
 // Binary execution commands
 void exec_command(int argc, char **argv) {
@@ -352,6 +356,61 @@ void sysinfo_command(int argc, char **argv) {
     printf("Note: Unlike Zora, this is meant to provide a unix-like experience :3\n");
 }
 
+// Helper function to expand path shortcuts like ".." and "~"
+void expand_path(const char* input, char* output, size_t output_size) {
+    if (!input || !output) return;
+    
+    // Handle special cases
+    if (strcmp(input, "~") == 0) {
+        strncpy(output, "/home", output_size - 1);
+        output[output_size - 1] = '\0';
+        return;
+    }
+    
+    if (strcmp(input, "..") == 0) {
+        char* current = vfs_getcwd();
+        if (current && strcmp(current, "/") != 0) {
+            // Find parent directory
+            char* last_slash = strrchr(current, '/');
+            if (last_slash && last_slash != current) {
+                size_t parent_len = last_slash - current;
+                strncpy(output, current, parent_len);
+                output[parent_len] = '\0';
+            } else {
+                strcpy(output, "/");
+            }
+        } else {
+            strcpy(output, "/");
+        }
+        return;
+    }
+    
+    if (strcmp(input, ".") == 0) {
+        char* current = vfs_getcwd();
+        strncpy(output, current ? current : "/", output_size - 1);
+        output[output_size - 1] = '\0';
+        return;
+    }
+    
+    // Handle relative paths starting with ".."
+    if (strncmp(input, "../", 3) == 0) {
+        char parent_path[256];
+        expand_path("..", parent_path, sizeof(parent_path));
+        snprintf(output, output_size, "%s/%s", parent_path, input + 3);
+        return;
+    }
+    
+    // Handle paths starting with "~/"
+    if (strncmp(input, "~/", 2) == 0) {
+        snprintf(output, output_size, "/home/%s", input + 2);
+        return;
+    }
+    
+    // For absolute paths or regular relative paths, copy as-is
+    strncpy(output, input, output_size - 1);
+    output[output_size - 1] = '\0';
+}
+
 void pwd_command(int argc, char **argv) {
     char* cwd = vfs_getcwd(); // Use VFS instead of system getcwd
     if (cwd) {
@@ -362,22 +421,42 @@ void pwd_command(int argc, char **argv) {
 }
 
 void ls_command(int argc, char **argv) {
-    char* current_dir = vfs_getcwd();
-    printf("Contents of %s:\n", current_dir);
+    char target_dir[512];
     
-    // Get the current directory node
-    VNode* dir_node = vfs_find_node(current_dir);
+    // Determine target directory
+    if (argc < 2) {
+        // No argument - use current directory
+        char* cwd = vfs_getcwd();
+        strcpy(target_dir, cwd ? cwd : "/");
+    } else {
+        // Expand the provided path
+        char expanded_path[512];
+        expand_path(argv[1], expanded_path, sizeof(expanded_path));
+        
+        // Build absolute path if relative
+        if (expanded_path[0] != '/') {
+            char* cwd = vfs_getcwd();
+            snprintf(target_dir, sizeof(target_dir), "%s/%s", cwd, expanded_path);
+        } else {
+            strcpy(target_dir, expanded_path);
+        }
+    }
+    
+    printf("Contents of %s:\n", target_dir);
+    
+    // Get the target directory node
+    VNode* dir_node = vfs_find_node(target_dir);
     if (!dir_node) {
-        printf("Error: Cannot access current directory\n");
+        printf("ls: %s: No such file or directory\n", target_dir);
         return;
     }
     
     if (!dir_node->is_directory) {
-        printf("Error: Not a directory\n");
+        printf("ls: %s: Not a directory\n", target_dir);
         return;
     }
     
-    // List children of current directory
+    // List children of target directory
     VNode* child = dir_node->children;
     if (!child) {
         printf("(empty directory)\n");
@@ -396,15 +475,25 @@ void ls_command(int argc, char **argv) {
 
 void cd_command(int argc, char **argv) {
     if (argc < 2) {
-        printf("Usage: cd <directory>\n");
+        // No argument provided - go to home directory
+        char home_path[] = "/home";
+        if (vfs_chdir(home_path) == 0) {
+            printf("Changed directory to: %s\n", home_path);
+        } else {
+            printf("cd: Cannot access home directory\n");
+        }
         return;
     }
     
+    // Expand the path to handle "..", "~", etc.
+    char expanded_path[512];
+    expand_path(argv[1], expanded_path, sizeof(expanded_path));
+    
     // Use VFS chdir instead of system chdir
-    if (vfs_chdir(argv[1]) == 0) {
-        printf("Changed directory to: %s\n", argv[1]);
+    if (vfs_chdir(expanded_path) == 0) {
+        printf("Changed directory to: %s\n", vfs_getcwd());
     } else {
-        printf("cd: %s: No such directory\n", argv[1]);
+        printf("cd: %s: No such directory\n", expanded_path);
     }
 }
 
@@ -413,10 +502,23 @@ void mkdir_command(int argc, char **argv) {
         printf("Usage: mkdir <directory>\n");
         return;
     }
-    if (vm_mkdir(argv[1]) == 0) { // Instead of _mkdir()
-        printf("Directory created: %s\n", argv[1]);
+    
+    char expanded_path[512];
+    expand_path(argv[1], expanded_path, sizeof(expanded_path));
+    
+    // Build absolute path if relative
+    char full_path[512];
+    if (expanded_path[0] != '/') {
+        char* cwd = vfs_getcwd();
+        snprintf(full_path, sizeof(full_path), "%s/%s", cwd, expanded_path);
     } else {
-        printf("mkdir: Failed to create directory\n");
+        strcpy(full_path, expanded_path);
+    }
+    
+    if (vfs_mkdir(full_path) == 0) {
+        printf("Directory created: %s\n", full_path);
+    } else {
+        printf("mkdir: Failed to create directory '%s'\n", full_path);
     }
 }
 
@@ -425,10 +527,23 @@ void rmdir_command(int argc, char **argv) {
         printf("Usage: rmdir <directory>\n");
         return;
     }
-    if (_rmdir(argv[1]) == 0) {
-        printf("Directory removed: %s\n", argv[1]);
+    
+    char expanded_path[512];
+    expand_path(argv[1], expanded_path, sizeof(expanded_path));
+    
+    // Build absolute path if relative
+    char full_path[512];
+    if (expanded_path[0] != '/') {
+        char* cwd = vfs_getcwd();
+        snprintf(full_path, sizeof(full_path), "%s/%s", cwd, expanded_path);
     } else {
-        perror("rmdir");
+        strcpy(full_path, expanded_path);
+    }
+    
+    if (vfs_rmdir(full_path) == 0) {
+        printf("Directory removed: %s\n", full_path);
+    } else {
+        printf("rmdir: Failed to remove directory '%s'\n", full_path);
     }
 }
 
@@ -437,12 +552,23 @@ void touch_command(int argc, char **argv) {
         printf("Usage: touch <filename>\n");
         return;
     }
-    FILE *file = fopen(argv[1], "w");
-    if (file) {
-        fclose(file);
-        printf("File created: %s\n", argv[1]);
+    
+    char expanded_path[512];
+    expand_path(argv[1], expanded_path, sizeof(expanded_path));
+    
+    // Build absolute path if relative
+    char full_path[512];
+    if (expanded_path[0] != '/') {
+        char* cwd = vfs_getcwd();
+        snprintf(full_path, sizeof(full_path), "%s/%s", cwd, expanded_path);
     } else {
-        perror("touch");
+        strcpy(full_path, expanded_path);
+    }
+    
+    if (vfs_create_file(full_path) == 0) {
+        printf("File created: %s\n", full_path);
+    } else {
+        printf("touch: Failed to create file '%s'\n", full_path);
     }
 }
 
@@ -451,10 +577,23 @@ void rm_command(int argc, char **argv) {
         printf("Usage: rm <filename>\n");
         return;
     }
-    if (remove(argv[1]) == 0) {
-        printf("File removed: %s\n", argv[1]);
+    
+    char expanded_path[512];
+    expand_path(argv[1], expanded_path, sizeof(expanded_path));
+    
+    // Build absolute path if relative
+    char full_path[512];
+    if (expanded_path[0] != '/') {
+        char* cwd = vfs_getcwd();
+        snprintf(full_path, sizeof(full_path), "%s/%s", cwd, expanded_path);
     } else {
-        perror("rm");
+        strcpy(full_path, expanded_path);
+    }
+    
+    if (vfs_delete_file(full_path) == 0) {
+        printf("File removed: %s\n", full_path);
+    } else {
+        printf("rm: Failed to remove file '%s'\n", full_path);
     }
 }
 
@@ -463,25 +602,55 @@ void cp_command(int argc, char **argv) {
         printf("Usage: cp <source> <destination>\n");
         return;
     }
-    FILE *src = fopen(argv[1], "rb");
-    if (!src) {
-        perror("cp");
+    
+    // Expand both source and destination paths
+    char src_expanded[512], dest_expanded[512];
+    expand_path(argv[1], src_expanded, sizeof(src_expanded));
+    expand_path(argv[2], dest_expanded, sizeof(dest_expanded));
+    
+    // Build absolute paths
+    char src_full[512], dest_full[512];
+    char* cwd = vfs_getcwd();
+    
+    if (src_expanded[0] != '/') {
+        snprintf(src_full, sizeof(src_full), "%s/%s", cwd, src_expanded);
+    } else {
+        strcpy(src_full, src_expanded);
+    }
+    
+    if (dest_expanded[0] != '/') {
+        snprintf(dest_full, sizeof(dest_full), "%s/%s", cwd, dest_expanded);
+    } else {
+        strcpy(dest_full, dest_expanded);
+    }
+    
+    // Find source node
+    VNode* src_node = vfs_find_node(src_full);
+    if (!src_node) {
+        printf("cp: %s: No such file or directory\n", src_full);
         return;
     }
-    FILE *dest = fopen(argv[2], "wb");
-    if (!dest) {
-        fclose(src);
-        perror("cp");
+    
+    if (src_node->is_directory) {
+        printf("cp: %s: Is a directory (use -r for recursive copy)\n", src_full);
         return;
     }
-    char buffer[1024];
-    size_t bytes;
-    while ((bytes = fread(buffer, 1, sizeof(buffer), src)) > 0) {
-        fwrite(buffer, 1, bytes, dest);
+    
+    // Create destination file
+    if (vfs_create_file(dest_full) == 0) {
+        // Copy data if source has data
+        VNode* dest_node = vfs_find_node(dest_full);
+        if (dest_node && src_node->data) {
+            dest_node->data = malloc(src_node->size);
+            if (dest_node->data) {
+                memcpy(dest_node->data, src_node->data, src_node->size);
+                dest_node->size = src_node->size;
+            }
+        }
+        printf("File copied from %s to %s\n", src_full, dest_full);
+    } else {
+        printf("cp: Failed to create destination file %s\n", dest_full);
     }
-    fclose(src);
-    fclose(dest);
-    printf("File copied from %s to %s\n", argv[1], argv[2]);
 }
 
 void mv_command(int argc, char **argv) {
@@ -489,10 +658,59 @@ void mv_command(int argc, char **argv) {
         printf("Usage: mv <source> <destination>\n");
         return;
     }
-    if (rename(argv[1], argv[2]) == 0) {
-        printf("File moved from %s to %s\n", argv[1], argv[2]);
+    
+    // Expand both source and destination paths
+    char src_expanded[512], dest_expanded[512];
+    expand_path(argv[1], src_expanded, sizeof(src_expanded));
+    expand_path(argv[2], dest_expanded, sizeof(dest_expanded));
+    
+    // Build absolute paths
+    char src_full[512], dest_full[512];
+    char* cwd = vfs_getcwd();
+    
+    if (src_expanded[0] != '/') {
+        snprintf(src_full, sizeof(src_full), "%s/%s", cwd, src_expanded);
     } else {
-        perror("mv");
+        strcpy(src_full, src_expanded);
+    }
+    
+    if (dest_expanded[0] != '/') {
+        snprintf(dest_full, sizeof(dest_full), "%s/%s", cwd, dest_expanded);
+    } else {
+        strcpy(dest_full, dest_expanded);
+    }
+    
+    // For now, implement mv as cp + rm
+    // TODO: Implement proper VFS move operation
+    VNode* src_node = vfs_find_node(src_full);
+    if (!src_node) {
+        printf("mv: %s: No such file or directory\n", src_full);
+        return;
+    }
+    
+    if (src_node->is_directory) {
+        printf("mv: %s: Is a directory (directory moves not yet implemented)\n", src_full);
+        return;
+    }
+    
+    // Copy then delete
+    if (vfs_create_file(dest_full) == 0) {
+        VNode* dest_node = vfs_find_node(dest_full);
+        if (dest_node && src_node->data) {
+            dest_node->data = malloc(src_node->size);
+            if (dest_node->data) {
+                memcpy(dest_node->data, src_node->data, src_node->size);
+                dest_node->size = src_node->size;
+            }
+        }
+        
+        if (vfs_delete_file(src_full) == 0) {
+            printf("File moved from %s to %s\n", src_full, dest_full);
+        } else {
+            printf("mv: Warning - copied but failed to remove source file\n");
+        }
+    } else {
+        printf("mv: Failed to create destination file %s\n", dest_full);
     }
 }
 
@@ -541,21 +759,124 @@ void echo_command(int argc, char **argv) {
     printf("\n");
 }
 
+void find_command(int argc, char **argv) {
+    if (argc < 2) {
+        printf("Usage: find <pattern>\n");
+        return;
+    }
+    
+    char* pattern = argv[1];
+    char* search_dir = (argc > 2) ? argv[2] : vfs_getcwd();
+    
+    printf("Searching for '%s' in %s:\n", pattern, search_dir);
+    find_files_recursive(search_dir, pattern);
+}
+
+void find_files_recursive(const char* dir_path, const char* pattern) {
+    VNode* dir_node = vfs_find_node(dir_path);
+    if (!dir_node || !dir_node->is_directory) {
+        return;
+    }
+    
+    VNode* child = dir_node->children;
+    while (child) {
+        // Check if name matches pattern (simple substring match)
+        if (strstr(child->name, pattern) != NULL) {
+            printf("%s/%s\n", dir_path, child->name);
+        }
+        
+        // Recursively search subdirectories
+        if (child->is_directory) {
+            char child_path[512];
+            snprintf(child_path, sizeof(child_path), "%s/%s", dir_path, child->name);
+            find_files_recursive(child_path, pattern);
+        }
+        
+        child = child->next;
+    }
+}
+
+void tree_command(int argc, char **argv) {
+    char* start_dir = (argc > 1) ? argv[1] : vfs_getcwd();
+    
+    char expanded_path[512];
+    expand_path(start_dir, expanded_path, sizeof(expanded_path));
+    
+    char full_path[512];
+    if (expanded_path[0] != '/') {
+        char* cwd = vfs_getcwd();
+        snprintf(full_path, sizeof(full_path), "%s/%s", cwd, expanded_path);
+    } else {
+        strcpy(full_path, expanded_path);
+    }
+    
+    printf("Directory tree for %s:\n", full_path);
+    print_tree_recursive(full_path, 0);
+}
+
+void print_tree_recursive(const char* dir_path, int depth) {
+    VNode* dir_node = vfs_find_node(dir_path);
+    if (!dir_node || !dir_node->is_directory) {
+        return;
+    }
+    
+    VNode* child = dir_node->children;
+    while (child) {
+        // Print indentation
+        for (int i = 0; i < depth; i++) {
+            printf("  ");
+        }
+        
+        if (child->is_directory) {
+            printf("📁 %s/\n", child->name);
+            // Recursively print subdirectories
+            char child_path[512];
+            snprintf(child_path, sizeof(child_path), "%s/%s", dir_path, child->name);
+            print_tree_recursive(child_path, depth + 1);
+        } else {
+            printf("📄 %s (%zu bytes)\n", child->name, child->size);
+        }
+        
+        child = child->next;
+    }
+}
+
 void cat_command(int argc, char **argv) {
     if (argc < 2) {
         printf("Usage: cat <filename>\n");
         return;
     }
-    FILE *file = fopen(argv[1], "r");
-    if (!file) {
-        perror("cat");
+    
+    char expanded_path[512];
+    expand_path(argv[1], expanded_path, sizeof(expanded_path));
+    
+    // Build absolute path if relative
+    char full_path[512];
+    if (expanded_path[0] != '/') {
+        char* cwd = vfs_getcwd();
+        snprintf(full_path, sizeof(full_path), "%s/%s", cwd, expanded_path);
+    } else {
+        strcpy(full_path, expanded_path);
+    }
+    
+    VNode* file_node = vfs_find_node(full_path);
+    if (!file_node) {
+        printf("cat: %s: No such file or directory\n", full_path);
         return;
     }
-    char buffer[1024];
-    while (fgets(buffer, sizeof(buffer), file)) {
-        printf("%s", buffer);
+    
+    if (file_node->is_directory) {
+        printf("cat: %s: Is a directory\n", full_path);
+        return;
     }
-    fclose(file);
+    
+    if (file_node->data && file_node->size > 0) {
+        // Print file contents
+        fwrite(file_node->data, 1, file_node->size, stdout);
+        printf("\n");
+    } else {
+        printf("(empty file)\n");
+    }
 }
 
 void pull_command(int argc, char* argv[]) {
@@ -837,6 +1158,8 @@ Command command_table[] = {
     {"desktop", desktop_command, "Desktop control (restart/status)"},
     {"theme", theme_command, "Switch desktop theme"},
     {"themes", themes_command, "List available desktop themes"},
+    {"find", find_command, "Search for files by name pattern"},
+    {"tree", tree_command, "Display directory tree structure"},
     
     #ifdef PYTHON_SCRIPTING
     {"python", python_command, "Execute Python script from /scripts (fallback legacy path)"},

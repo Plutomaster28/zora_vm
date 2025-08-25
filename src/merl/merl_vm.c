@@ -7,7 +7,6 @@
 #include <unistd.h>
 #endif
 #include "merl.h"
-#include "zoraperl.h"
 #include "shell.h"  // Include MERL shell header
 #include "vfs.h"    // Include VFS header
 #include "syscall.h" // Include syscall header

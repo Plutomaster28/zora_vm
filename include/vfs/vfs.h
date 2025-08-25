@@ -41,6 +41,8 @@ char* vfs_getcwd(void);
 // File operations
 int vfs_create_file(const char* path);
 int vfs_delete_file(const char* path);
+int vfs_write_file(const char* path, const void* data, size_t size);
+int vfs_read_file(const char* path, void** data, size_t* size);
 
 // Node operations
 VNode* vfs_find_node(const char* path);

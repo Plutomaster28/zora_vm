@@ -26,6 +26,18 @@ if(MSVC)
     add_compile_options(/GS /sdl)
 else()
     add_compile_options(-fstack-protector-strong -D_FORTIFY_SOURCE=2)
+    
+    # Static linking for standalone executables on MinGW/MSYS2
+    if(WIN32)
+        set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -static-libgcc -static-libstdc++ -static")
+        set(CMAKE_FIND_LIBRARY_SUFFIXES .a ${CMAKE_FIND_LIBRARY_SUFFIXES})
+        set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -Wl,--allow-multiple-definition")
+        
+        # Try to link CRT statically too (may not work on all systems)
+        # set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -Wl,-Bstatic -lmsvcrt -Wl,-Bdynamic")
+        
+        message(STATUS "Configured for static linking on Windows (MinGW)")
+    endif()
 endif()
 
 # === LUA DETECTION (Unified Logic) ===
@@ -78,12 +90,28 @@ if(NOT LUA_FOUND)
     message(FATAL_ERROR "Lua not found! Please install lua5.4-dev or lua-devel")
 endif()
 
+# Static linking preference for Lua on Windows
+if(WIN32 AND NOT MSVC)
+    # Try to find static Lua library if available
+    find_library(LUA_STATIC_LIB 
+        NAMES liblua.a lua54.a lua5.4.a
+        HINTS ${LUA_LIBRARY_DIRS}
+        PATH_SUFFIXES lib
+    )
+    
+    if(LUA_STATIC_LIB)
+        set(LUA_LIBRARIES ${LUA_STATIC_LIB})
+        message(STATUS "Using static Lua library: ${LUA_STATIC_LIB}")
+    else()
+        message(STATUS "Static Lua library not found, using: ${LUA_LIBRARIES}")
+    endif()
+endif()
+
 # === INCLUDE DIRECTORIES ===
 include_directories(include)
 include_directories(include/platform)     # Critical for platform.h
 include_directories(include/sandbox)      # NEW: Sandbox headers
 include_directories(include/binary)       # Binary execution headers
-include_directories(include/zoraperl)
 include_directories(include/merl)
 include_directories(include/vfs)
 include_directories(include/syscall)
@@ -146,7 +174,6 @@ set(ALL_PLATFORM_SOURCES
 )
 
 # OTHER SOURCES
-file(GLOB ZORAPERL_SOURCES "src/zoraperl/*.c")
 file(GLOB MERL_VM_SOURCES "src/merl/*.c")
 file(GLOB VFS_SOURCES "src/vfs/*.c")
 file(GLOB SYSCALL_SOURCES "src/syscall/*.c")
@@ -249,7 +276,6 @@ add_executable(zora_vm
     ${DEVICE_SOURCES}
     ${KERNEL_SOURCES}
     ${ALL_PLATFORM_SOURCES}  # Use combined platform sources
-    ${ZORAPERL_SOURCES}
     ${MERL_VM_SOURCES}
     ${VFS_SOURCES}
     ${SYSCALL_SOURCES}
@@ -267,6 +293,17 @@ add_executable(zora_vm
 
 # === LINK LIBRARIES ===
 if(WIN32)
+    # Static linking setup for Windows
+    if(NOT MSVC)
+        # For MinGW/MSYS2: Link libraries statically when possible
+        set_target_properties(zora_vm PROPERTIES 
+            LINK_FLAGS "-static-libgcc -static-libstdc++ -static"
+        )
+        
+        # Prefer static libraries
+        set(CMAKE_FIND_LIBRARY_SUFFIXES .a ${CMAKE_FIND_LIBRARY_SUFFIXES})
+    endif()
+    
     target_link_libraries(zora_vm 
         ${LUA_LIBRARIES}
         ws2_32      # Windows sockets
@@ -357,8 +394,20 @@ if(WIN32)
     # Windows-specific post-build
     add_custom_command(TARGET zora_vm POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E echo "Windows build completed successfully"
+        COMMAND ${CMAKE_COMMAND} -E echo "Executable location: $<TARGET_FILE:zora_vm>"
         COMMENT "Post-build validation"
     )
+    
+    # Add optional dependency check if objdump is available
+    find_program(OBJDUMP_PROGRAM objdump)
+    if(OBJDUMP_PROGRAM AND NOT MSVC)
+        add_custom_command(TARGET zora_vm POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E echo "Checking dynamic dependencies..."
+            COMMAND ${OBJDUMP_PROGRAM} -p $<TARGET_FILE:zora_vm> | findstr "DLL Name" || echo "No external DLL dependencies found (static build)"
+            COMMENT "Dependency analysis"
+            VERBATIM
+        )
+    endif()
 else()
     # Linux-specific post-build
     add_custom_command(TARGET zora_vm POST_BUILD
@@ -375,6 +424,15 @@ message(STATUS "Platform: ${CMAKE_SYSTEM_NAME}")
 message(STATUS "Compiler: ${CMAKE_C_COMPILER_ID}")
 message(STATUS "Lua: ${LUA_LIBRARIES}")
 message(STATUS "Build type: ${CMAKE_BUILD_TYPE}")
+
+# Show linking strategy
+if(WIN32 AND NOT MSVC)
+    message(STATUS "Linking: Static (standalone executable)")
+    message(STATUS "Runtime dependencies: None (fully self-contained)")
+else()
+    message(STATUS "Linking: Dynamic")
+endif()
+
 message(STATUS "Sandbox: Advanced cross-platform")
 message(STATUS "Binary support: ELF parsing enabled")
 if(WIN32)

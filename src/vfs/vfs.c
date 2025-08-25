@@ -22,6 +22,11 @@ static VirtualFS* vm_fs = NULL;
 static char current_directory[256] = "/";
 static char host_root_directory[512] = {0};
 
+// NEW: Write-through helper function declarations
+static char* vfs_get_host_path(VNode* node);
+static int vfs_ensure_host_directory(const char* host_path);
+static int vfs_sync_to_host(VNode* node);
+
 // NEW: Helper function to create directory nodes
 VNode* vfs_create_directory_node(const char* name) {
     VNode* node = malloc(sizeof(VNode));
@@ -129,6 +134,92 @@ int create_directory_recursive(const char* path) {
 #endif
     
     return 0;
+}
+
+// NEW: Get the full host filesystem path for a VFS node
+static char* vfs_get_host_path(VNode* node) {
+    if (!node || strlen(host_root_directory) == 0) return NULL;
+    
+    // Build path by walking up the tree
+    static char path_buffer[1024];
+    char temp_path[1024];
+    path_buffer[0] = '\0';
+    temp_path[0] = '\0';
+    
+    VNode* current = node;
+    while (current && current->parent) {
+        if (strlen(temp_path) > 0) {
+            snprintf(path_buffer, sizeof(path_buffer), "%s%c%s", current->name, 
+#ifdef PLATFORM_WINDOWS
+                     '\\',
+#else
+                     '/',
+#endif
+                     temp_path);
+        } else {
+            strncpy(path_buffer, current->name, sizeof(path_buffer) - 1);
+        }
+        strncpy(temp_path, path_buffer, sizeof(temp_path) - 1);
+        current = current->parent;
+    }
+    
+    // Construct full host path
+    static char full_path[1024];
+    if (strlen(path_buffer) > 0) {
+        snprintf(full_path, sizeof(full_path), "%s%c%s", host_root_directory,
+#ifdef PLATFORM_WINDOWS
+                 '\\',
+#else
+                 '/',
+#endif
+                 path_buffer);
+    } else {
+        strncpy(full_path, host_root_directory, sizeof(full_path) - 1);
+    }
+    
+    return full_path;
+}
+
+// NEW: Ensure host directory exists (create if needed)
+static int vfs_ensure_host_directory(const char* host_path) {
+    if (!host_path) return -1;
+    
+#ifdef PLATFORM_WINDOWS
+    DWORD attrib = GetFileAttributesA(host_path);
+    if (attrib == INVALID_FILE_ATTRIBUTES) {
+        return CreateDirectoryA(host_path, NULL) ? 0 : -1;
+    }
+    return (attrib & FILE_ATTRIBUTE_DIRECTORY) ? 0 : -1;
+#else
+    struct stat st;
+    if (stat(host_path, &st) == 0) {
+        return S_ISDIR(st.st_mode) ? 0 : -1;
+    }
+    return mkdir(host_path, 0755);
+#endif
+}
+
+// NEW: Sync VFS node to host filesystem
+static int vfs_sync_to_host(VNode* node) {
+    if (!node || strlen(host_root_directory) == 0) return -1;
+    
+    char* host_path = vfs_get_host_path(node);
+    if (!host_path) return -1;
+    
+    if (node->is_directory) {
+        // Create directory on host
+        return vfs_ensure_host_directory(host_path);
+    } else {
+        // Create/update file on host
+        FILE* host_file = fopen(host_path, "wb");
+        if (!host_file) return -1;
+        
+        if (node->data && node->size > 0) {
+            fwrite(node->data, 1, node->size, host_file);
+        }
+        fclose(host_file);
+        return 0;
+    }
 }
 
 int vfs_chdir(const char* path) {
@@ -316,8 +407,14 @@ int vfs_mkdir(const char* path) {
     // Create new directory node
     VNode* new_dir = vfs_create_directory_node(dir_name);
     if (!new_dir) return -1;
-    
+
     vfs_add_child(parent, new_dir);
+    
+    // NEW: Write-through to host filesystem
+    if (strlen(host_root_directory) > 0) {
+        vfs_sync_to_host(new_dir);
+    }
+    
     return 0;
 }
 
@@ -352,6 +449,12 @@ int vfs_create_file(const char* path) {
     if (!new_file) return -1;
     
     vfs_add_child(parent, new_file);
+    
+    // NEW: Write-through to host filesystem
+    if (strlen(host_root_directory) > 0) {
+        vfs_sync_to_host(new_file);
+    }
+    
     return 0;
 }
 
@@ -584,7 +687,19 @@ int vfs_rmdir(const char* path) {
     if (!node || !node->is_directory || node->children) {
         return -1;
     }
-    
+
+    // NEW: Delete from host filesystem first
+    if (strlen(host_root_directory) > 0) {
+        char* host_path = vfs_get_host_path(node);
+        if (host_path) {
+#ifdef PLATFORM_WINDOWS
+            RemoveDirectoryA(host_path);
+#else
+            rmdir(host_path);
+#endif
+        }
+    }
+
     // Remove from parent's children list
     VNode* parent = node->parent;
     if (parent) {
@@ -604,17 +719,27 @@ int vfs_rmdir(const char* path) {
             current = current->next;
         }
     }
-    
+
     free(node);
     return 0;
-}
-
-int vfs_delete_file(const char* path) {
+}int vfs_delete_file(const char* path) {
     VNode* node = vfs_find_node(path);
     if (!node || node->is_directory) {
         return -1;
     }
-    
+
+    // NEW: Delete from host filesystem first
+    if (strlen(host_root_directory) > 0) {
+        char* host_path = vfs_get_host_path(node);
+        if (host_path) {
+#ifdef PLATFORM_WINDOWS
+            DeleteFileA(host_path);
+#else
+            unlink(host_path);
+#endif
+        }
+    }
+
     // Remove from parent's children list
     VNode* parent = node->parent;
     if (parent) {
@@ -634,7 +759,7 @@ int vfs_delete_file(const char* path) {
             current = current->next;
         }
     }
-    
+
     if (node->data) {
         free(node->data);
     }
@@ -643,10 +768,50 @@ int vfs_delete_file(const char* path) {
     }
     free(node);
     return 0;
+}int vfs_create_directory(const char* path) {
+    return vfs_mkdir(path);
 }
 
-int vfs_create_directory(const char* path) {
-    return vfs_mkdir(path);
+// NEW: Write data to a file in VFS and sync to host
+int vfs_write_file(const char* path, const void* data, size_t size) {
+    VNode* node = vfs_find_node(path);
+    if (!node || node->is_directory) {
+        return -1;
+    }
+
+    // Update VFS data
+    if (node->data) {
+        free(node->data);
+    }
+    
+    if (size > 0 && data) {
+        node->data = malloc(size);
+        if (!node->data) return -1;
+        memcpy(node->data, data, size);
+        node->size = size;
+    } else {
+        node->data = NULL;
+        node->size = 0;
+    }
+
+    // NEW: Write-through to host filesystem
+    if (strlen(host_root_directory) > 0) {
+        vfs_sync_to_host(node);
+    }
+
+    return 0;
+}
+
+// NEW: Read data from a file in VFS
+int vfs_read_file(const char* path, void** data, size_t* size) {
+    VNode* node = vfs_find_node(path);
+    if (!node || node->is_directory) {
+        return -1;
+    }
+
+    if (data) *data = node->data;
+    if (size) *size = node->size;
+    return 0;
 }
 
 void vfs_sync_all_persistent(void) {
