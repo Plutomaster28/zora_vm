@@ -1,0 +1,57 @@
+
+1. File System Navigation & Manipulation:
+
+    ls: List directory contents.
+    cd: Change directory.
+    pwd: Print working directory.
+    mkdir: Create directories.
+    rmdir: Remove empty directories.
+    cp: Copy files or directories.
+    mv: Move or rename files or directories.
+    rm: Remove files or directories.
+    touch: Create empty files or update timestamps.
+    cat: Concatenate and display file contents.
+    more / less: View file contents page by page.
+    head: Display the beginning of a file.
+    tail: Display the end of a file.
+    find: Search for files and directories.
+    grep: Search for patterns within files.
+
+2. File Permissions & Ownership:
+
+    chmod: Change file permissions.
+    chown: Change file owner and group.
+
+3. Process Management:
+
+    ps: Display information about running processes.
+    top / htop: Display sorted information about processes in real-time.
+    kill: Terminate processes.
+    jobs: List background jobs.
+    bg: Send a stopped process to the background.
+    fg: Bring a background process to the foreground.
+
+4. System Information & Utilities:
+
+    date: Display or set the system date and time.
+    df: Display disk space usage.
+    du: Display disk usage of files and directories.
+    uname: Print system information.
+    man: Display manual pages for commands.
+    whoami: Display the current username.
+    history: Display command history.
+
+5. Networking:
+
+    ping: Test network connectivity.
+    ifconfig / ip: Display network interface configuration.
+    netstat: Display network connections and statistics.
+    ssh: Secure shell for remote access.
+    scp: Secure copy for transferring files over SSH.
+    wget / curl: Download files from the internet.
+
+6. Archiving & Compression:
+
+    tar: Archive files and directories.
+    gzip / gunzip: Compress or decompress files.
+    zip / unzip: Create or extract zip archives.
