@@ -2,7 +2,7 @@
 
 <div align="center">
 
-![Zora VM Logo](logo_placeholder.png)
+![Zora VM Logo](wdqqwdqw3e32.png)
 
 **A lightweight, cross-platform virtual machine environment with Unix/Linux command compatibility**
 
