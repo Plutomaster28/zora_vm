@@ -1,6 +1,7 @@
 #include "python_vm.h"
 #include "sandbox.h"
 #include "vfs/vfs.h"
+#include "desktop/desktop.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -27,7 +28,18 @@ void python_vm_cleanup(void) {
 
 // Simple Python-like statement executor
 static int execute_python_statement(const char* line) {
-    char* trimmed = strdup(line);
+    if (!line) return 0;
+    
+    size_t line_len = strlen(line);
+    if (line_len == 0 || line_len > 1024) return 0; // Skip empty or too long lines
+    
+    char* trimmed = malloc(line_len + 1);
+    if (!trimmed) {
+        printf("Python VM: Memory allocation failed for statement\n");
+        return -1;
+    }
+    
+    strcpy(trimmed, line);
     
     // Remove leading/trailing whitespace
     char* start = trimmed;
@@ -123,6 +135,83 @@ static int execute_python_statement(const char* line) {
         return 0;
     }
     
+    // Handle desktop function calls
+    if (strncmp(start, "desktop_create_window(", 22) == 0) {
+        char* params = start + 22;
+        char* end_paren = strrchr(params, ')');
+        if (end_paren) *end_paren = '\0';
+        
+        // Parse title and dimensions
+        char title[256] = {0};
+        int width = 800, height = 600;
+        
+        if (sscanf(params, "\"%255[^\"]\", %d, %d", title, &width, &height) >= 1 ||
+            sscanf(params, "'%255[^']', %d, %d", title, &width, &height) >= 1) {
+            printf("DESKTOP: Creating window '%s' (%dx%d)\n", title, width, height);
+            // Call actual desktop function
+            int window_id = desktop_create_window(title, width, height);
+            printf("DESKTOP: Window created with ID %d\n", window_id);
+        }
+        free(trimmed);
+        return 0;
+    }
+    
+    if (strncmp(start, "desktop_add_label(", 18) == 0) {
+        char* params = start + 18;
+        char* end_paren = strrchr(params, ')');
+        if (end_paren) *end_paren = '\0';
+        
+        char text[256] = {0};
+        if (sscanf(params, "\"%255[^\"]\"", text) == 1 ||
+            sscanf(params, "'%255[^']'", text) == 1) {
+            printf("DESKTOP: Adding label '%s'\n", text);
+            // Call actual desktop function with default window ID 1
+            desktop_add_label(1, text);
+        }
+        free(trimmed);
+        return 0;
+    }
+    
+    if (strncmp(start, "desktop_add_button(", 19) == 0) {
+        char* params = start + 19;
+        char* end_paren = strrchr(params, ')');
+        if (end_paren) *end_paren = '\0';
+        
+        char text[256] = {0};
+        if (sscanf(params, "\"%255[^\"]\"", text) == 1 ||
+            sscanf(params, "'%255[^']'", text) == 1) {
+            printf("DESKTOP: Adding button '%s'\n", text);
+            // For now, treat buttons as labels until we have button support
+            desktop_add_label(1, text);
+        }
+        free(trimmed);
+        return 0;
+    }
+    
+    if (strncmp(start, "desktop_show_window(", 20) == 0) {
+        printf("DESKTOP: Showing window\n");
+        // Call actual desktop function
+        desktop_show_window(1);
+        free(trimmed);
+        return 0;
+    }
+    
+    if (strncmp(start, "desktop_apply_theme()", 21) == 0) {
+        printf("DESKTOP: Applying CDE theme\n");
+        // Call actual desktop function
+        desktop_apply_theme();
+        free(trimmed);
+        return 0;
+    }
+    
+    if (strncmp(start, "desktop_run_loop()", 18) == 0) {
+        printf("DESKTOP: Starting event loop\n");
+        // Call actual desktop function
+        desktop_run_loop();
+        free(trimmed);
+        return 0;
+    }
+    
     // Handle function calls
     if (strchr(start, '(') && strchr(start, ')')) {
         printf("Function call: %s\n", start);
@@ -146,6 +235,24 @@ static int execute_python_statement(const char* line) {
 // Update the sandbox checking to be more selective
 int python_vm_execute_string(const char* code) {
     if (!python_vm.initialized) {
+        printf("Python VM: Not initialized\n");
+        return -1;
+    }
+    
+    if (!code) {
+        printf("Python VM: No code provided\n");
+        return -1;
+    }
+    
+    // Check code length
+    size_t code_len = strlen(code);
+    if (code_len == 0) {
+        printf("Python VM: Empty code string\n");
+        return 0; // Empty is OK
+    }
+    
+    if (code_len > 1024*1024) { // Limit to 1MB
+        printf("Python VM: Code too large (limit: 1MB)\n");
         return -1;
     }
     
@@ -195,27 +302,40 @@ int python_vm_execute_string(const char* code) {
     }
     
     // Allow the code to execute if not blocked
-    printf("Executing Python code: %s\n", code);
+    printf("Python VM: Executing Python code (length: %zu)\n", code_len);
     
     // Split code into lines and execute each
-    char* code_copy = strdup(code);
+    char* code_copy = malloc(code_len + 1);
+    if (!code_copy) {
+        printf("Python VM: Memory allocation failed\n");
+        return -1;
+    }
+    
+    strcpy(code_copy, code);
     char* line = strtok(code_copy, "\n");
     
-    while (line != NULL) {
+    int result = 0;
+    while (line != NULL && result == 0) {
         if (execute_python_statement(line) != 0) {
-            free(code_copy);
-            return -1;
+            result = -1;
+            break;
         }
         line = strtok(NULL, "\n");
     }
     
     free(code_copy);
-    return 0;
+    return result;
 }
 
 // Load and execute script from VFS
 int python_vm_load_script(const char* vm_path) {
     if (!python_vm.initialized) {
+        printf("Python VM not initialized\n");
+        return -1;
+    }
+    
+    if (!vm_path) {
+        printf("Python VM: Invalid script path\n");
         return -1;
     }
     
@@ -228,25 +348,47 @@ int python_vm_load_script(const char* vm_path) {
     // Load file content if needed
     if (!node->data && node->host_path) {
         FILE* f = fopen(node->host_path, "r");
-        if (f) {
-            fseek(f, 0, SEEK_END);
-            long size = ftell(f);
-            fseek(f, 0, SEEK_SET);
-            
-            node->data = malloc(size + 1);
-            if (node->data) {
-                fread(node->data, 1, size, f);
-                ((char*)node->data)[size] = '\0';
-                node->size = size;
-            }
-            fclose(f);
+        if (!f) {
+            printf("Python VM: Could not open script file: %s\n", vm_path);
+            return -1;
         }
+        
+        fseek(f, 0, SEEK_END);
+        long size = ftell(f);
+        if (size <= 0 || size > 1024*1024) { // Limit to 1MB
+            printf("Python VM: Invalid file size for script: %s\n", vm_path);
+            fclose(f);
+            return -1;
+        }
+        
+        fseek(f, 0, SEEK_SET);
+        
+        node->data = malloc(size + 1);
+        if (!node->data) {
+            printf("Python VM: Memory allocation failed for script: %s\n", vm_path);
+            fclose(f);
+            return -1;
+        }
+        
+        size_t read_size = fread(node->data, 1, size, f);
+        fclose(f);
+        
+        if (read_size != size) {
+            printf("Python VM: File read error for script: %s\n", vm_path);
+            free(node->data);
+            node->data = NULL;
+            return -1;
+        }
+        
+        ((char*)node->data)[size] = '\0';
+        node->size = size;
     }
     
     if (node->data) {
-        printf("Python VM executing...\n");
+        printf("Python VM: Executing script %s (size: %zu bytes)\n", vm_path, node->size);
         return python_vm_execute_string((char*)node->data);
     }
     
+    printf("Python VM: No data available for script: %s\n", vm_path);
     return -1;
 }

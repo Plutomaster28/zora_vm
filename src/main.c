@@ -257,15 +257,21 @@ int main(int argc, char* argv[]) {
     }
     
     if (!path_found) {
-        fprintf(stderr, "ERROR: Could not find ZoraPerl directory in any expected location!\n");
+        fprintf(stderr, "WARNING: Could not find ZoraPerl directory in any expected location!\n");
         fprintf(stderr, "Searched paths:\n");
         for (int i = 0; i < 4; i++) {
             fprintf(stderr, "  - %s\n", possible_paths[i]);
         }
-        goto cleanup;
+        fprintf(stderr, "Creating ZoraPerl directory in current location...\n");
+        strcpy(zora_perl_path, "ZoraPerl");
+        if (create_directory_recursive(zora_perl_path) != 0) {
+            fprintf(stderr, "ERROR: Failed to create ZoraPerl directory!\n");
+            goto cleanup;
+        }
+        printf("Created ZoraPerl directory at: %s\n", zora_perl_path);
+    } else {
+        printf("Found ZoraPerl directory at: %s\n", zora_perl_path);
     }
-    
-    printf("Found ZoraPerl directory at: %s\n", zora_perl_path);
     
     // Ensure the entire ZoraPerl directory structure exists
     printf("Ensuring ZoraPerl directory structure exists...\n");
@@ -372,6 +378,15 @@ cleanup:
     
     // Clean up resources before exiting
     printf("\nShutting down Zora VM...\n");
+    
+    // If there was an error during initialization, pause to show the error
+    #ifdef DEBUG_PAUSE_ON_ERROR
+    if (result != 0) {
+        printf("Press Enter to continue...");
+        getchar();
+    }
+    #endif
+    
     merl_cleanup();
     device_cleanup();
     memory_cleanup();

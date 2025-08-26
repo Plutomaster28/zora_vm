@@ -54,6 +54,44 @@ void read_wrapper(int argc, char **argv);
 void write_wrapper(int argc, char **argv);
 void route_wrapper(int argc, char **argv);
 
+// Missing file system commands
+void more_command(int argc, char **argv);
+void less_command(int argc, char **argv);
+void head_command(int argc, char **argv);
+void tail_command(int argc, char **argv);
+void grep_command(int argc, char **argv);
+
+// Missing file permissions commands
+void chmod_command(int argc, char **argv);
+void chown_command(int argc, char **argv);
+
+// Missing process management commands
+void top_command(int argc, char **argv);
+void htop_command(int argc, char **argv);
+void jobs_command(int argc, char **argv);
+void bg_command(int argc, char **argv);
+void fg_command(int argc, char **argv);
+
+// Missing system information commands
+void date_command(int argc, char **argv);
+void df_command(int argc, char **argv);
+void du_command(int argc, char **argv);
+void uname_command(int argc, char **argv);
+void history_command(int argc, char **argv);
+
+// Missing networking commands
+void scp_command(int argc, char **argv);
+
+// Missing archiving commands
+void tar_command(int argc, char **argv);
+void gzip_command(int argc, char **argv);
+void gunzip_command(int argc, char **argv);
+void zip_command(int argc, char **argv);
+void unzip_command(int argc, char **argv);
+
+// Helper functions
+void add_to_history(const char* command);
+
 // External references
 extern Command command_table[];
 extern const int command_table_size;

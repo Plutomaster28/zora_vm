@@ -87,6 +87,672 @@ void find_files_recursive(const char* dir_path, const char* pattern);
 void tree_command(int argc, char **argv);
 void print_tree_recursive(const char* dir_path, int depth);
 
+// Helper function prototypes
+void expand_path(const char* input, char* output, size_t output_size);
+void add_to_history(const char* command);
+void resolve_script_path(const char* name, char* out, size_t out_sz);
+
+// Color support functions
+void set_color(int color);
+void reset_color();
+void print_colored_prompt();
+
+// ANSI color codes
+#define COLOR_RESET     "\033[0m"
+#define COLOR_BLACK     "\033[30m"
+#define COLOR_RED       "\033[31m"
+#define COLOR_GREEN     "\033[32m"
+#define COLOR_YELLOW    "\033[33m"
+#define COLOR_BLUE      "\033[34m"
+#define COLOR_MAGENTA   "\033[35m"
+#define COLOR_CYAN      "\033[36m"
+#define COLOR_WHITE     "\033[37m"
+#define COLOR_BRIGHT_BLACK   "\033[90m"
+#define COLOR_BRIGHT_RED     "\033[91m"
+#define COLOR_BRIGHT_GREEN   "\033[92m"
+#define COLOR_BRIGHT_YELLOW  "\033[93m"
+#define COLOR_BRIGHT_BLUE    "\033[94m"
+#define COLOR_BRIGHT_MAGENTA "\033[95m"
+#define COLOR_BRIGHT_CYAN    "\033[96m"
+#define COLOR_BRIGHT_WHITE   "\033[97m"
+
+// Kali Linux inspired colors
+#define KALI_USER_COLOR     COLOR_BRIGHT_GREEN
+#define KALI_AT_COLOR       COLOR_WHITE
+#define KALI_HOST_COLOR     COLOR_BRIGHT_BLUE  
+#define KALI_PROMPT_COLOR   COLOR_BRIGHT_GREEN
+#define KALI_PATH_COLOR     COLOR_BRIGHT_CYAN
+
+// Global user system state
+// These are defined in user.c
+extern char current_user[50];
+extern int is_logged_in;
+static char hostname[50] = "zora-vm";
+static char current_path[256] = "/";
+
+// Color support functions implementation
+void set_color(int color) {
+#ifdef _WIN32
+    HANDLE hConsole = GetStdHandle(STD_OUTPUT_HANDLE);
+    SetConsoleTextAttribute(hConsole, color);
+#else
+    // Linux/Unix ANSI colors are handled via printf with escape codes
+#endif
+}
+
+void reset_color() {
+#ifdef _WIN32
+    HANDLE hConsole = GetStdHandle(STD_OUTPUT_HANDLE);
+    SetConsoleTextAttribute(hConsole, 7); // Default white on black
+#else
+    printf(COLOR_RESET);
+#endif
+}
+
+void print_colored_prompt() {
+#ifdef _WIN32
+    // Windows console color codes
+    HANDLE hConsole = GetStdHandle(STD_OUTPUT_HANDLE);
+    
+    // Enable ANSI escape sequences on Windows 10+
+    DWORD dwMode = 0;
+    GetConsoleMode(hConsole, &dwMode);
+    dwMode |= ENABLE_VIRTUAL_TERMINAL_PROCESSING;
+    SetConsoleMode(hConsole, dwMode);
+#endif
+
+    // Print colored prompt: user@hostname:path>
+    printf(KALI_USER_COLOR "%s" COLOR_RESET, current_user);
+    printf(KALI_AT_COLOR "@" COLOR_RESET);
+    printf(KALI_HOST_COLOR "%s" COLOR_RESET, hostname);
+    printf(COLOR_WHITE ":" COLOR_RESET);
+    printf(KALI_PATH_COLOR "%s" COLOR_RESET, current_path);
+    printf(KALI_PROMPT_COLOR "> " COLOR_RESET);
+}
+
+// Missing file system commands
+void more_command(int argc, char **argv);
+void less_command(int argc, char **argv);
+void head_command(int argc, char **argv);
+void tail_command(int argc, char **argv);
+void grep_command(int argc, char **argv);
+
+// Missing file permissions commands
+void chmod_command(int argc, char **argv);
+void chown_command(int argc, char **argv);
+
+// Missing process management commands
+void top_command(int argc, char **argv);
+void htop_command(int argc, char **argv);
+void jobs_command(int argc, char **argv);
+void bg_command(int argc, char **argv);
+void fg_command(int argc, char **argv);
+
+// Missing system information commands
+void date_command(int argc, char **argv);
+void df_command(int argc, char **argv);
+void du_command(int argc, char **argv);
+void uname_command(int argc, char **argv);
+void history_command(int argc, char **argv);
+
+// Missing networking commands
+void scp_command(int argc, char **argv);
+
+// Missing archiving commands
+void tar_command(int argc, char **argv);
+void gzip_command(int argc, char **argv);
+void gunzip_command(int argc, char **argv);
+void zip_command(int argc, char **argv);
+void unzip_command(int argc, char **argv);
+void hostname_command(int argc, char **argv);
+
+// Missing command implementations
+
+// File system commands
+void more_command(int argc, char **argv) {
+    if (argc < 2) {
+        printf("Usage: more <filename>\n");
+        return;
+    }
+    
+    char expanded_path[512];
+    expand_path(argv[1], expanded_path, sizeof(expanded_path));
+    
+    char full_path[512];
+    if (expanded_path[0] != '/') {
+        char* cwd = vfs_getcwd();
+        snprintf(full_path, sizeof(full_path), "%s/%s", cwd, expanded_path);
+    } else {
+        strcpy(full_path, expanded_path);
+    }
+    
+    VNode* file_node = vfs_find_node(full_path);
+    if (!file_node) {
+        printf("more: %s: No such file or directory\n", full_path);
+        return;
+    }
+    
+    if (file_node->is_directory) {
+        printf("more: %s: Is a directory\n", full_path);
+        return;
+    }
+    
+    if (file_node->data && file_node->size > 0) {
+        // Display file contents with paging (simple version)
+        char* content = (char*)file_node->data;
+        int lines_shown = 0;
+        int i = 0;
+        
+        while (i < (int)file_node->size) {
+            if (lines_shown >= 20) {  // Show 20 lines at a time
+                printf("--More-- (Press Enter to continue, q to quit)");
+                char c = getchar();
+                if (c == 'q' || c == 'Q') break;
+                lines_shown = 0;
+            }
+            
+            putchar(content[i]);
+            if (content[i] == '\n') lines_shown++;
+            i++;
+        }
+        printf("\n");
+    } else {
+        printf("(empty file)\n");
+    }
+}
+
+void less_command(int argc, char **argv) {
+    // For simplicity, less is just an alias to more in our VM
+    more_command(argc, argv);
+}
+
+void head_command(int argc, char **argv) {
+    int lines = 10;  // Default number of lines
+    char* filename = NULL;
+    
+    if (argc < 2) {
+        printf("Usage: head [-n lines] <filename>\n");
+        return;
+    }
+    
+    // Parse arguments
+    if (argc == 2) {
+        filename = argv[1];
+    } else if (argc == 4 && strcmp(argv[1], "-n") == 0) {
+        lines = atoi(argv[2]);
+        filename = argv[3];
+    } else {
+        printf("Usage: head [-n lines] <filename>\n");
+        return;
+    }
+    
+    char expanded_path[512];
+    expand_path(filename, expanded_path, sizeof(expanded_path));
+    
+    char full_path[512];
+    if (expanded_path[0] != '/') {
+        char* cwd = vfs_getcwd();
+        snprintf(full_path, sizeof(full_path), "%s/%s", cwd, expanded_path);
+    } else {
+        strcpy(full_path, expanded_path);
+    }
+    
+    VNode* file_node = vfs_find_node(full_path);
+    if (!file_node) {
+        printf("head: %s: No such file or directory\n", full_path);
+        return;
+    }
+    
+    if (file_node->is_directory) {
+        printf("head: %s: Is a directory\n", full_path);
+        return;
+    }
+    
+    if (file_node->data && file_node->size > 0) {
+        char* content = (char*)file_node->data;
+        int lines_shown = 0;
+        int i = 0;
+        
+        while (i < (int)file_node->size && lines_shown < lines) {
+            putchar(content[i]);
+            if (content[i] == '\n') lines_shown++;
+            i++;
+        }
+        if (content[file_node->size - 1] != '\n') printf("\n");
+    } else {
+        printf("(empty file)\n");
+    }
+}
+
+void tail_command(int argc, char **argv) {
+    int lines = 10;  // Default number of lines
+    char* filename = NULL;
+    
+    if (argc < 2) {
+        printf("Usage: tail [-n lines] <filename>\n");
+        return;
+    }
+    
+    // Parse arguments
+    if (argc == 2) {
+        filename = argv[1];
+    } else if (argc == 4 && strcmp(argv[1], "-n") == 0) {
+        lines = atoi(argv[2]);
+        filename = argv[3];
+    } else {
+        printf("Usage: tail [-n lines] <filename>\n");
+        return;
+    }
+    
+    char expanded_path[512];
+    expand_path(filename, expanded_path, sizeof(expanded_path));
+    
+    char full_path[512];
+    if (expanded_path[0] != '/') {
+        char* cwd = vfs_getcwd();
+        snprintf(full_path, sizeof(full_path), "%s/%s", cwd, expanded_path);
+    } else {
+        strcpy(full_path, expanded_path);
+    }
+    
+    VNode* file_node = vfs_find_node(full_path);
+    if (!file_node) {
+        printf("tail: %s: No such file or directory\n", full_path);
+        return;
+    }
+    
+    if (file_node->is_directory) {
+        printf("tail: %s: Is a directory\n", full_path);
+        return;
+    }
+    
+    if (file_node->data && file_node->size > 0) {
+        char* content = (char*)file_node->data;
+        
+        // Count total lines first
+        int total_lines = 0;
+        for (int i = 0; i < (int)file_node->size; i++) {
+            if (content[i] == '\n') total_lines++;
+        }
+        
+        // Find starting position for last N lines
+        int target_line = (total_lines > lines) ? total_lines - lines : 0;
+        int current_line = 0;
+        int start_pos = 0;
+        
+        for (int i = 0; i < (int)file_node->size; i++) {
+            if (current_line >= target_line) {
+                start_pos = i;
+                break;
+            }
+            if (content[i] == '\n') current_line++;
+        }
+        
+        // Print from start_pos to end
+        for (int i = start_pos; i < (int)file_node->size; i++) {
+            putchar(content[i]);
+        }
+        if (content[file_node->size - 1] != '\n') printf("\n");
+    } else {
+        printf("(empty file)\n");
+    }
+}
+
+void grep_command(int argc, char **argv) {
+    if (argc < 3) {
+        printf("Usage: grep <pattern> <filename>\n");
+        return;
+    }
+    
+    char* pattern = argv[1];
+    char* filename = argv[2];
+    
+    char expanded_path[512];
+    expand_path(filename, expanded_path, sizeof(expanded_path));
+    
+    char full_path[512];
+    if (expanded_path[0] != '/') {
+        char* cwd = vfs_getcwd();
+        snprintf(full_path, sizeof(full_path), "%s/%s", cwd, expanded_path);
+    } else {
+        strcpy(full_path, expanded_path);
+    }
+    
+    VNode* file_node = vfs_find_node(full_path);
+    if (!file_node) {
+        printf("grep: %s: No such file or directory\n", full_path);
+        return;
+    }
+    
+    if (file_node->is_directory) {
+        printf("grep: %s: Is a directory\n", full_path);
+        return;
+    }
+    
+    if (file_node->data && file_node->size > 0) {
+        char* content = (char*)file_node->data;
+        char line[1024];
+        int line_num = 1;
+        int line_pos = 0;
+        
+        for (int i = 0; i < (int)file_node->size; i++) {
+            if (content[i] == '\n' || i == (int)file_node->size - 1) {
+                line[line_pos] = '\0';
+                
+                // Check if line contains pattern
+                if (strstr(line, pattern) != NULL) {
+                    printf("%d: %s\n", line_num, line);
+                }
+                
+                line_num++;
+                line_pos = 0;
+            } else {
+                if (line_pos < 1023) {
+                    line[line_pos++] = content[i];
+                }
+            }
+        }
+    }
+}
+
+// File permissions commands
+void chmod_command(int argc, char **argv) {
+    if (argc < 3) {
+        printf("Usage: chmod <mode> <filename>\n");
+        printf("Example: chmod 755 myfile\n");
+        return;
+    }
+    
+    char* mode = argv[1];
+    char* filename = argv[2];
+    
+    printf("chmod: Changed permissions of '%s' to '%s' (simulated)\n", filename, mode);
+    printf("Note: File permissions are simulated in the VM environment\n");
+}
+
+void chown_command(int argc, char **argv) {
+    if (argc < 3) {
+        printf("Usage: chown <owner[:group]> <filename>\n");
+        printf("Example: chown user:group myfile\n");
+        return;
+    }
+    
+    char* owner = argv[1];
+    char* filename = argv[2];
+    
+    printf("chown: Changed ownership of '%s' to '%s' (simulated)\n", filename, owner);
+    printf("Note: File ownership is simulated in the VM environment\n");
+}
+
+// Process management commands
+static int background_jobs[10] = {0};
+static int job_count = 0;
+
+void top_command(int argc, char **argv) {
+    printf("=== Zora VM Process Monitor ===\n");
+    printf("  PID USER      PR  NI    VIRT    RES    SHR S  %%CPU %%MEM     TIME+ COMMAND\n");
+    printf("    1 root      20   0    8192   4096   2048 S   0.0  1.6   0:00.01 init\n");
+    printf("    2 root      20   0   16384   8192   4096 S   0.0  3.2   0:00.05 kernel\n");
+    printf("    3 vm        20   0   32768  16384   8192 R   0.1  6.4   0:00.10 zora_vm\n");
+    printf("    4 vm        20   0   65536  32768  16384 S   0.0 12.8   0:00.25 merl_shell\n");
+    printf("    5 vm        20   0   24576  12288   6144 S   0.0  4.8   0:00.03 vfs_daemon\n");
+    printf("    6 vm        20   0   16384   8192   4096 S   0.0  3.2   0:00.02 network\n");
+    printf("\nTasks: 6 total, 1 running, 5 sleeping\n");
+    printf("CPU: 0.1%% us, 0.0%% sy, 0.0%% ni, 99.9%% id\n");
+    printf("Memory: 256M total, 86M used, 170M free\n");
+    printf("\nPress 'q' to quit, any other key to refresh...\n");
+    
+    char c = getchar();
+    if (c != 'q' && c != 'Q') {
+        // In a real implementation, this would refresh
+        printf("Refreshed (simulated)\n");
+    }
+}
+
+void htop_command(int argc, char **argv) {
+    // htop is just an alias to top in our implementation
+    printf("htop: Using top implementation (htop features simulated)\n");
+    top_command(argc, argv);
+}
+
+void jobs_command(int argc, char **argv) {
+    printf("Background jobs:\n");
+    if (job_count == 0) {
+        printf("No background jobs\n");
+    } else {
+        for (int i = 0; i < job_count; i++) {
+            printf("[%d]+ %d Running    job_%d\n", i+1, background_jobs[i], i+1);
+        }
+    }
+}
+
+void bg_command(int argc, char **argv) {
+    if (argc < 2) {
+        printf("Usage: bg <job_id>\n");
+        return;
+    }
+    
+    int job_id = atoi(argv[1]);
+    printf("bg: Sent job %d to background (simulated)\n", job_id);
+}
+
+void fg_command(int argc, char **argv) {
+    if (argc < 2) {
+        printf("Usage: fg <job_id>\n");
+        return;
+    }
+    
+    int job_id = atoi(argv[1]);
+    printf("fg: Brought job %d to foreground (simulated)\n", job_id);
+}
+
+// System information commands
+void date_command(int argc, char **argv) {
+    time_t now = time(NULL);
+    char* date_str = ctime(&now);
+    // Remove trailing newline
+    date_str[strlen(date_str) - 1] = '\0';
+    printf("%s\n", date_str);
+}
+
+void df_command(int argc, char **argv) {
+    printf("Filesystem     1K-blocks    Used Available Use%% Mounted on\n");
+    printf("vfs_root          262144   65536    196608  26%% /\n");
+    printf("vfs_persistent    131072   32768     98304  26%% /persistent\n");
+    printf("vfs_tmp            32768    4096     28672  13%% /tmp\n");
+    printf("vfs_home           65536   16384     49152  26%% /home\n");
+    printf("vfs_scripts        16384    8192      8192  50%% /scripts\n");
+}
+
+void du_command(int argc, char **argv) {
+    char* target_dir = (argc > 1) ? argv[1] : vfs_getcwd();
+    
+    char expanded_path[512];
+    expand_path(target_dir, expanded_path, sizeof(expanded_path));
+    
+    char full_path[512];
+    if (expanded_path[0] != '/') {
+        char* cwd = vfs_getcwd();
+        snprintf(full_path, sizeof(full_path), "%s/%s", cwd, expanded_path);
+    } else {
+        strcpy(full_path, expanded_path);
+    }
+    
+    printf("Disk usage for %s:\n", full_path);
+    
+    VNode* dir_node = vfs_find_node(full_path);
+    if (!dir_node || !dir_node->is_directory) {
+        printf("du: %s: Not a directory\n", full_path);
+        return;
+    }
+    
+    size_t total_size = 0;
+    VNode* child = dir_node->children;
+    while (child) {
+        printf("%zu\t%s\n", child->size, child->name);
+        total_size += child->size;
+        child = child->next;
+    }
+    printf("%zu\ttotal\n", total_size);
+}
+
+void uname_command(int argc, char **argv) {
+    if (argc > 1 && strcmp(argv[1], "-a") == 0) {
+        printf("ZoraVM 1.0 zora-vm x86_64 x86_64 x86_64 GNU/Linux\n");
+    } else {
+        printf("ZoraVM\n");
+    }
+}
+
+static char* command_history[100];
+static int history_count = 0;
+
+void history_command(int argc, char **argv) {
+    printf("Command history:\n");
+    if (history_count == 0) {
+        printf("No commands in history\n");
+    } else {
+        for (int i = 0; i < history_count; i++) {
+            printf("%4d  %s\n", i+1, command_history[i]);
+        }
+    }
+}
+
+// Add command to history (called from handle_command)
+void add_to_history(const char* command) {
+    if (history_count < 100) {
+        command_history[history_count] = malloc(strlen(command) + 1);
+        strcpy(command_history[history_count], command);
+        history_count++;
+    } else {
+        // Rotate history - remove oldest, add newest
+        free(command_history[0]);
+        for (int i = 0; i < 99; i++) {
+            command_history[i] = command_history[i+1];
+        }
+        command_history[99] = malloc(strlen(command) + 1);
+        strcpy(command_history[99], command);
+    }
+}
+
+// Networking commands
+void scp_command(int argc, char **argv) {
+    if (argc < 3) {
+        printf("Usage: scp <source> <destination>\n");
+        printf("Example: scp file.txt user@host:/path/\n");
+        return;
+    }
+    
+    char* source = argv[1];
+    char* dest = argv[2];
+    
+    printf("scp: Copying %s to %s (simulated)\n", source, dest);
+    printf("scp: 100%% |***********************| 1024 bytes transferred\n");
+}
+
+// Archiving commands
+void tar_command(int argc, char **argv) {
+    if (argc < 3) {
+        printf("Usage: tar [options] archive_name files...\n");
+        printf("Options: -c (create), -x (extract), -t (list), -v (verbose), -f (file)\n");
+        printf("Example: tar -cvf archive.tar file1 file2\n");
+        return;
+    }
+    
+    char* options = argv[1];
+    char* archive = argv[2];
+    
+    if (strstr(options, "c")) {
+        printf("tar: Creating archive %s\n", archive);
+        for (int i = 3; i < argc; i++) {
+            printf("tar: Adding %s\n", argv[i]);
+        }
+        printf("tar: Archive created successfully\n");
+    } else if (strstr(options, "x")) {
+        printf("tar: Extracting from %s\n", archive);
+        printf("tar: Extracted (simulated)\n");
+    } else if (strstr(options, "t")) {
+        printf("tar: Contents of %s:\n", archive);
+        printf("tar: file1.txt\n");
+        printf("tar: file2.txt\n");
+        printf("tar: subdir/\n");
+    }
+}
+
+void gzip_command(int argc, char **argv) {
+    if (argc < 2) {
+        printf("Usage: gzip <filename>\n");
+        return;
+    }
+    
+    char* filename = argv[1];
+    printf("gzip: Compressing %s to %s.gz (simulated)\n", filename, filename);
+    printf("gzip: Compression ratio: 65%%\n");
+}
+
+void gunzip_command(int argc, char **argv) {
+    if (argc < 2) {
+        printf("Usage: gunzip <filename.gz>\n");
+        return;
+    }
+    
+    char* filename = argv[1];
+    
+    // Remove .gz extension for output name
+    char output_name[512];
+    strcpy(output_name, filename);
+    char* gz_ext = strstr(output_name, ".gz");
+    if (gz_ext) {
+        *gz_ext = '\0';
+    }
+    
+    printf("gunzip: Decompressing %s to %s (simulated)\n", filename, output_name);
+}
+
+void zip_command(int argc, char **argv) {
+    if (argc < 3) {
+        printf("Usage: zip <archive.zip> <files...>\n");
+        return;
+    }
+    
+    char* archive = argv[1];
+    printf("zip: Creating archive %s\n", archive);
+    
+    for (int i = 2; i < argc; i++) {
+        printf("zip: Adding %s\n", argv[i]);
+    }
+    printf("zip: Archive created successfully\n");
+}
+
+void unzip_command(int argc, char **argv) {
+    if (argc < 2) {
+        printf("Usage: unzip <archive.zip>\n");
+        return;
+    }
+    
+    char* archive = argv[1];
+    printf("unzip: Extracting from %s\n", archive);
+    printf("unzip: Inflating: file1.txt\n");
+    printf("unzip: Inflating: file2.txt\n");
+    printf("unzip: Inflating: subdir/file3.txt\n");
+    printf("unzip: Extraction complete\n");
+}
+
+// Hostname command
+void hostname_command(int argc, char **argv) {
+    if (argc < 2) {
+        // Display current hostname
+        printf("%s\n", hostname);
+    } else {
+        // Set new hostname
+        strncpy(hostname, argv[1], sizeof(hostname) - 1);
+        hostname[sizeof(hostname) - 1] = '\0';
+        printf("Hostname set to: %s\n", hostname);
+    }
+}
+
+// End of missing command implementations
+
 // Binary execution commands
 void exec_command(int argc, char **argv) {
     if (argc < 2) {
@@ -320,14 +986,22 @@ void plcode_command(int argc, char **argv) {
 void start_shell() {
     char input[256];
 
+    // Initialize user system
+    load_users();
+    
+    // Set default hostname
+    strncpy(hostname, "zora-vm", sizeof(hostname) - 1);
+    hostname[sizeof(hostname) - 1] = '\0';
+
     printf("=== Zora VM - MERL Shell ===\n");
     printf("Virtual Machine OS with MERL Shell\n");
     printf("Type 'help' for available commands, 'exit' to quit VM.\n");
     printf("VM Commands: vmstat, reboot, shutdown\n\n");
 
     while (1) {
-        // Render the shell prompt
-        printf("zora-vm:merl> ");
+        // Render the colored shell prompt
+        print_colored_prompt();
+        
         if (fgets(input, sizeof(input), stdin) == NULL) {
             printf("\nExiting VM...\n");
             break;
@@ -479,6 +1153,9 @@ void cd_command(int argc, char **argv) {
         char home_path[] = "/home";
         if (vfs_chdir(home_path) == 0) {
             printf("Changed directory to: %s\n", home_path);
+            // Update current path for prompt
+            strncpy(current_path, home_path, sizeof(current_path) - 1);
+            current_path[sizeof(current_path) - 1] = '\0';
         } else {
             printf("cd: Cannot access home directory\n");
         }
@@ -491,7 +1168,11 @@ void cd_command(int argc, char **argv) {
     
     // Use VFS chdir instead of system chdir
     if (vfs_chdir(expanded_path) == 0) {
-        printf("Changed directory to: %s\n", vfs_getcwd());
+        char* new_path = vfs_getcwd();
+        printf("Changed directory to: %s\n", new_path);
+        // Update current path for prompt
+        strncpy(current_path, new_path, sizeof(current_path) - 1);
+        current_path[sizeof(current_path) - 1] = '\0';
     } else {
         printf("cd: %s: No such directory\n", expanded_path);
     }
@@ -1160,6 +1841,30 @@ Command command_table[] = {
     {"themes", themes_command, "List available desktop themes"},
     {"find", find_command, "Search for files by name pattern"},
     {"tree", tree_command, "Display directory tree structure"},
+    {"more", more_command, "View file contents page by page"},
+    {"less", less_command, "View file contents page by page"},
+    {"head", head_command, "Display the beginning of a file"},
+    {"tail", tail_command, "Display the end of a file"},
+    {"grep", grep_command, "Search for patterns within files"},
+    {"chmod", chmod_command, "Change file permissions"},
+    {"chown", chown_command, "Change file owner and group"},
+    {"top", top_command, "Display sorted information about processes in real-time"},
+    {"htop", htop_command, "Display sorted information about processes in real-time"},
+    {"jobs", jobs_command, "List background jobs"},
+    {"bg", bg_command, "Send a stopped process to the background"},
+    {"fg", fg_command, "Bring a background process to the foreground"},
+    {"date", date_command, "Display or set the system date and time"},
+    {"df", df_command, "Display disk space usage"},
+    {"du", du_command, "Display disk usage of files and directories"},
+    {"uname", uname_command, "Print system information"},
+    {"history", history_command, "Display command history"},
+    {"scp", scp_command, "Secure copy for transferring files over SSH"},
+    {"tar", tar_command, "Archive files and directories"},
+    {"gzip", gzip_command, "Compress files"},
+    {"gunzip", gunzip_command, "Decompress files"},
+    {"zip", zip_command, "Create zip archives"},
+    {"unzip", unzip_command, "Extract zip archives"},
+    {"hostname", hostname_command, "Display or set the system hostname"},
     
     #ifdef PYTHON_SCRIPTING
     {"python", python_command, "Execute Python script from /scripts (fallback legacy path)"},
@@ -1177,6 +1882,11 @@ Command command_table[] = {
 const int command_table_size = sizeof(command_table) / sizeof(Command);
 
 void handle_command(char *command) {
+    // Add command to history (but not if it's just whitespace)
+    if (command && strlen(command) > 0 && strspn(command, " \t\n") != strlen(command)) {
+        add_to_history(command);
+    }
+    
     // Tokenize the command
     char *args[10];
     int argc = 0;
@@ -1187,6 +1897,9 @@ void handle_command(char *command) {
         token = strtok(NULL, " ");
     }
     args[argc] = NULL;
+
+    // Skip empty commands
+    if (argc == 0) return;
 
     // Search for the command in the command table
     for (int i = 0; i < command_table_size; i++) {
@@ -1508,14 +2221,50 @@ void debug_vfs_command(int argc, char* argv[]) {
     }
 }
 
-// Helper: resolve script path considering new root layout (/scripts) then legacy (/persistent/scripts)
-static void resolve_script_path(const char* name, char* out, size_t out_sz) {
+// Helper: resolve script path with flexible path handling
+void resolve_script_path(const char* name, char* out, size_t out_sz) {
     if (!name || !out || out_sz == 0) return;
-    if (name[0] == '/') { strncpy(out, name, out_sz-1); out[out_sz-1] = '\0'; return; }
-    snprintf(out, out_sz, "/scripts/%s", name);
-    if (!vfs_find_node(out)) {
-        snprintf(out, out_sz, "/persistent/scripts/%s", name);
+    
+    // If it's an absolute path, use as-is
+    if (name[0] == '/') { 
+        strncpy(out, name, out_sz-1); 
+        out[out_sz-1] = '\0'; 
+        return; 
     }
+    
+    // Get current working directory from VFS
+    char* cwd = vfs_getcwd();
+    if (!cwd) cwd = "/";
+    
+    // If it contains a path separator, treat as relative path from current directory
+    if (strchr(name, '/') || strchr(name, '\\')) {
+        snprintf(out, out_sz, "%s/%s", cwd, name);
+        if (vfs_find_node(out)) return;
+    }
+    
+    // Check current directory first
+    snprintf(out, out_sz, "%s/%s", cwd, name);
+    if (vfs_find_node(out)) return;
+    
+    // Try /scripts directory
+    snprintf(out, out_sz, "/scripts/%s", name);
+    if (vfs_find_node(out)) return;
+    
+    // Try legacy /persistent/scripts directory
+    snprintf(out, out_sz, "/persistent/scripts/%s", name);
+    if (vfs_find_node(out)) return;
+    
+    // Try /bin directory
+    snprintf(out, out_sz, "/bin/%s", name);
+    if (vfs_find_node(out)) return;
+    
+    // Try /usr/bin directory
+    snprintf(out, out_sz, "/usr/bin/%s", name);
+    if (vfs_find_node(out)) return;
+    
+    // If nothing found, default to the name as given
+    strncpy(out, name, out_sz-1);
+    out[out_sz-1] = '\0';
 }
 
 void lua_command(int argc, char **argv) {

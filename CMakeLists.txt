@@ -269,6 +269,13 @@ foreach(WRAPPER_FILE ${SANDBOX_WRAPPER_SOURCES} ${BINARY_WRAPPER_SOURCES})
 endforeach()
 
 # === CREATE EXECUTABLE ===
+# Add Windows resource file if on Windows
+if(WIN32)
+    set(RESOURCE_FILES resources.rc)
+else()
+    set(RESOURCE_FILES "")
+endif()
+
 add_executable(zora_vm 
     ${MAIN_SOURCES}
     ${CPU_SOURCES}
@@ -289,6 +296,7 @@ add_executable(zora_vm
     ${MERL_SHELL_SOURCES}
     ${HEADERS}
     ${MERL_HEADERS}
+    ${RESOURCE_FILES}
 )
 
 # === LINK LIBRARIES ===
@@ -339,6 +347,7 @@ add_definitions(-DZORA_VM_MODE)
 add_definitions(-DVIRTUAL_FILESYSTEM)
 add_definitions(-DSANDBOXED_SYSCALLS)
 add_definitions(-DLUA_SCRIPTING)
+add_definitions(-DPYTHON_SCRIPTING)
 
 # NEW: Enhanced sandbox definitions
 add_definitions(-DADVANCED_SANDBOX)

@@ -15,9 +15,9 @@ typedef struct {
 static User user_list[MAX_USERS];
 static int user_count = 0;
 
-// Global variables for user management
-static char current_user[50] = "guest"; // Default user
-static int is_logged_in = 0;            // Login status
+// Global variables for user management (accessible from other modules)
+char current_user[50] = "guest"; // Default user
+int is_logged_in = 0;            // Login status
 
 // Command implementations
 
