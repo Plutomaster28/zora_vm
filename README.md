@@ -12,7 +12,7 @@
 
 </div>
 
-## 🚀 Quick Start
+## Quick Start
 
 ### Prerequisites
 - **Windows**: MinGW-w64 or Visual Studio 2019+
@@ -54,7 +54,7 @@ cmake --build .
 ./zora_vm
 ```
 
-## 🎯 What is Zora VM?
+## What is Zora VM?
 
 Zora VM is a **standalone virtual machine environment** that provides:
 
@@ -65,9 +65,9 @@ Zora VM is a **standalone virtual machine environment** that provides:
 - **Network simulation** with security features
 - **Desktop environment** with theming support
 
-## 📋 Features
+## Features
 
-### ✅ Core Features
+### Core Features
 - **Full Unix Shell Experience**: 80+ commands including `ls`, `cd`, `grep`, `tar`, `ssh`, `top`, etc.
 - **Multi-Platform**: Runs natively on Windows, Linux, and macOS
 - **Scripting Languages**: Python, Lua, and Perl interpreters built-in
@@ -76,20 +76,20 @@ Zora VM is a **standalone virtual machine environment** that provides:
 - **Process Management**: Background jobs, process monitoring, and control
 - **Package Management**: Tetra package system for easy software installation
 
-### 🎨 User Interface
+### User Interface
 - **Colored Terminal**: Kali Linux-inspired color scheme
 - **User System**: Multi-user support with authentication
 - **Command History**: Full command history with search
 - **Tab Completion**: Auto-completion for commands and paths
 - **Desktop Environment**: GTK-based GUI with CDE theming
 
-### 🔒 Security
+### Security
 - **Sandbox Isolation**: All code execution is sandboxed
 - **Permission System**: Unix-style file permissions
 - **Network Security**: Configurable firewall rules
 - **Safe Mode**: Restricted execution environment
 
-## 🛠️ Command Reference
+## Command Reference
 
 ### File System Commands
 ```bash
@@ -162,7 +162,7 @@ reboot          # Restart the VM
 shutdown        # Shutdown the VM
 ```
 
-## 🎮 Getting Started Tutorial
+## Getting Started Tutorial
 
 ### 1. Basic Navigation
 ```bash
@@ -237,7 +237,7 @@ whoami
 hostname my-computer
 ```
 
-## 🔧 Configuration
+## Configuration
 
 ### Environment Variables
 - `ZORA_HOME`: Set custom home directory
@@ -249,7 +249,7 @@ hostname my-computer
 - `/etc/themes/`: Desktop themes
 - `/home/.zora-desktop/`: User settings
 
-## 🐛 Troubleshooting
+## Troubleshooting
 
 ### Common Issues
 
@@ -302,7 +302,7 @@ cat /var/log/zora_vm.log
 └─────────────────────────────────────┘
 ```
 
-## 🤝 Contributing
+## Contributing
 
 1. Fork the repository
 2. Create your feature branch (`git checkout -b feature/amazing-feature`)
@@ -325,18 +325,18 @@ cmake --build .
 ctest
 ```
 
-## 📜 License
+## License
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
-## 🙏 Acknowledgments
+## Acknowledgments
 
 - **MERL Shell**: Inspired by Unix shell design principles
 - **Tetra Package Manager**: Custom lightweight package management
 - **Virtual Silicon**: High-performance execution engine
 - **Community**: Thanks to all contributors and testers
 
-## 📞 Support
+## Support
 
 - **Documentation**: [Wiki](https://github.com/Plutomaster28/zora_vm/wiki)
 - **Issues**: [GitHub Issues](https://github.com/Plutomaster28/zora_vm/issues)
@@ -346,7 +346,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 <div align="center">
 
-**Made with ❤️ by the Zora VM Team**
+**Made with ❤️ by Tomoko**
 
 [Website](https://zoravirus.dev) • [Documentation](https://docs.zoravirus.dev) • [Community](https://discord.gg/zoravirus)
 
