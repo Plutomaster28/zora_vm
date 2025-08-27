@@ -189,9 +189,38 @@ file(GLOB DESKTOP_SOURCES "src/desktop/*.c")
 file(GLOB MERL_SHELL_SOURCES "MERL/*.c")
 list(REMOVE_ITEM MERL_SHELL_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/MERL/merl_main.c")
 
-# Headers
-file(GLOB_RECURSE HEADERS "include/*.h")
-file(GLOB_RECURSE MERL_HEADERS "MERL/*.h")
+# Headers - explicit list to avoid GLOB_RECURSE causing reconfiguration loops
+set(HEADERS 
+    include/cpu.h
+    include/device.h  
+    include/kernel.h
+    include/memory.h
+    include/merl.h
+    include/sandbox.h
+    include/vm.h
+    include/binary/binary_executor.h
+    include/binary/elf_parser.h
+    include/desktop/desktop.h
+    include/lua/lua_vm.h
+    include/meisei/virtual_silicon.h
+    include/network/network.h
+    include/perl/perl_vm.h
+    include/platform/platform.h
+    include/python/python_vm.h
+    include/syscall/syscall.h
+    include/vfs/vfs.h
+    include/virtualization/virtualization.h
+)
+set(MERL_HEADERS
+    MERL/color-and-test.h
+    MERL/config.h
+    MERL/crash.h
+    MERL/kernel.h
+    MERL/shell.h
+    MERL/tetra.h
+    MERL/user.h
+    MERL/utils.h
+)
 
 # === PLATFORM-SPECIFIC SOURCE FILES ===
 if(WIN32)
@@ -251,8 +280,8 @@ endif()
 # Combine all platform sources
 set(ALL_PLATFORM_SOURCES 
     ${PLATFORM_SANDBOX_SOURCES}
-    ${BINARY_SOURCES}           # Changed from PLATFORM_BINARY_SOURCES
-    ${ELF_SOURCES}              # Include ELF sources
+    ${BINARY_SOURCES}               # Include wrapper and platform-specific binary files
+    ${ELF_SOURCES}                  # Include wrapper and platform-specific ELF files
 )
 
 # Debug: Print what sources we found

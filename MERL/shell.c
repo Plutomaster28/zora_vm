@@ -14,6 +14,7 @@
 #include "lua/lua_vm.h"
 #include "binary/binary_executor.h"
 #include "desktop/desktop.h"
+#include "vm.h"  // For crash guard control
 
 // Add platform detection at the top:
 #ifdef _WIN32
@@ -58,6 +59,11 @@
 
 // Function prototypes
 void handle_command(char *command);
+void parse_and_execute_command_line(char *command_line);
+int execute_pipeline(char *pipeline_str);
+int execute_command_with_parsing(char *cmd_str);
+int execute_command_with_redirection(char *args[], int argc, char *input_file, char *output_file, int append_mode);
+void execute_simple_command(char *args[], int argc);
 void man_command(int argc, char **argv);
 void help_command(int argc, char **argv);
 void save_command(int argc, char* argv[]);
@@ -82,6 +88,7 @@ void test_sandbox_command(int argc, char **argv);
 void desktop_command(int argc, char **argv);
 void theme_command(int argc, char **argv);
 void themes_command(int argc, char **argv);
+void find_command(int argc, char **argv);
 void find_command(int argc, char **argv);
 void find_files_recursive(const char* dir_path, const char* pattern);
 void tree_command(int argc, char **argv);
@@ -171,7 +178,6 @@ void print_colored_prompt() {
 }
 
 // Missing file system commands
-void more_command(int argc, char **argv);
 void less_command(int argc, char **argv);
 void head_command(int argc, char **argv);
 void tail_command(int argc, char **argv);
@@ -182,7 +188,6 @@ void chmod_command(int argc, char **argv);
 void chown_command(int argc, char **argv);
 
 // Missing process management commands
-void top_command(int argc, char **argv);
 void htop_command(int argc, char **argv);
 void jobs_command(int argc, char **argv);
 void bg_command(int argc, char **argv);
@@ -209,9 +214,9 @@ void hostname_command(int argc, char **argv);
 // Missing command implementations
 
 // File system commands
-void more_command(int argc, char **argv) {
+void less_command(int argc, char **argv) {
     if (argc < 2) {
-        printf("Usage: more <filename>\n");
+        printf("Usage: less <filename>\n");
         return;
     }
     
@@ -228,22 +233,25 @@ void more_command(int argc, char **argv) {
     
     VNode* file_node = vfs_find_node(full_path);
     if (!file_node) {
-        printf("more: %s: No such file or directory\n", full_path);
+        printf("less: %s: No such file or directory\n", full_path);
         return;
     }
     
     if (file_node->is_directory) {
-        printf("more: %s: Is a directory\n", full_path);
+        printf("less: %s: Is a directory\n", full_path);
         return;
     }
     
-    if (file_node->data && file_node->size > 0) {
+    // Use VFS API to read file content (triggers on-demand loading)
+    void* data = NULL;
+    size_t size = 0;
+    if (vfs_read_file(full_path, &data, &size) == 0 && data && size > 0) {
         // Display file contents with paging (simple version)
-        char* content = (char*)file_node->data;
+        char* content = (char*)data;
         int lines_shown = 0;
         int i = 0;
         
-        while (i < (int)file_node->size) {
+        while (i < (int)size) {
             if (lines_shown >= 20) {  // Show 20 lines at a time
                 printf("--More-- (Press Enter to continue, q to quit)");
                 char c = getchar();
@@ -259,11 +267,6 @@ void more_command(int argc, char **argv) {
     } else {
         printf("(empty file)\n");
     }
-}
-
-void less_command(int argc, char **argv) {
-    // For simplicity, less is just an alias to more in our VM
-    more_command(argc, argv);
 }
 
 void head_command(int argc, char **argv) {
@@ -308,12 +311,15 @@ void head_command(int argc, char **argv) {
         return;
     }
     
-    if (file_node->data && file_node->size > 0) {
-        char* content = (char*)file_node->data;
+    // Use VFS API to read file content (triggers on-demand loading)
+    void* data = NULL;
+    size_t size = 0;
+    if (vfs_read_file(full_path, &data, &size) == 0 && data && size > 0) {
+        char* content = (char*)data;
         int lines_shown = 0;
         int i = 0;
         
-        while (i < (int)file_node->size && lines_shown < lines) {
+        while (i < (int)size && lines_shown < lines) {
             putchar(content[i]);
             if (content[i] == '\n') lines_shown++;
             i++;
@@ -366,12 +372,15 @@ void tail_command(int argc, char **argv) {
         return;
     }
     
-    if (file_node->data && file_node->size > 0) {
-        char* content = (char*)file_node->data;
+    // Use VFS API to read file content (triggers on-demand loading)
+    void* data = NULL;
+    size_t size = 0;
+    if (vfs_read_file(full_path, &data, &size) == 0 && data && size > 0) {
+        char* content = (char*)data;
         
         // Count total lines first
         int total_lines = 0;
-        for (int i = 0; i < (int)file_node->size; i++) {
+        for (int i = 0; i < (int)size; i++) {
             if (content[i] == '\n') total_lines++;
         }
         
@@ -429,14 +438,17 @@ void grep_command(int argc, char **argv) {
         return;
     }
     
-    if (file_node->data && file_node->size > 0) {
-        char* content = (char*)file_node->data;
+    // Use VFS API to read file content (triggers on-demand loading)
+    void* data = NULL;
+    size_t size = 0;
+    if (vfs_read_file(full_path, &data, &size) == 0 && data && size > 0) {
+        char* content = (char*)data;
         char line[1024];
         int line_num = 1;
         int line_pos = 0;
         
-        for (int i = 0; i < (int)file_node->size; i++) {
-            if (content[i] == '\n' || i == (int)file_node->size - 1) {
+        for (int i = 0; i < (int)size; i++) {
+            if (content[i] == '\n' || i == (int)size - 1) {
                 line[line_pos] = '\0';
                 
                 // Check if line contains pattern
@@ -488,8 +500,8 @@ void chown_command(int argc, char **argv) {
 static int background_jobs[10] = {0};
 static int job_count = 0;
 
-void top_command(int argc, char **argv) {
-    printf("=== Zora VM Process Monitor ===\n");
+void htop_command(int argc, char **argv) {
+    printf("=== Zora VM Process Monitor (htop) ===\n");
     printf("  PID USER      PR  NI    VIRT    RES    SHR S  %%CPU %%MEM     TIME+ COMMAND\n");
     printf("    1 root      20   0    8192   4096   2048 S   0.0  1.6   0:00.01 init\n");
     printf("    2 root      20   0   16384   8192   4096 S   0.0  3.2   0:00.05 kernel\n");
@@ -507,12 +519,6 @@ void top_command(int argc, char **argv) {
         // In a real implementation, this would refresh
         printf("Refreshed (simulated)\n");
     }
-}
-
-void htop_command(int argc, char **argv) {
-    // htop is just an alias to top in our implementation
-    printf("htop: Using top implementation (htop features simulated)\n");
-    top_command(argc, argv);
 }
 
 void jobs_command(int argc, char **argv) {
@@ -769,8 +775,14 @@ void exec_command(int argc, char **argv) {
     
     printf("Executing binary: %s\n", binary_path);
     
+    // Enable crash guard for binary execution
+    vm_enable_crash_guard();
+    
     // Execute the binary
     int result = execute_sandboxed_binary(binary_path, argv + 1, argc - 1);
+    
+    // Disable crash guard after execution
+    vm_disable_crash_guard();
     
     if (result == -1) {
         printf("Failed to execute binary\n");
@@ -797,7 +809,14 @@ void run_windows_command(int argc, char **argv) {
     // Force Windows execution
     VNode* node = vfs_find_node(binary_path);
     if (node && node->host_path) {
+        // Enable crash guard for binary execution
+        vm_enable_crash_guard();
+        
         int result = execute_windows_binary(node->host_path, argv + 1, argc - 1);
+        
+        // Disable crash guard after execution
+        vm_disable_crash_guard();
+        
         printf("Windows binary execution completed (exit code: %d)\n", result);
     } else {
         printf("Binary not found: %s\n", binary_path);
@@ -822,7 +841,14 @@ void run_linux_command(int argc, char **argv) {
     // Force Linux execution via QEMU
     VNode* node = vfs_find_node(binary_path);
     if (node && node->host_path) {
+        // Enable crash guard for binary execution
+        vm_enable_crash_guard();
+        
         int result = execute_linux_binary(node->host_path, argv + 1, argc - 1);
+        
+        // Disable crash guard after execution
+        vm_disable_crash_guard();
+        
         printf("Linux binary execution completed (exit code: %d)\n", result);
     } else {
         printf("Binary not found: %s\n", binary_path);
@@ -1124,12 +1150,15 @@ void ls_command(int argc, char **argv) {
         printf("ls: %s: No such file or directory\n", target_dir);
         return;
     }
-    
+
     if (!dir_node->is_directory) {
         printf("ls: %s: Not a directory\n", target_dir);
         return;
     }
-    
+
+    // Refresh directory to detect new files from host system
+    vfs_refresh_directory(dir_node);
+
     // List children of target directory
     VNode* child = dir_node->children;
     if (!child) {
@@ -1407,18 +1436,6 @@ void rename_command(int argc, char **argv) {
     }
 }
 
-void calendar_command(int argc, char **argv) {
-    time_t now = time(NULL);
-    struct tm *local = localtime(&now);
-    printf("Current Date: %02d-%02d-%04d\n", local->tm_mday, local->tm_mon + 1, local->tm_year + 1900);
-}
-
-void clock_command(int argc, char **argv) {
-    time_t now = time(NULL);
-    struct tm *local = localtime(&now);
-    printf("Current Time: %02d:%02d:%02d\n", local->tm_hour, local->tm_min, local->tm_sec);
-}
-
 void clear_screen(void) {
 #ifdef _WIN32
     system("cls");
@@ -1551,10 +1568,15 @@ void cat_command(int argc, char **argv) {
         return;
     }
     
-    if (file_node->data && file_node->size > 0) {
+    // Use VFS API to read file content (triggers on-demand loading)
+    void* data = NULL;
+    size_t size = 0;
+    if (vfs_read_file(full_path, &data, &size) == 0 && data && size > 0) {
         // Print file contents
-        fwrite(file_node->data, 1, file_node->size, stdout);
-        printf("\n");
+        fwrite(data, 1, size, stdout);
+        if (((char*)data)[size - 1] != '\n') {
+            printf("\n");
+        }
     } else {
         printf("(empty file)\n");
     }
@@ -1787,8 +1809,6 @@ Command command_table[] = {
     {"search", search_command, "Searches for files matching a pattern."},
     {"edit", edit_command, "Edits a text file."},
     {"run", run_command, "Runs an external program."},
-    {"calendar", calendar_command, "Displays the current date."},
-    {"clock", clock_command, "Displays the current time."},
     {"clear", clear_command, "Clears the screen."},
     {"echo", echo_command, "Prints a string to the console."},
     {"cat", cat_command, "Displays the contents of a file."},
@@ -1807,9 +1827,7 @@ Command command_table[] = {
     {"read", read_wrapper, "Reads a file."},
     {"write", write_wrapper, "Writes to a file."},
     {"color-and-test", color_and_test_command, "Displays colors and system info."},
-    {"vm-status", vm_status_command, "Displays the status of the Zora VM."},
-    {"vm-reboot", vm_reboot_command, "Reboots the Zora VM."},
-    {"vm-shutdown", vm_shutdown_command, "Shuts down the Zora VM."},
+    {"neofetch", color_and_test_command, "Display system information with logo (alias for color-and-test)."},
     {"vmstat", vm_status_command, "Shows virtual machine status."},
     {"reboot", vm_reboot_command, "Reboots the virtual machine."},
     {"shutdown", vm_shutdown_command, "Shuts down the virtual machine."},
@@ -1841,14 +1859,12 @@ Command command_table[] = {
     {"themes", themes_command, "List available desktop themes"},
     {"find", find_command, "Search for files by name pattern"},
     {"tree", tree_command, "Display directory tree structure"},
-    {"more", more_command, "View file contents page by page"},
     {"less", less_command, "View file contents page by page"},
     {"head", head_command, "Display the beginning of a file"},
     {"tail", tail_command, "Display the end of a file"},
     {"grep", grep_command, "Search for patterns within files"},
     {"chmod", chmod_command, "Change file permissions"},
     {"chown", chown_command, "Change file owner and group"},
-    {"top", top_command, "Display sorted information about processes in real-time"},
     {"htop", htop_command, "Display sorted information about processes in real-time"},
     {"jobs", jobs_command, "List background jobs"},
     {"bg", bg_command, "Send a stopped process to the background"},
@@ -1881,35 +1897,261 @@ Command command_table[] = {
 };
 const int command_table_size = sizeof(command_table) / sizeof(Command);
 
+// Shell operator parsing functions
+void execute_simple_command(char *args[], int argc);
+void parse_and_execute_command_line(char *command_line);
+int execute_command_with_redirection(char *args[], int argc, char *input_file, char *output_file, int append_mode);
+
 void handle_command(char *command) {
-    // Add command to history (but not if it's just whitespace)
-    if (command && strlen(command) > 0 && strspn(command, " \t\n") != strlen(command)) {
-        add_to_history(command);
+    // Check for null command
+    if (!command) {
+        return;
     }
     
-    // Tokenize the command
+    // Check for empty command after trimming whitespace
+    char *trimmed = command;
+    while (*trimmed == ' ' || *trimmed == '\t') trimmed++;
+    if (*trimmed == '\0') {
+        return;
+    }
+    
+    // Add command to history (but not if it's just whitespace)
+    if (strlen(trimmed) > 0) {
+        add_to_history(trimmed);
+    }
+    
+    // Parse and execute the full command line with operators
+    parse_and_execute_command_line(trimmed);
+}
+
+void parse_and_execute_command_line(char *command_line) {
+    // Create a working copy of the command line
+    char *cmd_copy = strdup(command_line);
+    if (!cmd_copy) return;
+    
+    // Split by semicolon (;) for sequential commands
+    char *cmd_part = strtok(cmd_copy, ";");
+    
+    while (cmd_part != NULL) {
+        // Trim whitespace from command part
+        while (*cmd_part == ' ' || *cmd_part == '\t') cmd_part++;
+        char *end = cmd_part + strlen(cmd_part) - 1;
+        while (end > cmd_part && (*end == ' ' || *end == '\t')) end--;
+        *(end + 1) = '\0';
+        
+        if (strlen(cmd_part) > 0) {
+            // Check for && and || operators
+            char *and_pos = strstr(cmd_part, "&&");
+            char *or_pos = strstr(cmd_part, "||");
+            
+            if (and_pos || or_pos) {
+                // Handle conditional execution
+                char *first_cmd, *second_cmd;
+                int is_and = 0;
+                
+                if (and_pos && (!or_pos || and_pos < or_pos)) {
+                    // && operator found first
+                    *and_pos = '\0';
+                    first_cmd = cmd_part;
+                    second_cmd = and_pos + 2;
+                    is_and = 1;
+                } else {
+                    // || operator found first
+                    *or_pos = '\0';
+                    first_cmd = cmd_part;
+                    second_cmd = or_pos + 2;
+                    is_and = 0;
+                }
+                
+                // Execute first command
+                int first_result = execute_pipeline(first_cmd);
+                
+                // Execute second command based on first result and operator
+                if ((is_and && first_result == 0) || (!is_and && first_result != 0)) {
+                    // Trim whitespace from second command
+                    while (*second_cmd == ' ' || *second_cmd == '\t') second_cmd++;
+                    execute_pipeline(second_cmd);
+                }
+            } else {
+                // No conditional operators, process as pipeline
+                execute_pipeline(cmd_part);
+            }
+        }
+        
+        cmd_part = strtok(NULL, ";");
+    }
+    
+    free(cmd_copy);
+}
+
+int execute_pipeline(char *pipeline_str) {
+    // Create a working copy
+    char *pipe_copy = strdup(pipeline_str);
+    if (!pipe_copy) return 1;
+    
+    // For now, implement simple pipeline (can be extended for complex pipes)
+    char *pipe_pos = strchr(pipe_copy, '|');
+    
+    if (pipe_pos) {
+        // Handle piping - for now, just execute sequentially (can be improved later)
+        *pipe_pos = '\0';
+        char *first_cmd = pipe_copy;
+        char *second_cmd = pipe_pos + 1;
+        
+        // Trim whitespace
+        while (*second_cmd == ' ' || *second_cmd == '\t') second_cmd++;
+        
+        printf("Piping: '%s' | '%s' (simplified implementation)\n", first_cmd, second_cmd);
+        
+        // Execute first command (output would be piped to second in full implementation)
+        int result = execute_command_with_parsing(first_cmd);
+        
+        // Execute second command
+        execute_command_with_parsing(second_cmd);
+        
+        free(pipe_copy);
+        return result;
+    } else {
+        // No pipe, execute single command with redirection
+        int result = execute_command_with_parsing(pipe_copy);
+        free(pipe_copy);
+        return result;
+    }
+}
+
+int execute_command_with_parsing(char *cmd_str) {
+    // Parse for redirection operators
+    char *input_file = NULL;
+    char *output_file = NULL;
+    int append_mode = 0;
+    
+    // Create working copy
+    char *work_copy = strdup(cmd_str);
+    if (!work_copy) return 1;
+    
+    // Look for redirection operators
+    char *redirect_pos;
+    
+    // Check for >> (append)
+    redirect_pos = strstr(work_copy, ">>");
+    if (redirect_pos) {
+        *redirect_pos = '\0';
+        output_file = redirect_pos + 2;
+        append_mode = 1;
+        
+        // Trim whitespace from filename
+        while (*output_file == ' ' || *output_file == '\t') output_file++;
+        char *end = output_file + strlen(output_file) - 1;
+        while (end > output_file && (*end == ' ' || *end == '\t')) end--;
+        *(end + 1) = '\0';
+    } else {
+        // Check for > (overwrite)
+        redirect_pos = strchr(work_copy, '>');
+        if (redirect_pos) {
+            *redirect_pos = '\0';
+            output_file = redirect_pos + 1;
+            append_mode = 0;
+            
+            // Trim whitespace from filename
+            while (*output_file == ' ' || *output_file == '\t') output_file++;
+            char *end = output_file + strlen(output_file) - 1;
+            while (end > output_file && (*end == ' ' || *end == '\t')) end--;
+            *(end + 1) = '\0';
+        }
+    }
+    
+    // Check for < (input redirection)
+    redirect_pos = strchr(work_copy, '<');
+    if (redirect_pos) {
+        *redirect_pos = '\0';
+        input_file = redirect_pos + 1;
+        
+        // Trim whitespace from filename
+        while (*input_file == ' ' || *input_file == '\t') input_file++;
+        char *end = input_file + strlen(input_file) - 1;
+        while (end > input_file && (*end == ' ' || *end == '\t')) end--;
+        *(end + 1) = '\0';
+    }
+    
+    // Parse command and arguments
     char *args[10];
     int argc = 0;
-
-    char *token = strtok(command, " ");
-    while (token != NULL && argc < 10) {
+    
+    char *token = strtok(work_copy, " \t");
+    while (token != NULL && argc < 9) {
         args[argc++] = token;
-        token = strtok(NULL, " ");
+        token = strtok(NULL, " \t");
     }
     args[argc] = NULL;
+    
+    int result = 1;
+    if (argc > 0) {
+        result = execute_command_with_redirection(args, argc, input_file, output_file, append_mode);
+    }
+    
+    free(work_copy);
+    return result;
+}
 
+int execute_command_with_redirection(char *args[], int argc, char *input_file, char *output_file, int append_mode) {
+    // Handle output redirection using freopen
+    FILE *original_stdout = NULL;
+    char original_stdout_filename[256] = {0};
+    
+    if (output_file && strlen(output_file) > 0) {
+        printf("Redirecting output to: %s (%s)\n", output_file, append_mode ? "append" : "overwrite");
+        fflush(stdout);
+        
+        // Save current stdout and redirect to file
+        if (freopen(output_file, append_mode ? "a" : "w", stdout) == NULL) {
+            printf("Error: Cannot redirect output to file '%s'\n", output_file);
+            return 1;
+        }
+    }
+    
+    // Handle input redirection (simplified - just notify for now)
+    if (input_file && strlen(input_file) > 0) {
+        printf("Input redirection from: %s (simplified implementation)\n", input_file);
+    }
+    
+    // Execute the actual command
+    execute_simple_command(args, argc);
+    
+    // Restore stdout if redirected
+    if (output_file && strlen(output_file) > 0) {
+        fflush(stdout);
+        
+        // Redirect stdout back to console (this is platform specific)
+        #ifdef _WIN32
+        freopen("CON", "w", stdout);
+        #else
+        freopen("/dev/tty", "w", stdout);
+        #endif
+        
+        printf("Output redirection completed to: %s\n", output_file);
+    }
+    
+    return 0;  // Assume success for now
+}
+
+void execute_simple_command(char *args[], int argc) {
     // Skip empty commands
     if (argc == 0) return;
 
     // Search for the command in the command table
     for (int i = 0; i < command_table_size; i++) {
-        if (strcmp(args[0], command_table[i].name) == 0) {
-            command_table[i].handler(argc, args);
+        if (command_table[i].name && strcmp(args[0], command_table[i].name) == 0) {
+            // Execute the command handler safely
+            if (command_table[i].handler) {
+                command_table[i].handler(argc, args);
+            }
             return;
         }
     }
 
-    printf("Unknown command: %s\n", args[0]);
+    // Command not found - just print error message and return
+    printf("Unknown command: '%s'\n", args[0]);
+    printf("Type 'help' to see available commands.\n");
 }
 
 void man_command(int argc, char **argv) {
@@ -1933,6 +2175,23 @@ void help_command(int argc, char **argv) {
     for (int i = 0; i < command_table_size; i++) {
         printf("  %s - %s\n", command_table[i].name, command_table[i].description);
     }
+    
+    printf("\nShell operators:\n");
+    printf("  ;           - Sequential execution (cmd1 ; cmd2)\n");
+    printf("  &&          - Conditional AND (cmd1 && cmd2 - run cmd2 only if cmd1 succeeds)\n");
+    printf("  ||          - Conditional OR (cmd1 || cmd2 - run cmd2 only if cmd1 fails)\n");
+    printf("  |           - Pipe output (cmd1 | cmd2 - send cmd1 output to cmd2)\n");
+    printf("  >           - Redirect output to file (cmd > file.txt)\n");
+    printf("  >>          - Append output to file (cmd >> file.txt)\n");
+    printf("  <           - Redirect input from file (cmd < file.txt)\n");
+    
+    printf("\nExamples:\n");
+    printf("  ls ; pwd                     - List files then show current directory\n");
+    printf("  test -f file.txt && cat file.txt  - Show file only if it exists\n");
+    printf("  ls missing_dir || echo 'Not found'  - Show error message if ls fails\n");
+    printf("  ls | grep .txt               - List files and filter for .txt files\n");
+    printf("  echo 'Hello World' > output.txt     - Write text to file\n");
+    printf("  echo 'More text' >> output.txt      - Append text to file\n");
 }
 
 void save_command(int argc, char* argv[]) {

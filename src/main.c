@@ -73,15 +73,25 @@ void vm_crash_handler(int sig) {
     }
 }
 
-// Initialize crash protection
+// Initialize crash protection (but keep it disabled by default)
 void vm_init_crash_protection() {
     printf("Initializing VM crash protection...\n");
     signal(SIGSEGV, vm_crash_handler);
     signal(SIGABRT, vm_crash_handler);
     signal(SIGFPE, vm_crash_handler);
     signal(SIGILL, vm_crash_handler);  // Add illegal instruction
+    vm_crash_guard = 0;  // Start disabled - only enable during risky operations
+    printf("VM crash protection installed (disabled by default)\n");
+}
+
+// Enable crash guard for risky operations
+void vm_enable_crash_guard() {
     vm_crash_guard = 1;
-    printf("VM crash protection enabled\n");
+}
+
+// Disable crash guard for normal operations
+void vm_disable_crash_guard() {
+    vm_crash_guard = 0;
 }
 
 int vm_init(void) {

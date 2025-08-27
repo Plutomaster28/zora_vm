@@ -345,49 +345,16 @@ int python_vm_load_script(const char* vm_path) {
         return -1;
     }
     
-    // Load file content if needed
-    if (!node->data && node->host_path) {
-        FILE* f = fopen(node->host_path, "r");
-        if (!f) {
-            printf("Python VM: Could not open script file: %s\n", vm_path);
-            return -1;
-        }
-        
-        fseek(f, 0, SEEK_END);
-        long size = ftell(f);
-        if (size <= 0 || size > 1024*1024) { // Limit to 1MB
-            printf("Python VM: Invalid file size for script: %s\n", vm_path);
-            fclose(f);
-            return -1;
-        }
-        
-        fseek(f, 0, SEEK_SET);
-        
-        node->data = malloc(size + 1);
-        if (!node->data) {
-            printf("Python VM: Memory allocation failed for script: %s\n", vm_path);
-            fclose(f);
-            return -1;
-        }
-        
-        size_t read_size = fread(node->data, 1, size, f);
-        fclose(f);
-        
-        if (read_size != size) {
-            printf("Python VM: File read error for script: %s\n", vm_path);
-            free(node->data);
-            node->data = NULL;
-            return -1;
-        }
-        
-        ((char*)node->data)[size] = '\0';
-        node->size = size;
+    // Use VFS to read file content
+    void* data = NULL;
+    size_t size = 0;
+    if (vfs_read_file(vm_path, &data, &size) != 0 || !data) {
+        printf("Python VM: Failed to read script: %s\n", vm_path);
+        return -1;
     }
     
-    if (node->data) {
-        printf("Python VM: Executing script %s (size: %zu bytes)\n", vm_path, node->size);
-        return python_vm_execute_string((char*)node->data);
-    }
+    printf("Python VM: Executing script %s (size: %zu bytes)\n", vm_path, size);
+    return python_vm_execute_string((char*)data);
     
     printf("Python VM: No data available for script: %s\n", vm_path);
     return -1;

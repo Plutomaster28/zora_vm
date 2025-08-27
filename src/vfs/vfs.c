@@ -27,7 +27,7 @@ static char* vfs_get_host_path(VNode* node);
 static int vfs_ensure_host_directory(const char* host_path);
 static int vfs_sync_to_host(VNode* node);
 
-// NEW: Helper function to create directory nodes
+// Create directory node
 VNode* vfs_create_directory_node(const char* name) {
     VNode* node = malloc(sizeof(VNode));
     if (!node) return NULL;
@@ -35,7 +35,7 @@ VNode* vfs_create_directory_node(const char* name) {
     strncpy(node->name, name, sizeof(node->name) - 1);
     node->name[sizeof(node->name) - 1] = '\0';
     node->is_directory = 1;
-    node->is_persistent = 0;
+    node->is_persistent = 0;  // Will be removed eventually
     node->size = 0;
     node->data = NULL;
     node->host_path = NULL;
@@ -46,7 +46,7 @@ VNode* vfs_create_directory_node(const char* name) {
     return node;
 }
 
-// NEW: Helper function to create file nodes
+// Create file node
 VNode* vfs_create_file_node(const char* name) {
     VNode* node = malloc(sizeof(VNode));
     if (!node) return NULL;
@@ -54,7 +54,7 @@ VNode* vfs_create_file_node(const char* name) {
     strncpy(node->name, name, sizeof(node->name) - 1);
     node->name[sizeof(node->name) - 1] = '\0';
     node->is_directory = 0;
-    node->is_persistent = 0;
+    node->is_persistent = 0;  // Will be removed eventually
     node->size = 0;
     node->data = NULL;
     node->host_path = NULL;
@@ -65,13 +65,70 @@ VNode* vfs_create_file_node(const char* name) {
     return node;
 }
 
-// NEW: Helper function to add child to parent
+// Add child to parent
 void vfs_add_child(VNode* parent, VNode* child) {
     if (!parent || !child) return;
     
     child->parent = parent;
     child->next = parent->children;
     parent->children = child;
+}
+
+// Load file content from host filesystem (on-demand)
+int vfs_load_file_content(VNode* node) {
+    if (!node || node->is_directory || !node->host_path) {
+        return -1;
+    }
+    
+    // Already loaded
+    if (node->data) {
+        return 0;
+    }
+    
+    FILE* f = fopen(node->host_path, "rb");
+    if (!f) {
+        printf("VFS: Could not open file: %s\n", node->host_path);
+        return -1;
+    }
+    
+    fseek(f, 0, SEEK_END);
+    long size = ftell(f);
+    if (size < 0 || size > 16*1024*1024) { // Limit to 16MB
+        printf("VFS: Invalid file size for: %s (size: %ld)\n", node->host_path, size);
+        fclose(f);
+        return -1;
+    }
+    
+    fseek(f, 0, SEEK_SET);
+    
+    // Allocate memory for content plus null terminator
+    node->data = malloc(size + 1);
+    if (!node->data) {
+        printf("VFS: Memory allocation failed for: %s\n", node->host_path);
+        fclose(f);
+        return -1;
+    }
+    
+    size_t read_size = 0;
+    if (size > 0) {
+        read_size = fread(node->data, 1, size, f);
+    }
+    fclose(f);
+    
+    if (read_size != (size_t)size) {
+        printf("VFS: File read error for: %s (expected: %ld, read: %zu)\n", 
+               node->host_path, size, read_size);
+        free(node->data);
+        node->data = NULL;
+        return -1;
+    }
+    
+    // Null-terminate for text files
+    ((char*)node->data)[size] = '\0';
+    node->size = size;
+    
+    printf("VFS: Loaded file content: %s (%zu bytes)\n", node->name, node->size);
+    return 0;
 }
 
 // NEW: Create directory recursively
@@ -458,9 +515,144 @@ int vfs_create_file(const char* path) {
     return 0;
 }
 
-// FIXED: Load persistent directory function
-void vfs_load_persistent_directory(VNode* vm_node, const char* host_path) {
-    printf("DEBUG: Loading persistent directory from %s to %s\n", host_path, vm_node->name);
+// Refresh directory by checking for new files in host filesystem
+void vfs_refresh_directory(VNode* vm_node) {
+    if (!vm_node || !vm_node->is_directory || !vm_node->host_path) {
+        return;
+    }
+    
+    printf("DEBUG: Refreshing directory: %s from %s\n", vm_node->name, vm_node->host_path);
+    
+#ifdef PLATFORM_WINDOWS
+    WIN32_FIND_DATAA find_data;
+    char search_path[MAX_PATH];
+    snprintf(search_path, sizeof(search_path), "%s\\*", vm_node->host_path);
+    
+    HANDLE hFind = FindFirstFileA(search_path, &find_data);
+    if (hFind == INVALID_HANDLE_VALUE) {
+        printf("DEBUG: Failed to refresh directory: %s\n", vm_node->host_path);
+        return;
+    }
+    
+    do {
+        // Skip . and ..
+        if (strcmp(find_data.cFileName, ".") == 0 || strcmp(find_data.cFileName, "..") == 0) {
+            continue;
+        }
+        
+        // Check if this file/directory already exists in VM
+        VNode* existing = vm_node->children;
+        bool found = false;
+        while (existing) {
+            if (strcmp(existing->name, find_data.cFileName) == 0) {
+                found = true;
+                break;
+            }
+            existing = existing->next;
+        }
+        
+        if (!found) {
+            // New file/directory found, add it
+            printf("DEBUG: Found new entry: %s\n", find_data.cFileName);
+            char full_host_path[MAX_PATH];
+            snprintf(full_host_path, sizeof(full_host_path), "%s\\%s", vm_node->host_path, find_data.cFileName);
+            
+            if (find_data.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) {
+                // New directory
+                printf("DEBUG: Adding new directory: %s\n", find_data.cFileName);
+                VNode* dir_node = vfs_create_directory_node(find_data.cFileName);
+                if (dir_node) {
+                    vfs_add_child(vm_node, dir_node);
+                    vfs_load_host_directory(dir_node, full_host_path);
+                }
+            } else {
+                // New file
+                printf("DEBUG: Adding new file: %s\n", find_data.cFileName);
+                VNode* file_node = vfs_create_file_node(find_data.cFileName);
+                if (file_node) {
+                    file_node->host_path = malloc(strlen(full_host_path) + 1);
+                    if (file_node->host_path) {
+                        strcpy(file_node->host_path, full_host_path);
+                    }
+                    file_node->size = find_data.nFileSizeLow;
+                    vfs_add_child(vm_node, file_node);
+                    printf("DEBUG: Added new file: %s (size: %zu)\n", file_node->name, file_node->size);
+                }
+            }
+        }
+    } while (FindNextFileA(hFind, &find_data) != 0);
+    
+    FindClose(hFind);
+    
+#else
+    // Linux implementation
+    DIR* dir = opendir(vm_node->host_path);
+    if (!dir) {
+        printf("DEBUG: Failed to refresh directory: %s\n", vm_node->host_path);
+        return;
+    }
+    
+    struct dirent* entry;
+    while ((entry = readdir(dir)) != NULL) {
+        // Skip . and ..
+        if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0) {
+            continue;
+        }
+        
+        // Check if this file/directory already exists in VM
+        VNode* existing = vm_node->children;
+        bool found = false;
+        while (existing) {
+            if (strcmp(existing->name, entry->d_name) == 0) {
+                found = true;
+                break;
+            }
+            existing = existing->next;
+        }
+        
+        if (!found) {
+            // New file/directory found, add it
+            printf("DEBUG: Found new entry: %s\n", entry->d_name);
+            char full_host_path[PATH_MAX];
+            snprintf(full_host_path, sizeof(full_host_path), "%s/%s", vm_node->host_path, entry->d_name);
+            
+            struct stat st;
+            if (stat(full_host_path, &st) == 0) {
+                if (S_ISDIR(st.st_mode)) {
+                    // New directory
+                    printf("DEBUG: Adding new directory: %s\n", entry->d_name);
+                    VNode* dir_node = vfs_create_directory_node(entry->d_name);
+                    if (dir_node) {
+                        vfs_add_child(vm_node, dir_node);
+                        vfs_load_host_directory(dir_node, full_host_path);
+                    }
+                } else {
+                    // New file
+                    printf("DEBUG: Adding new file: %s\n", entry->d_name);
+                    VNode* file_node = vfs_create_file_node(entry->d_name);
+                    if (file_node) {
+                        file_node->host_path = malloc(strlen(full_host_path) + 1);
+                        if (file_node->host_path) {
+                            strcpy(file_node->host_path, full_host_path);
+                        }
+                        file_node->size = st.st_size;
+                        vfs_add_child(vm_node, file_node);
+                        printf("DEBUG: Added new file: %s (size: %zu)\n", file_node->name, file_node->size);
+                    }
+                }
+            }
+        }
+    }
+    
+    closedir(dir);
+#endif
+    
+    printf("DEBUG: Finished refreshing directory: %s\n", vm_node->name);
+}
+
+// Load directory contents from host filesystem
+void vfs_load_host_directory(VNode* vm_node, const char* host_path) {
+    printf("DEBUG: Loading host directory from %s to %s\n", host_path, vm_node->name);
     
 #ifdef PLATFORM_WINDOWS
     // Windows implementation using FindFirstFile/FindNextFile
@@ -493,7 +685,7 @@ void vfs_load_persistent_directory(VNode* vm_node, const char* host_path) {
             if (dir_node) {
                 vfs_add_child(vm_node, dir_node);
                 // Recursive load
-                vfs_load_persistent_directory(dir_node, full_host_path);
+                vfs_load_host_directory(dir_node, full_host_path);
             }
         } else {
             // It's a file
@@ -505,7 +697,7 @@ void vfs_load_persistent_directory(VNode* vm_node, const char* host_path) {
                     strcpy(file_node->host_path, full_host_path);
                 }
                 file_node->size = find_data.nFileSizeLow;
-                file_node->is_persistent = 1;
+                // Note: content will be loaded on-demand via vfs_load_file_content()
                 vfs_add_child(vm_node, file_node);
                 printf("DEBUG: Added file: %s (size: %zu)\n", file_node->name, file_node->size);
             }
@@ -543,7 +735,7 @@ void vfs_load_persistent_directory(VNode* vm_node, const char* host_path) {
                 VNode* dir_node = vfs_create_directory_node(entry->d_name);
                 if (dir_node) {
                     vfs_add_child(vm_node, dir_node);
-                    vfs_load_persistent_directory(dir_node, full_host_path);
+                    vfs_load_host_directory(dir_node, full_host_path);
                 }
             } else {
                 // It's a file
@@ -554,7 +746,7 @@ void vfs_load_persistent_directory(VNode* vm_node, const char* host_path) {
                         strcpy(file_node->host_path, full_host_path);
                     }
                     file_node->size = st.st_size;
-                    file_node->is_persistent = 1;
+                    // Note: content will be loaded on-demand via vfs_load_file_content()
                     vfs_add_child(vm_node, file_node);
                 }
             }
@@ -567,9 +759,9 @@ void vfs_load_persistent_directory(VNode* vm_node, const char* host_path) {
     printf("DEBUG: Finished loading directory: %s\n", host_path);
 }
 
-// Mount persistent directory
+// Mount host directory
 int vfs_mount_persistent(const char* vm_path, const char* host_path) {
-    printf("DEBUG: Mounting persistent directory: %s -> %s\n", vm_path, host_path);
+    printf("DEBUG: Mounting host directory: %s -> %s\n", vm_path, host_path);
     
     // Find or create VM directory
     VNode* vm_node = vfs_find_node(vm_path);
@@ -593,7 +785,7 @@ int vfs_mount_persistent(const char* vm_path, const char* host_path) {
     }
     
     // Load the directory contents
-    vfs_load_persistent_directory(vm_node, host_path);
+    vfs_load_host_directory(vm_node, host_path);
     return 0;
 }
 
@@ -802,13 +994,18 @@ int vfs_write_file(const char* path, const void* data, size_t size) {
     return 0;
 }
 
-// NEW: Read data from a file in VFS
+// Read data from a file in VFS (with on-demand loading)
 int vfs_read_file(const char* path, void** data, size_t* size) {
     VNode* node = vfs_find_node(path);
     if (!node || node->is_directory) {
         return -1;
     }
-
+    
+    // Load content if not already loaded
+    if (!node->data && vfs_load_file_content(node) != 0) {
+        return -1;
+    }
+    
     if (data) *data = node->data;
     if (size) *size = node->size;
     return 0;

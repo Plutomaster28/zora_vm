@@ -68,6 +68,9 @@ int desktop_load_prefs(void) {
             line = strtok(NULL, "\n");
         }
         free(copy);
+    } else {
+        // No preferences file exists, apply default theme
+        desktop_apply_theme();
     }
     return 0;
 }
@@ -128,7 +131,8 @@ int desktop_switch_theme(const char* theme_name) {
 int desktop_init(void) {
     printf("Desktop subsystem initializing...\n");
     desktop_load_prefs();
-    desktop_apply_theme();
+    // Note: desktop_load_prefs() already applies the theme via desktop_switch_theme()
+    // No need to call desktop_apply_theme() again here
     return 0;
 }
 

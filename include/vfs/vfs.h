@@ -49,9 +49,11 @@ VNode* vfs_find_node(const char* path);
 VNode* vfs_create_directory_node(const char* name);  // NEW: Returns VNode*
 VNode* vfs_create_file_node(const char* name);       // NEW: Returns VNode*
 void vfs_add_child(VNode* parent, VNode* child);     // NEW: Add child function
+int vfs_load_file_content(VNode* node);              // NEW: Load file content on-demand
 
-// Persistent directory operations - FIXED SIGNATURE
-void vfs_load_persistent_directory(VNode* vm_node, const char* host_path);
+// Host directory operations
+void vfs_load_host_directory(VNode* vm_node, const char* host_path);
+void vfs_refresh_directory(VNode* vm_node);             // NEW: Refresh directory from host
 int vfs_mount_persistent(const char* vm_path, const char* host_path);
 
 // Utility functions
