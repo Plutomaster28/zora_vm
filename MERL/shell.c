@@ -16,46 +16,10 @@
 #include "desktop/desktop.h"
 #include "vm.h"  // For crash guard control
 
-// Add platform detection at the top:
-#ifdef _WIN32
-    #include <windows.h>
-    #include <io.h>
-    #include <direct.h>
-#else
-    #include <sys/stat.h>
-    #include <dirent.h>
-    #include <unistd.h>
-    #include <glob.h>  // ADD THIS LINE - this was missing!
-    
-    // Windows compatibility for Linux
-    #define INVALID_FILE_ATTRIBUTES ((unsigned long)-1)
-    #define FILE_ATTRIBUTE_DIRECTORY S_IFDIR
-    
-    typedef struct {
-        char cFileName[256];
-        unsigned long dwFileAttributes;
-    } WIN32_FIND_DATA;
-    
-    static inline unsigned long GetFileAttributes(const char* path) {
-        struct stat st;
-        if (stat(path, &st) == 0) {
-            return st.st_mode;
-        }
-        return INVALID_FILE_ATTRIBUTES;
-    }
-#endif
-
-// Add these compatibility defines at the top after the includes:
-
-#ifndef PLATFORM_WINDOWS
-    // Linux compatibility
-    #define _rmdir(path) rmdir(path)
-    #define _mkdir(path) mkdir(path, 0755)
-    #define GetFileAttributesA(path) GetFileAttributes(path)
-    
-    // Add the missing FindFirstFile/FindNextFile/FindClose declarations
-    // These should now be available from tetra.c
-#endif
+// Windows-specific includes
+#include <windows.h>
+#include <io.h>
+#include <direct.h>
 
 // Function prototypes
 void handle_command(char *command);
@@ -139,25 +103,16 @@ static char current_path[256] = "/";
 
 // Color support functions implementation
 void set_color(int color) {
-#ifdef _WIN32
     HANDLE hConsole = GetStdHandle(STD_OUTPUT_HANDLE);
     SetConsoleTextAttribute(hConsole, color);
-#else
-    // Linux/Unix ANSI colors are handled via printf with escape codes
-#endif
 }
 
 void reset_color() {
-#ifdef _WIN32
     HANDLE hConsole = GetStdHandle(STD_OUTPUT_HANDLE);
     SetConsoleTextAttribute(hConsole, 7); // Default white on black
-#else
-    printf(COLOR_RESET);
-#endif
 }
 
 void print_colored_prompt() {
-#ifdef _WIN32
     // Windows console color codes
     HANDLE hConsole = GetStdHandle(STD_OUTPUT_HANDLE);
     
@@ -166,7 +121,6 @@ void print_colored_prompt() {
     GetConsoleMode(hConsole, &dwMode);
     dwMode |= ENABLE_VIRTUAL_TERMINAL_PROCESSING;
     SetConsoleMode(hConsole, dwMode);
-#endif
 
     // Print colored prompt: user@hostname:path>
     printf(KALI_USER_COLOR "%s" COLOR_RESET, current_user);
@@ -604,7 +558,7 @@ void du_command(int argc, char **argv) {
 
 void uname_command(int argc, char **argv) {
     if (argc > 1 && strcmp(argv[1], "-a") == 0) {
-        printf("ZoraVM 1.0 zora-vm x86_64 x86_64 x86_64 GNU/Linux\n");
+        printf("ZoraVM 1.0 zora-vm x86_64 x86_64 x86_64 Windows\n");
     } else {
         printf("ZoraVM\n");
     }
@@ -823,38 +777,6 @@ void run_windows_command(int argc, char **argv) {
     }
 }
 
-void run_linux_command(int argc, char **argv) {
-    if (argc < 2) {
-        printf("Usage: run-linux <binary> [args...]\n");
-        return;
-    }
-    
-    char binary_path[256];
-    if (argv[1][0] == '/') {
-        strcpy(binary_path, argv[1]);
-    } else {
-        snprintf(binary_path, sizeof(binary_path), "/persistent/data/%s", argv[1]);
-    }
-    
-    printf("Executing Linux binary: %s\n", binary_path);
-    
-    // Force Linux execution via QEMU
-    VNode* node = vfs_find_node(binary_path);
-    if (node && node->host_path) {
-        // Enable crash guard for binary execution
-        vm_enable_crash_guard();
-        
-        int result = execute_linux_binary(node->host_path, argv + 1, argc - 1);
-        
-        // Disable crash guard after execution
-        vm_disable_crash_guard();
-        
-        printf("Linux binary execution completed (exit code: %d)\n", result);
-    } else {
-        printf("Binary not found: %s\n", binary_path);
-    }
-}
-
 void list_binaries_command(int argc, char **argv) {
     printf("Available binaries in /persistent/data:\n");
     
@@ -887,24 +809,16 @@ void sandbox_status_command(int argc, char **argv) {
     printf("=== Sandbox Status ===\n");
     printf("Binary Executor: %s\n", binary_executor_is_initialized() ? "Initialized" : "Not initialized");
     printf("ELF Parser: %s\n", binary_executor_has_elf_support() ? "Available" : "Not Available");
-    
-    if (binary_executor_has_elf_support()) {
-        printf("Linux ELF Support: Native ELF Parser (SANDBOXED)\n");
-        printf("Architecture Support: 32-bit and 64-bit\n");
-        printf("Translation Layer: Custom Linux syscall emulation\n");
-    }
-    
     printf("Sandbox Directory: %s\n", "Temp/zora_vm_sandbox_<pid>");
     printf("Windows Binary Support: Native execution (SANDBOXED)\n");
-    printf("Linux Binary Support: %s\n", binary_executor_has_elf_support() ? "Native ELF Parser (SANDBOXED)" : "Disabled");
+    printf("ELF Binary Support: %s\n", binary_executor_has_elf_support() ? "Native ELF Parser (SANDBOXED)" : "Disabled");
     printf("Script Execution: Enabled (SANDBOXED)\n");
     
     printf("\nFeatures:\n");
     printf("   • Native ELF parsing and loading\n");
-    printf("   • Custom Linux syscall emulation layer\n");
-    printf("   • Cross-platform binary execution\n");
+    printf("   • Windows-optimized binary execution\n");
     printf("   • Sandboxed execution environment\n");
-    printf("   • NO external dependencies (no QEMU required)\n");
+    printf("   • NO external dependencies required\n");
     printf("   • Real machine code execution with syscall interception\n");
 }
 
@@ -1437,11 +1351,7 @@ void rename_command(int argc, char **argv) {
 }
 
 void clear_screen(void) {
-#ifdef _WIN32
     system("cls");
-#else
-    system("clear");
-#endif
 }
 
 void clear_command(int argc, char **argv) {
@@ -1594,13 +1504,8 @@ void pull_command(int argc, char* argv[]) {
 
     printf("Pulling files from %s to %s\n", src_dir, dst_dir);
 
-#ifdef _WIN32
     // Windows: use xcopy
     snprintf(cmd, sizeof(cmd), "xcopy /E /I /Y \"%s\" \"%s\"", src_dir, dst_dir);
-#else
-    // Linux: use cp -r
-    snprintf(cmd, sizeof(cmd), "cp -r \"%s\" \"%s\"", src_dir, dst_dir);
-#endif
 
     int result = system(cmd);
     if (result == 0) {
@@ -1635,7 +1540,6 @@ void search_command(int argc, char **argv) {
 
     printf("Searching for: %s\n", argv[1]);
 
-#ifdef _WIN32
     // Windows implementation using FindFirstFile
     WIN32_FIND_DATA find_data;
     HANDLE hFind = FindFirstFile(argv[1], &find_data);
@@ -1655,31 +1559,6 @@ void search_command(int argc, char **argv) {
     } while (FindNextFile(hFind, &find_data) != 0);
     
     FindClose(hFind);
-#else
-    // Linux implementation using glob
-    glob_t glob_result;
-    int glob_status = glob(argv[1], GLOB_MARK, NULL, &glob_result);
-    
-    if (glob_status != 0) {
-        printf("No files found matching pattern: %s\n", argv[1]);
-        return;
-    }
-    
-    for (size_t i = 0; i < glob_result.gl_pathc; i++) {
-        printf("Found: %s\n", glob_result.gl_pathv[i]);
-        
-        struct stat file_stat;
-        if (stat(glob_result.gl_pathv[i], &file_stat) == 0) {
-            if (S_ISDIR(file_stat.st_mode)) {
-                printf("  [Directory]\n");
-            } else {
-                printf("  Size: %ld bytes\n", file_stat.st_size);
-            }
-        }
-    }
-    
-    globfree(&glob_result);
-#endif
 }
 
 void edit_command(int argc, char **argv) {
@@ -1775,13 +1654,16 @@ void vm_status_command(int argc, char **argv) {
 
 void vm_reboot_command(int argc, char **argv) {
     printf("Rebooting Zora VM...\n");
-    printf("This will exit the VM and return to host system.\n");
+    printf("This will restart the entire VM process.\n");
     printf("Are you sure? (y/n): ");
     char response;
     scanf(" %c", &response);
     if (response == 'y' || response == 'Y') {
-        printf("Rebooting...\n");
-        exit(0);  // Exit the VM
+        printf("Initiating reboot...\n");
+        vm_trigger_reboot();  // Call the proper reboot function
+        return;  // Let the main loop handle the reboot
+    } else {
+        printf("Reboot cancelled.\n");
     }
 }
 
@@ -1851,7 +1733,6 @@ Command command_table[] = {
     {"luacode", luacode_command, "Execute Lua code directly."},
     {"exec", exec_command, "Execute binary from /persistent/data/"},
     {"run-windows", run_windows_command, "Execute Windows binary with sandboxing"},
-    {"run-linux", run_linux_command, "Execute Linux binary via QEMU"},
     {"list-binaries", list_binaries_command, "List available binaries and their types"},
     {"sandbox-status", sandbox_status_command, "Show sandbox execution status"},
     {"desktop", desktop_command, "Desktop control (restart/status)"},
@@ -2122,11 +2003,7 @@ int execute_command_with_redirection(char *args[], int argc, char *input_file, c
         fflush(stdout);
         
         // Redirect stdout back to console (this is platform specific)
-        #ifdef _WIN32
         freopen("CON", "w", stdout);
-        #else
-        freopen("/dev/tty", "w", stdout);
-        #endif
         
         printf("Output redirection completed to: %s\n", output_file);
     }
@@ -2617,27 +2494,7 @@ void test_sandbox_command(int argc, char **argv) {
     printf("Process isolation is active\n");
 }
 
-// Linux implementations of Windows Find functions for shell.c
-
-#ifdef PLATFORM_WINDOWS
-// Use native Windows FindFirstFile/FindNextFile/FindClose - they're already declared in windows.h
-// No additional declarations needed
-#else
-// Linux implementations would go here if needed
-#endif
-
-// Platform detection
-#ifndef _WIN32
-    #ifndef __linux__
-        #define __linux__
-    #endif
-#endif
-
-// Cross-platform compatibility
-#ifdef _WIN32
-    #define PLATFORM_NAME "Windows"
-    #define CLEAR_COMMAND "cls"
-#else
-    #define PLATFORM_NAME "Linux"
-    #define CLEAR_COMMAND "clear"
-#endif
+// Windows implementation uses native FindFirstFile/FindNextFile/FindClose
+// Platform detection - Windows only
+#define PLATFORM_NAME "Windows"
+#define CLEAR_COMMAND "cls"

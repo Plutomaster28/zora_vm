@@ -10,15 +10,8 @@ if(WIN32)
     set(PLATFORM_NAME "Windows")
     add_definitions(-D_WIN32_WINNT=0x0601)  # Windows 7+
     message(STATUS "Building for Windows")
-elseif(UNIX)
-    set(PLATFORM_NAME "Unix/Linux")
-    message(STATUS "Building for Unix/Linux")
-endif()
-
-# Docker build detection
-if(DEFINED ENV{DOCKER_BUILD})
-    message(STATUS "Building in Docker environment")
-    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fPIC")
+else()
+    message(FATAL_ERROR "This project now only supports Windows. Use Windows with MinGW, MSYS2, or Visual Studio.")
 endif()
 
 # Security features
@@ -44,50 +37,29 @@ endif()
 find_package(PkgConfig QUIET)
 set(LUA_FOUND FALSE)
 
-# Try pkg-config first (works best in Docker/Linux)
-if(PkgConfig_FOUND)
-    pkg_check_modules(LUA lua5.4 QUIET)
-    if(NOT LUA_FOUND)
-        pkg_check_modules(LUA lua QUIET)
-    endif()
-    
-    if(LUA_FOUND)
-        message(STATUS "Found Lua via pkg-config: ${LUA_VERSION}")
-    endif()
-endif()
+# Windows-specific Lua detection
+find_path(LUA_INCLUDE_DIR lua.h
+    HINTS
+    C:/msys64/ucrt64/include/lua5.4
+    C:/msys64/ucrt64/include/lua
+    C:/lua/include
+    C:/Program Files/Lua/include
+)
 
-# Fallback to manual search if pkg-config fails
-if(NOT LUA_FOUND)
-    message(STATUS "pkg-config failed, trying manual Lua detection...")
-    
-    find_path(LUA_INCLUDE_DIR lua.h
-        HINTS
-        /usr/include/lua5.4
-        /usr/include/lua
-        /usr/local/include/lua5.4
-        /usr/local/include/lua
-        C:/msys64/ucrt64/include/lua5.4
-        C:/msys64/ucrt64/include/lua
-    )
-    
-    find_library(LUA_LIBRARIES
-        NAMES lua5.4 lua54 lua
-        HINTS
-        /usr/lib
-        /usr/local/lib
+find_library(LUA_LIBRARIES
+    NAMES lua5.4 lua54 lua
+    HINTS
         C:/msys64/ucrt64/lib
-    )
-    
-    if(LUA_INCLUDE_DIR AND LUA_LIBRARIES)
-        set(LUA_FOUND TRUE)
-        set(LUA_INCLUDE_DIRS ${LUA_INCLUDE_DIR})
-        message(STATUS "Found Lua manually: ${LUA_LIBRARIES}")
-    endif()
-endif()
+        C:/lua/lib
+        C:/Program Files/Lua/lib
+)
 
-# Final Lua check
-if(NOT LUA_FOUND)
-    message(FATAL_ERROR "Lua not found! Please install lua5.4-dev or lua-devel")
+if(LUA_INCLUDE_DIR AND LUA_LIBRARIES)
+    set(LUA_FOUND TRUE)
+    set(LUA_INCLUDE_DIRS ${LUA_INCLUDE_DIR})
+    message(STATUS "Found Lua manually: ${LUA_LIBRARIES}")
+else()
+    message(FATAL_ERROR "Lua not found! Please install Lua 5.4 via MSYS2: pacman -S mingw-w64-ucrt-x86_64-lua")
 endif()
 
 # Static linking preference for Lua on Windows
@@ -132,30 +104,13 @@ file(GLOB MEMORY_SOURCES "src/memory/*.c")
 file(GLOB DEVICE_SOURCES "src/devices/*.c")
 file(GLOB KERNEL_SOURCES "src/kernel/*.c")
 
-# NEW: ELF Parser sources (platform-independent)
+# Windows-only ELF Parser sources
 set(ELF_SOURCES "src/binary/elf_parser.c")
+set(BINARY_PLATFORM_SOURCES "src/binary/windows/binary_executor_win.c")
+set(ELF_PLATFORM_SOURCES "src/binary/windows/elf_parser_win.c")
+message(STATUS "Added Windows-specific files: ${BINARY_PLATFORM_SOURCES}, ${ELF_PLATFORM_SOURCES}")
 
-# Add platform-specific ELF sources only if they exist
-if(UNIX)
-    set(ELF_PLATFORM_SOURCES "src/binary/linux/elf_parser_linux.c")
-    message(STATUS "Added Linux-specific ELF file: ${ELF_PLATFORM_SOURCES}")
-else()
-    set(ELF_PLATFORM_SOURCES "src/binary/windows/elf_parser_win.c")
-    message(STATUS "Added Windows-specific ELF file: ${ELF_PLATFORM_SOURCES}")
-endif()
-
-# Platform-specific binary executor sources
-if(WIN32)
-    set(BINARY_PLATFORM_SOURCES "src/binary/windows/binary_executor_win.c")
-    set(ELF_PLATFORM_SOURCES "src/binary/windows/elf_parser_win.c")
-    message(STATUS "Added Windows-specific files: ${BINARY_PLATFORM_SOURCES}, ${ELF_PLATFORM_SOURCES}")
-else()
-    set(BINARY_PLATFORM_SOURCES "")
-    set(ELF_PLATFORM_SOURCES "src/binary/linux/elf_parser_linux.c")
-    message(STATUS "Added Linux-specific ELF file: ${ELF_PLATFORM_SOURCES}")
-endif()
-
-# Update binary sources - FIX: Include both wrapper and platform-specific files
+# Update binary sources - Include both wrapper and platform-specific files
 set(BINARY_SOURCES 
     "src/binary/binary_executor.c"
     ${BINARY_PLATFORM_SOURCES}
@@ -222,58 +177,26 @@ set(MERL_HEADERS
     MERL/utils.h
 )
 
-# === PLATFORM-SPECIFIC SOURCE FILES ===
-if(WIN32)
-    message(STATUS "Including Windows-specific sources via wrappers")
-    
-    # Only include the WRAPPER files, not the platform-specific ones directly
-    set(PLATFORM_SANDBOX_SOURCES 
-        "src/sandbox/sandbox.c"
-        "src/sandbox/syscall_filter.c"
-    )
-    set(PLATFORM_BINARY_SOURCES 
-        "src/binary/binary_executor.c"
-    )
-    
-    # Windows-specific definitions
-    add_definitions(-DWIN32_LEAN_AND_MEAN)
-    add_definitions(-DNOMINMAX)
-    
-else()
-    message(STATUS "Including Linux-specific sources via wrappers")
-    
-    # Only include the WRAPPER files for Linux too
-    set(PLATFORM_SANDBOX_SOURCES 
-        "src/sandbox/sandbox.c"
-        "src/sandbox/syscall_filter.c"
-    )
-    set(PLATFORM_BINARY_SOURCES 
-        "src/binary/binary_executor.c"
-    )
-    
-    # Linux-specific definitions
-    add_definitions(-D_GNU_SOURCE)
-    add_definitions(-D_DEFAULT_SOURCE)
-    
-    # Linux may need additional libraries
-    find_package(PkgConfig QUIET)
-    if(PkgConfig_FOUND)
-        pkg_check_modules(SECCOMP libseccomp QUIET)
-        if(SECCOMP_FOUND)
-            message(STATUS "Found libseccomp for enhanced sandboxing")
-            add_definitions(-DHAVE_SECCOMP)
-        else()
-            message(WARNING "libseccomp not found - sandbox features will be limited")
-        endif()
-    endif()
-endif()
+# === WINDOWS-ONLY SOURCE FILES ===
+message(STATUS "Including Windows-specific sources via wrappers")
+
+# Only include the WRAPPER files for Windows
+set(PLATFORM_SANDBOX_SOURCES 
+    "src/sandbox/sandbox.c"
+    "src/sandbox/syscall_filter.c"
+)
+set(PLATFORM_BINARY_SOURCES 
+    "src/binary/binary_executor.c"
+)
+
+# Windows-specific definitions
+add_definitions(-DWIN32_LEAN_AND_MEAN)
+add_definitions(-DNOMINMAX)
 
 # Remove any direct inclusion of platform-specific files from the main sources
 # Make sure these lines are NOT in your main sources:
 # "src/sandbox/windows/*.c"
-# "src/sandbox/linux/*.c" 
 # "src/binary/windows/*.c"
-# "src/binary/linux/*.c"
 
 # The wrapper files will #include the platform-specific implementations
 
@@ -351,24 +274,6 @@ if(WIN32)
         psapi       # Process status API
         dbghelp     # Debug help library
     )
-else()
-    set(LINUX_LIBS
-        ${LUA_LIBRARIES}
-        pthread     # POSIX threads
-        dl          # Dynamic loading
-        m           # Math library
-        rt          # Real-time extensions
-        util        # Utility functions
-    )
-    
-    # Add seccomp if available
-    if(SECCOMP_FOUND)
-        list(APPEND LINUX_LIBS ${SECCOMP_LIBRARIES})
-        target_include_directories(zora_vm PRIVATE ${SECCOMP_INCLUDE_DIRS})
-        target_compile_definitions(zora_vm PRIVATE -DHAVE_SECCOMP)
-    endif()
-    
-    target_link_libraries(zora_vm ${LINUX_LIBS})
 endif()
 
 # === COMPILER DEFINITIONS ===

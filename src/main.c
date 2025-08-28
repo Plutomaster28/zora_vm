@@ -4,14 +4,9 @@
 #include <string.h>
 #include <setjmp.h>  // Add this include
 
-// Platform-specific includes for directory handling
-#ifdef PLATFORM_WINDOWS
-    #include <windows.h>
-    #include <direct.h>
-#else
-    #include <sys/stat.h>
-    #include <unistd.h>
-#endif
+// Windows-specific includes for directory handling
+#include <windows.h>
+#include <direct.h>
 
 #include "cpu.h"
 #include "memory.h"
@@ -37,6 +32,7 @@
 #endif
 
 static volatile int running = 1;
+static volatile int rebooting = 0;  // Flag for reboot
 static int vm_initialized = 0;
 
 // Add crash protection variables
@@ -92,6 +88,13 @@ void vm_enable_crash_guard() {
 // Disable crash guard for normal operations
 void vm_disable_crash_guard() {
     vm_crash_guard = 0;
+}
+
+// Trigger VM reboot
+void vm_trigger_reboot() {
+    printf("VM reboot triggered...\n");
+    rebooting = 1;
+    running = 0;  // Stop the main loop
 }
 
 int vm_init(void) {
@@ -380,6 +383,55 @@ int main(int argc, char* argv[]) {
             fprintf(stderr, "MERL shell execution failed with code: %d\n", result);
         }
         break; // Normal exit
+    }
+
+    // Check if we need to reboot
+    if (rebooting) {
+        printf("Reboot requested - cleaning up before restart...\n");
+        
+        // Perform cleanup
+        vm_crash_guard = 0;
+        merl_cleanup();
+        device_cleanup();
+        memory_cleanup();
+        cpu_cleanup();
+        vm_cleanup();
+        virtualization_cleanup();
+        sandbox_cleanup();
+        network_cleanup();
+        lua_vm_cleanup();
+        vfs_cleanup();
+        binary_executor_cleanup();
+        meisei_silicon_cleanup();
+        
+#ifdef PYTHON_SCRIPTING
+        python_vm_cleanup();
+#endif
+#ifdef PERL_SCRIPTING
+        perl_vm_cleanup();
+#endif
+        
+        printf("Cleanup complete. Restarting Zora VM...\n");
+        
+        // Get the current executable path
+        char exe_path[MAX_PATH];
+        GetModuleFileNameA(NULL, exe_path, MAX_PATH);
+        
+        // Create new process to restart the VM
+        STARTUPINFOA si = {0};
+        PROCESS_INFORMATION pi = {0};
+        si.cb = sizeof(si);
+        
+        if (CreateProcessA(NULL, exe_path, NULL, NULL, FALSE, 0, NULL, NULL, &si, &pi)) {
+            printf("VM restart initiated successfully.\n");
+            CloseHandle(pi.hProcess);
+            CloseHandle(pi.hThread);
+            return 0; // Exit current instance
+        } else {
+            printf("Failed to restart VM. Error code: %lu\n", GetLastError());
+            printf("Please restart manually.\n");
+            return 1;
+        }
     }
 
 cleanup:

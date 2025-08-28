@@ -6,16 +6,10 @@
 #include <time.h>
 #include "platform/platform.h"
 
-// Platform-specific directory handling
-#ifdef PLATFORM_WINDOWS
-    #include <windows.h>
-    #include <direct.h>
-    #include <sys/stat.h>
-#else
-    #include <dirent.h>
-    #include <sys/stat.h>
-    #include <unistd.h>
-#endif
+// Windows-specific directory handling
+#include <windows.h>
+#include <direct.h>
+#include <sys/stat.h>
 
 // Virtual file system that stays in memory
 static VirtualFS* vm_fs = NULL;
@@ -143,7 +137,6 @@ int create_directory_recursive(const char* path) {
             *ptr = '\0';
             
             // Check if directory exists
-#ifdef PLATFORM_WINDOWS
             DWORD attrib = GetFileAttributesA(temp_path);
             if (attrib == INVALID_FILE_ATTRIBUTES) {
                 if (CreateDirectoryA(temp_path, NULL) == 0) {
@@ -154,15 +147,6 @@ int create_directory_recursive(const char* path) {
                     }
                 }
             }
-#else
-            struct stat st;
-            if (stat(temp_path, &st) != 0) {
-                if (mkdir(temp_path, 0755) != 0) {
-                    perror("mkdir");
-                    return -1;
-                }
-            }
-#endif
             *ptr = '/';
         }
         ptr++;

@@ -11,4 +11,7 @@ void vm_init_crash_protection(void);
 void vm_enable_crash_guard(void);
 void vm_disable_crash_guard(void);
 
+// VM control functions
+void vm_trigger_reboot(void);
+
 #endif // VM_H
