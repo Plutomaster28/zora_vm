@@ -4,10 +4,10 @@
 
 ![Zora VM Logo](proto_meisei_font.png)
 
-**A lightweight, cross-platform virtual machine environment with Unix/Linux command compatibility**
+**A lightweight Windows virtual machine environment with Unix/Linux command compatibility**
 
 [![Build Status](https://img.shields.io/badge/build-passing-brightgreen)]()
-[![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux-blue)]()
+[![Platform](https://img.shields.io/badge/platform-Windows-blue)]()
 [![License](https://img.shields.io/badge/license-MIT-green)]()
 
 </div>
@@ -16,7 +16,6 @@
 
 ### Prerequisites
 - **Windows**: MinGW-w64 or Visual Studio 2019+
-- **Linux**: GCC 9.0+ 
 - **CMake**: 3.20 or higher
 - **Git**: For cloning the repository
 
@@ -25,7 +24,7 @@
 #### Option 1: Download Pre-built Executable (Recommended)
 1. Download the latest `ZoraVM_Distribution.zip` from the releases
 2. Extract to your desired location
-3. Run `Launch_ZoraVM.bat` (Windows) or `./zora_vm` (Linux)
+3. Run `Launch_ZoraVM.bat`
 
 #### Option 2: Build from Source
 ```bash
@@ -35,9 +34,6 @@ cd zora_vm
 
 # Build on Windows
 build-docker.bat
-
-# Build on Linux
-./build-docker.sh
 
 # Or use CMake directly
 mkdir build && cd build
@@ -49,16 +45,13 @@ cmake --build .
 ```bash
 # Windows
 .\Launch_ZoraVM.bat
-
-# Linux
-./zora_vm
 ```
 
 ## What is Zora VM?
 
 Zora VM is a **standalone virtual machine environment** that provides:
 
-- **Complete Unix/Linux command compatibility** on any platform
+- **Complete Unix/Linux command compatibility** on Windows
 - **Isolated sandbox environment** for safe code execution
 - **Multi-language scripting support** (Python, Lua, Perl)
 - **Virtual file system** with persistent storage
@@ -69,7 +62,7 @@ Zora VM is a **standalone virtual machine environment** that provides:
 
 ### Core Features
 - **Full Unix Shell Experience**: 80+ commands including `ls`, `cd`, `grep`, `tar`, `ssh`, `top`, etc.
-- **Multi-Platform**: Runs natively on Windows, Linux, and macOS
+- **Windows-Native**: Runs natively on Windows with full system integration
 - **Scripting Languages**: Python, Lua, and Perl interpreters built-in
 - **Virtual File System**: Persistent storage with Unix-style permissions
 - **Network Stack**: Virtual networking with NAT, DNS, and firewall simulation
@@ -367,33 +360,28 @@ zora_vm/
 ### Contributing:
 1. Fork the repository
 2. Create feature branch: `git checkout -b feature-name`
-3. Make changes and test (both native and Docker if possible)
+3. Make changes and test
 4. Submit pull request
 
 ### Testing:
 ```bash
 # Native testing
 ninja test
-
-# Docker testing  
-docker run --rm ghcr.io/plutomaster28/zora-vm:latest -c "echo 'test' | zora_vm --batch-mode"
 ```
 
 ---
 
 ## Distribution
 
-- **Docker Hub**: `ghcr.io/plutomaster28/zora-vm:latest`
 - **Source**: `https://github.com/Plutomaster28/zora_vm`
-- **Releases**: Check GitHub releases for precompiled binaries
+- **Releases**: Check GitHub releases for precompiled Windows binaries
 
 ---
 
 ## Community
 
 - Report bugs via GitHub Issues
-- Discuss features in GitHub Discussions  
-- Docker-related issues: tag with `docker` label
+- Discuss features in GitHub Discussions
 
 ---
 
