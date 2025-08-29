@@ -31,13 +31,13 @@ static void kernel_display_boot_splash(void) {
     printf("\n");
     
     if (g_boot_flags & BOOT_FLAG_SAFE_MODE) {
-        printf("[KERNEL] ⚠️  SAFE MODE ENABLED\n");
+        printf("[KERNEL] SAFE MODE ENABLED\n");
     }
     if (g_boot_flags & BOOT_FLAG_DEBUG_MODE) {
-        printf("[KERNEL] 🐛 DEBUG MODE ENABLED\n");
+        printf("[KERNEL] DEBUG MODE ENABLED\n");
     }
     if (g_boot_flags & BOOT_FLAG_VERBOSE) {
-        printf("[KERNEL] 📝 VERBOSE LOGGING ENABLED\n");
+        printf("[KERNEL] VERBOSE LOGGING ENABLED\n");
     }
 }
 
