@@ -6,6 +6,9 @@
 #include <time.h>
 #include "platform/platform.h"
 
+// Debug control - set to 0 to disable verbose debug output
+#define VFS_DEBUG_VERBOSE 0
+
 // Windows-specific directory handling
 #include <windows.h>
 #include <direct.h>
@@ -477,7 +480,7 @@ void vfs_refresh_directory(VNode* vm_node) {
     if (!vm_node || !vm_node->is_directory || !vm_node->host_path) {
         return;
     }
-    printf("DEBUG: Refreshing directory: %s from %s\n", vm_node->name, vm_node->host_path);
+    if (VFS_DEBUG_VERBOSE) printf("DEBUG: Refreshing directory: %s from %s\n", vm_node->name, vm_node->host_path);
     
     WIN32_FIND_DATAA find_data;
     char search_path[MAX_PATH];
@@ -485,7 +488,7 @@ void vfs_refresh_directory(VNode* vm_node) {
     
     HANDLE hFind = FindFirstFileA(search_path, &find_data);
     if (hFind == INVALID_HANDLE_VALUE) {
-        printf("DEBUG: Failed to refresh directory: %s\n", vm_node->host_path);
+        if (VFS_DEBUG_VERBOSE) printf("DEBUG: Failed to refresh directory: %s\n", vm_node->host_path);
         return;
     }
     
@@ -508,13 +511,13 @@ void vfs_refresh_directory(VNode* vm_node) {
         
         if (!found) {
             // New file/directory found, add it
-            printf("DEBUG: Found new entry: %s\n", find_data.cFileName);
+            if (VFS_DEBUG_VERBOSE) printf("DEBUG: Found new entry: %s\n", find_data.cFileName);
             char full_host_path[MAX_PATH];
             snprintf(full_host_path, sizeof(full_host_path), "%s\\%s", vm_node->host_path, find_data.cFileName);
             
             if (find_data.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) {
                 // New directory
-                printf("DEBUG: Adding new directory: %s\n", find_data.cFileName);
+                if (VFS_DEBUG_VERBOSE) printf("DEBUG: Adding new directory: %s\n", find_data.cFileName);
                 VNode* dir_node = vfs_create_directory_node(find_data.cFileName);
                 if (dir_node) {
                     vfs_add_child(vm_node, dir_node);
@@ -522,7 +525,7 @@ void vfs_refresh_directory(VNode* vm_node) {
                 }
             } else {
                 // New file
-                printf("DEBUG: Adding new file: %s\n", find_data.cFileName);
+                if (VFS_DEBUG_VERBOSE) printf("DEBUG: Adding new file: %s\n", find_data.cFileName);
                 VNode* file_node = vfs_create_file_node(find_data.cFileName);
                 if (file_node) {
                     file_node->host_path = malloc(strlen(full_host_path) + 1);
@@ -531,7 +534,7 @@ void vfs_refresh_directory(VNode* vm_node) {
                     }
                     file_node->size = find_data.nFileSizeLow;
                     vfs_add_child(vm_node, file_node);
-                    printf("DEBUG: Added new file: %s (size: %zu)\n", file_node->name, file_node->size);
+                    if (VFS_DEBUG_VERBOSE) printf("DEBUG: Added new file: %s (size: %zu)\n", file_node->name, file_node->size);
                 }
             }
         }
@@ -539,12 +542,12 @@ void vfs_refresh_directory(VNode* vm_node) {
     
     FindClose(hFind);
     
-    printf("DEBUG: Finished refreshing directory: %s\n", vm_node->name);
+    if (VFS_DEBUG_VERBOSE) printf("DEBUG: Finished refreshing directory: %s\n", vm_node->name);
 }
 
 // Load directory contents from host filesystem
 void vfs_load_host_directory(VNode* vm_node, const char* host_path) {
-    printf("DEBUG: Loading host directory from %s to %s\n", host_path, vm_node->name);
+    if (VFS_DEBUG_VERBOSE) printf("DEBUG: Loading host directory from %s to %s\n", host_path, vm_node->name);
     
     // Windows implementation using FindFirstFile/FindNextFile
     WIN32_FIND_DATAA find_data;
@@ -553,7 +556,7 @@ void vfs_load_host_directory(VNode* vm_node, const char* host_path) {
     
     HANDLE hFind = FindFirstFileA(search_path, &find_data);
     if (hFind == INVALID_HANDLE_VALUE) {
-        printf("DEBUG: Failed to open directory: %s\n", host_path);
+        if (VFS_DEBUG_VERBOSE) printf("DEBUG: Failed to open directory: %s\n", host_path);
         return;
     }
     
@@ -563,7 +566,7 @@ void vfs_load_host_directory(VNode* vm_node, const char* host_path) {
             continue;
         }
         
-        printf("DEBUG: Found entry: %s\n", find_data.cFileName);
+        if (VFS_DEBUG_VERBOSE) printf("DEBUG: Found entry: %s\n", find_data.cFileName);
         
         // Build full paths
         char full_host_path[MAX_PATH];
@@ -571,7 +574,7 @@ void vfs_load_host_directory(VNode* vm_node, const char* host_path) {
         
         if (find_data.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) {
             // It's a directory
-            printf("DEBUG: Creating directory node: %s\n", find_data.cFileName);
+            if (VFS_DEBUG_VERBOSE) printf("DEBUG: Creating directory node: %s\n", find_data.cFileName);
             VNode* dir_node = vfs_create_directory_node(find_data.cFileName);
             if (dir_node) {
                 vfs_add_child(vm_node, dir_node);
@@ -580,7 +583,7 @@ void vfs_load_host_directory(VNode* vm_node, const char* host_path) {
             }
         } else {
             // It's a file
-            printf("DEBUG: Creating file node: %s\n", find_data.cFileName);
+            if (VFS_DEBUG_VERBOSE) printf("DEBUG: Creating file node: %s\n", find_data.cFileName);
             VNode* file_node = vfs_create_file_node(find_data.cFileName);
             if (file_node) {
                 file_node->host_path = malloc(strlen(full_host_path) + 1);
@@ -590,19 +593,19 @@ void vfs_load_host_directory(VNode* vm_node, const char* host_path) {
                 file_node->size = find_data.nFileSizeLow;
                 // Note: content will be loaded on-demand via vfs_load_file_content()
                 vfs_add_child(vm_node, file_node);
-                printf("DEBUG: Added file: %s (size: %zu)\n", file_node->name, file_node->size);
+                if (VFS_DEBUG_VERBOSE) printf("DEBUG: Added file: %s (size: %zu)\n", file_node->name, file_node->size);
             }
         }
     } while (FindNextFileA(hFind, &find_data) != 0);
     
     FindClose(hFind);
     
-    printf("DEBUG: Finished loading directory: %s\n", host_path);
+    if (VFS_DEBUG_VERBOSE) printf("DEBUG: Finished loading directory: %s\n", host_path);
 }
 
 // Mount host directory
 int vfs_mount_persistent(const char* vm_path, const char* host_path) {
-    printf("DEBUG: Mounting host directory: %s -> %s\n", vm_path, host_path);
+    if (VFS_DEBUG_VERBOSE) printf("DEBUG: Mounting host directory: %s -> %s\n", vm_path, host_path);
     
     // Find or create VM directory
     VNode* vm_node = vfs_find_node(vm_path);

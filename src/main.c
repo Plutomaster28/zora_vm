@@ -185,6 +185,13 @@ int main(int argc, char* argv[]) {
         goto cleanup;
     }
 
+    // Initialize sophisticated kernel first - this shows our OS boot sequence
+    printf("Initializing ZORA Kernel...\n");
+    if (kernel_init() != 0) {
+        fprintf(stderr, "Failed to initialize kernel.\n");
+        goto cleanup;
+    }
+
     // Set up CPU, memory, and devices within sandbox
     printf("Initializing CPU...\n");
     if (cpu_init() != 0) {
@@ -201,11 +208,8 @@ int main(int argc, char* argv[]) {
     }
     printf("Memory initialization successful!\n");
 
-    printf("Initializing devices...\n");
-    if (device_init() != 0) {
-        fprintf(stderr, "Failed to initialize devices.\n");
-        goto cleanup;
-    }
+    // Note: Devices are already initialized by the kernel's device manager
+    // No need for separate device_init() call
 
     // Initialize MERL shell within the VM
     printf("Initializing MERL shell...\n");
@@ -227,7 +231,8 @@ int main(int argc, char* argv[]) {
     
     GetCurrentDirectoryA(sizeof(current_dir), current_dir);
     
-    printf("Current working directory: %s\n", current_dir);
+    // Debug: Uncomment the next line if you need to see the working directory
+    // printf("Current working directory: %s\n", current_dir);
     
     // Try multiple possible paths to find ZoraPerl
     const char* possible_paths[] = {
@@ -262,11 +267,11 @@ int main(int argc, char* argv[]) {
         }
         printf("Created ZoraPerl directory at: %s\n", zora_perl_path);
     } else {
-        printf("Found ZoraPerl directory at: %s\n", zora_perl_path);
+        // Debug: Uncomment the next line if you need to see the ZoraPerl path
+        // printf("Found ZoraPerl directory at: %s\n", zora_perl_path);
     }
     
     // Ensure the entire ZoraPerl directory structure exists
-    printf("Ensuring ZoraPerl directory structure exists...\n");
     create_directory_recursive(zora_perl_path);
     
     // Create subdirectories using the found path
@@ -278,9 +283,7 @@ int main(int argc, char* argv[]) {
     }
     
     // Autodiscover host root-style directories directly under /
-    printf("Mapping host ZoraPerl tree (autodiscover) as VM root...\n");
     vfs_mount_root_autodiscover(zora_perl_path);
-    printf("Root mapping complete.\n");
 
     // Optionally place a starter desktop script in /usr/bin or /bin
     // Later we will execute a Perl 'desktop.pl' script to start the GUI environment.

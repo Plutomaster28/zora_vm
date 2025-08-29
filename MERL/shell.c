@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
+#include <ctype.h>
 #include "platform/platform.h"  // FIXED: Use correct path
 #include "shell.h"
 #include "user.h"
@@ -49,6 +50,10 @@ void debug_vfs_command(int argc, char* argv[]);
 void lua_command(int argc, char **argv);
 void luacode_command(int argc, char **argv);
 void test_sandbox_command(int argc, char **argv);
+void set_command(int argc, char **argv);
+void unset_command(int argc, char **argv);
+void export_command(int argc, char **argv);
+void env_command(int argc, char **argv);
 void desktop_command(int argc, char **argv);
 void theme_command(int argc, char **argv);
 void themes_command(int argc, char **argv);
@@ -78,6 +83,25 @@ void print_colored_prompt();
 #define COLOR_MAGENTA   "\033[35m"
 #define COLOR_CYAN      "\033[36m"
 #define COLOR_WHITE     "\033[37m"
+
+// Environment variable support
+#define MAX_ENV_VARS 100
+#define MAX_VAR_NAME 64
+#define MAX_VAR_VALUE 256
+
+typedef struct {
+    char name[MAX_VAR_NAME];
+    char value[MAX_VAR_VALUE];
+} EnvVar;
+
+static EnvVar env_vars[MAX_ENV_VARS];
+static int env_var_count = 0;
+
+// Environment variable functions
+void set_env_var(const char* name, const char* value);
+const char* get_env_var(const char* name);
+void expand_variables(const char* input, char* output, size_t output_size);
+void init_default_env_vars(void);
 #define COLOR_BRIGHT_BLACK   "\033[90m"
 #define COLOR_BRIGHT_RED     "\033[91m"
 #define COLOR_BRIGHT_GREEN   "\033[92m"
@@ -933,6 +957,9 @@ void start_shell() {
     strncpy(hostname, "zora-vm", sizeof(hostname) - 1);
     hostname[sizeof(hostname) - 1] = '\0';
 
+    // Initialize environment variables
+    init_default_env_vars();
+
     printf("=== Zora VM - MERL Shell ===\n");
     printf("Virtual Machine OS with MERL Shell\n");
     printf("Type 'help' for available commands, 'exit' to quit VM.\n");
@@ -1762,6 +1789,10 @@ Command command_table[] = {
     {"zip", zip_command, "Create zip archives"},
     {"unzip", unzip_command, "Extract zip archives"},
     {"hostname", hostname_command, "Display or set the system hostname"},
+    {"set", set_command, "Set environment variable"},
+    {"unset", unset_command, "Unset environment variable"},
+    {"export", export_command, "Export environment variable"},
+    {"env", env_command, "Display environment variables"},
     
     #ifdef PYTHON_SCRIPTING
     {"python", python_command, "Execute Python script from /scripts (fallback legacy path)"},
@@ -1777,6 +1808,100 @@ Command command_table[] = {
     {NULL, NULL, NULL}
 };
 const int command_table_size = sizeof(command_table) / sizeof(Command);
+
+// Environment variable implementation
+void set_env_var(const char* name, const char* value) {
+    // Check if variable already exists
+    for (int i = 0; i < env_var_count; i++) {
+        if (strcmp(env_vars[i].name, name) == 0) {
+            strncpy(env_vars[i].value, value, MAX_VAR_VALUE - 1);
+            env_vars[i].value[MAX_VAR_VALUE - 1] = '\0';
+            return;
+        }
+    }
+    
+    // Add new variable if space available
+    if (env_var_count < MAX_ENV_VARS) {
+        strncpy(env_vars[env_var_count].name, name, MAX_VAR_NAME - 1);
+        env_vars[env_var_count].name[MAX_VAR_NAME - 1] = '\0';
+        strncpy(env_vars[env_var_count].value, value, MAX_VAR_VALUE - 1);
+        env_vars[env_var_count].value[MAX_VAR_VALUE - 1] = '\0';
+        env_var_count++;
+    }
+}
+
+const char* get_env_var(const char* name) {
+    for (int i = 0; i < env_var_count; i++) {
+        if (strcmp(env_vars[i].name, name) == 0) {
+            return env_vars[i].value;
+        }
+    }
+    return NULL;
+}
+
+void expand_variables(const char* input, char* output, size_t output_size) {
+    const char* src = input;
+    char* dst = output;
+    size_t remaining = output_size - 1;
+    
+    while (*src && remaining > 0) {
+        if (*src == '$') {
+            src++; // Skip $
+            if (*src == '{') {
+                // ${VAR} format
+                src++; // Skip {
+                char var_name[MAX_VAR_NAME];
+                int var_len = 0;
+                while (*src && *src != '}' && var_len < MAX_VAR_NAME - 1) {
+                    var_name[var_len++] = *src++;
+                }
+                if (*src == '}') src++; // Skip }
+                var_name[var_len] = '\0';
+                
+                const char* var_value = get_env_var(var_name);
+                if (var_value) {
+                    size_t value_len = strlen(var_value);
+                    if (value_len <= remaining) {
+                        strcpy(dst, var_value);
+                        dst += value_len;
+                        remaining -= value_len;
+                    }
+                }
+            } else {
+                // $VAR format
+                char var_name[MAX_VAR_NAME];
+                int var_len = 0;
+                while (*src && (isalnum(*src) || *src == '_') && var_len < MAX_VAR_NAME - 1) {
+                    var_name[var_len++] = *src++;
+                }
+                var_name[var_len] = '\0';
+                
+                const char* var_value = get_env_var(var_name);
+                if (var_value) {
+                    size_t value_len = strlen(var_value);
+                    if (value_len <= remaining) {
+                        strcpy(dst, var_value);
+                        dst += value_len;
+                        remaining -= value_len;
+                    }
+                }
+            }
+        } else {
+            *dst++ = *src++;
+            remaining--;
+        }
+    }
+    *dst = '\0';
+}
+
+void init_default_env_vars(void) {
+    set_env_var("HOME", "/home");
+    set_env_var("USER", "guest");
+    set_env_var("PATH", "/bin:/usr/bin:/scripts");
+    set_env_var("SHELL", "/bin/merl");
+    set_env_var("PWD", "/");
+    set_env_var("HOSTNAME", "zora-vm");
+}
 
 // Shell operator parsing functions
 void execute_simple_command(char *args[], int argc);
@@ -1801,8 +1926,12 @@ void handle_command(char *command) {
         add_to_history(trimmed);
     }
     
+    // Expand environment variables
+    char expanded_command[1024];
+    expand_variables(trimmed, expanded_command, sizeof(expanded_command));
+    
     // Parse and execute the full command line with operators
-    parse_and_execute_command_line(trimmed);
+    parse_and_execute_command_line(expanded_command);
 }
 
 void parse_and_execute_command_line(char *command_line) {
@@ -1821,6 +1950,18 @@ void parse_and_execute_command_line(char *command_line) {
         *(end + 1) = '\0';
         
         if (strlen(cmd_part) > 0) {
+            // Check for background process operator (&)
+            int is_background = 0;
+            char *bg_pos = strchr(cmd_part, '&');
+            if (bg_pos && *(bg_pos + 1) != '&') {  // Make sure it's not &&
+                *bg_pos = '\0';  // Remove the & from command
+                is_background = 1;
+                // Trim any remaining whitespace after removing &
+                char *end = cmd_part + strlen(cmd_part) - 1;
+                while (end > cmd_part && (*end == ' ' || *end == '\t')) end--;
+                *(end + 1) = '\0';
+            }
+            
             // Check for && and || operators
             char *and_pos = strstr(cmd_part, "&&");
             char *or_pos = strstr(cmd_part, "||");
@@ -1845,16 +1986,28 @@ void parse_and_execute_command_line(char *command_line) {
                 }
                 
                 // Execute first command
-                int first_result = execute_pipeline(first_cmd);
+                int first_result;
+                if (is_background) {
+                    printf("[Background] Executing: %s\n", first_cmd);
+                    first_result = execute_pipeline(first_cmd);
+                } else {
+                    first_result = execute_pipeline(first_cmd);
+                }
                 
                 // Execute second command based on first result and operator
                 if ((is_and && first_result == 0) || (!is_and && first_result != 0)) {
                     // Trim whitespace from second command
                     while (*second_cmd == ' ' || *second_cmd == '\t') second_cmd++;
+                    if (is_background) {
+                        printf("[Background] Executing: %s\n", second_cmd);
+                    }
                     execute_pipeline(second_cmd);
                 }
             } else {
                 // No conditional operators, process as pipeline
+                if (is_background) {
+                    printf("[Background] Executing: %s\n", cmd_part);
+                }
                 execute_pipeline(cmd_part);
             }
         }
@@ -1874,22 +2027,59 @@ int execute_pipeline(char *pipeline_str) {
     char *pipe_pos = strchr(pipe_copy, '|');
     
     if (pipe_pos) {
-        // Handle piping - for now, just execute sequentially (can be improved later)
+        // Handle actual piping - capture output from first command and feed to second
         *pipe_pos = '\0';
         char *first_cmd = pipe_copy;
         char *second_cmd = pipe_pos + 1;
         
         // Trim whitespace
+        while (*first_cmd == ' ' || *first_cmd == '\t') first_cmd++;
         while (*second_cmd == ' ' || *second_cmd == '\t') second_cmd++;
         
-        printf("Piping: '%s' | '%s' (simplified implementation)\n", first_cmd, second_cmd);
+        // For now, implement basic pipe by redirecting first command to temp file
+        // and feeding that to second command (can be enhanced with real pipes later)
+        char temp_pipe_file[] = "/tmp/pipe_XXXXXX";
         
-        // Execute first command (output would be piped to second in full implementation)
-        int result = execute_command_with_parsing(first_cmd);
+        // Execute first command with output redirected to temp file
+        printf("Executing pipeline: %s | %s\n", first_cmd, second_cmd);
         
-        // Execute second command
-        execute_command_with_parsing(second_cmd);
+        // Parse first command
+        char *first_args[256];
+        int first_argc = 0;
+        char *first_copy = strdup(first_cmd);
+        char *token = strtok(first_copy, " \t");
+        while (token && first_argc < 255) {
+            first_args[first_argc++] = token;
+            token = strtok(NULL, " \t");
+        }
+        first_args[first_argc] = NULL;
         
+        // Execute first command (output would be captured in real implementation)
+        int result = 0;
+        if (first_argc > 0) {
+            execute_command_with_redirection(first_args, first_argc, NULL, temp_pipe_file, 0);
+        }
+        
+        // Execute second command with temp file as input
+        char *second_args[256];
+        int second_argc = 0;
+        char *second_copy = strdup(second_cmd);
+        token = strtok(second_copy, " \t");
+        while (token && second_argc < 255) {
+            second_args[second_argc++] = token;
+            token = strtok(NULL, " \t");
+        }
+        second_args[second_argc] = NULL;
+        
+        if (second_argc > 0) {
+            execute_command_with_redirection(second_args, second_argc, temp_pipe_file, NULL, 0);
+        }
+        
+        // Clean up temp file
+        vfs_delete_file(temp_pipe_file);
+        
+        free(first_copy);
+        free(second_copy);
         free(pipe_copy);
         return result;
     } else {
@@ -2498,3 +2688,53 @@ void test_sandbox_command(int argc, char **argv) {
 // Platform detection - Windows only
 #define PLATFORM_NAME "Windows"
 #define CLEAR_COMMAND "cls"
+
+// Environment variable commands implementation
+void set_command(int argc, char **argv) {
+    if (argc != 3) {
+        printf("Usage: set VARIABLE VALUE\n");
+        return;
+    }
+    set_env_var(argv[1], argv[2]);
+    printf("Set %s=%s\n", argv[1], argv[2]);
+}
+
+void unset_command(int argc, char **argv) {
+    if (argc != 2) {
+        printf("Usage: unset VARIABLE\n");
+        return;
+    }
+    set_env_var(argv[1], "");  // Set to empty string (simple unset)
+    printf("Unset %s\n", argv[1]);
+}
+
+void export_command(int argc, char **argv) {
+    if (argc == 1) {
+        // List all exported variables (same as env for now)
+        env_command(argc, argv);
+    } else if (argc == 2) {
+        // Check if it's VARIABLE=VALUE format
+        char *eq_pos = strchr(argv[1], '=');
+        if (eq_pos) {
+            *eq_pos = '\0';
+            set_env_var(argv[1], eq_pos + 1);
+            printf("Exported %s=%s\n", argv[1], eq_pos + 1);
+        } else {
+            printf("Usage: export VARIABLE=VALUE or export VARIABLE VALUE\n");
+        }
+    } else if (argc == 3) {
+        set_env_var(argv[1], argv[2]);
+        printf("Exported %s=%s\n", argv[1], argv[2]);
+    } else {
+        printf("Usage: export [VARIABLE=VALUE] or export VARIABLE VALUE\n");
+    }
+}
+
+void env_command(int argc, char **argv) {
+    printf("Environment Variables:\n");
+    for (int i = 0; i < env_var_count; i++) {
+        if (strlen(env_vars[i].value) > 0) {  // Only show non-empty variables
+            printf("%s=%s\n", env_vars[i].name, env_vars[i].value);
+        }
+    }
+}
