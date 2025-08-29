@@ -1,10 +1,6 @@
 #include <stdint.h>
 #include <stdio.h>
-#ifdef _WIN32
 #include <windows.h>
-#else
-#include <unistd.h>
-#endif
 #include "cpu.h"
 #include "memory.h"
 
@@ -55,11 +51,7 @@ void cpu_run(void) {
         cpu.pc++;
         
         // Simple delay to prevent 100% CPU usage
-        #ifdef _WIN32
         Sleep(1);
-        #else
-        usleep(1000);
-        #endif
     }
 }
 

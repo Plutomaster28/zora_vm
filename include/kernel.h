@@ -1,11 +1,7 @@
 #ifndef KERNEL_H
 #define KERNEL_H
 
-#ifdef _WIN32
 #include <windows.h>
-#else
-#include <unistd.h>
-#endif
 
 // Kernel functions
 int kernel_main(void);

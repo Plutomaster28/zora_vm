@@ -6,26 +6,12 @@
 #include <stdint.h>
 
 // Platform-specific includes
-#ifdef PLATFORM_WINDOWS
-    #include <windows.h>
-    #include <psapi.h>
-#else
-    #include <sys/mman.h>
-    #include <sys/wait.h>
-    #include <pthread.h>
-    #include <dlfcn.h>
-    #include <signal.h>
-    #include <unistd.h>
-    #include <ctype.h>
-#endif
+#include <windows.h>
+#include <psapi.h>
 
 // Cross-platform off_t definition
 #ifndef zora_off_t
-#ifdef PLATFORM_WINDOWS
 typedef __int64 zora_off_t;
-#else
-typedef off_t zora_off_t;
-#endif
 #endif
 
 // Global context - declare and initialize properly
@@ -129,14 +115,7 @@ void elf_free_context(ElfContext* ctx) {
     if (!ctx) return;
     
     if (ctx->base_address) {  // Use base_address instead of base_addr
-#ifdef PLATFORM_WINDOWS
         VirtualFree(ctx->base_address, 0, MEM_RELEASE);
-#else
-        // Platform-specific cleanup will be handled in platform files
-        if (ctx->size > 0) {
-            munmap(ctx->base_address, ctx->size);
-        }
-#endif
         ctx->base_address = NULL;
     }
     
@@ -154,11 +133,7 @@ void* elf_allocate_memory(ElfContext* ctx, size_t size) {
     
     printf("ELF: Allocating %zu bytes\n", size);
     
-#ifdef PLATFORM_WINDOWS
     return VirtualAlloc(NULL, size, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
-#else
-    return mmap(NULL, size, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
-#endif
 }
 
 void elf_free_memory(ElfContext* ctx, void* ptr) {
@@ -166,14 +141,7 @@ void elf_free_memory(ElfContext* ctx, void* ptr) {
     
     printf("ELF: Freeing memory\n");
     
-#ifdef PLATFORM_WINDOWS
     VirtualFree(ptr, 0, MEM_RELEASE);
-#else
-    // For mmap'd memory, we need size, but this is simplified
-    // In real implementation, we'd track allocated blocks
-    // For now, just don't crash
-    (void)ptr;  // Suppress unused parameter warning
-#endif
 }
 
 // Global cleanup function - renamed to avoid conflict

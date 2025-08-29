@@ -100,11 +100,7 @@ int desktop_apply_theme(void) {
     }
     if (gtkrc->host_path) {
     /* Cross-platform environment variable set */
-#if defined(_WIN32) || defined(PLATFORM_WINDOWS)
     _putenv_s("GTK2_RC_FILES", gtkrc->host_path);
-#else
-    setenv("GTK2_RC_FILES", gtkrc->host_path, 1);
-#endif
     printf("Desktop: GTK2_RC_FILES=%s\n", gtkrc->host_path);
     }
     printf("Desktop: Theme applied (%s)\n", current_theme_name);

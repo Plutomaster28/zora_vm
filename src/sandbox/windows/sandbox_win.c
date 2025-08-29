@@ -13,10 +13,8 @@ static struct {
     int syscalls_blocked;
     size_t memory_limit;
     int cpu_limit;
-#ifdef PLATFORM_WINDOWS
     HANDLE job_object;
     HANDLE heap_mutex;
-#endif
 } sandbox_state = {0};
 
 int sandbox_init(void) {

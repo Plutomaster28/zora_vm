@@ -126,13 +126,6 @@ int main(int argc, char* argv[]) {
 
     printf("Starting Zora VM...\n");
 
-#ifdef DOCKER_MODE
-    // Docker-specific initialization
-    printf("Running in Docker container\n");
-    printf("Persistent storage: /home/zora/ZoraPerl\n");
-    printf("Container optimizations enabled\n");
-#endif
-
     // Check if running in batch mode (for healthcheck)
     int batch_mode = 0;
     for (int i = 1; i < argc; i++) {
@@ -232,13 +225,7 @@ int main(int argc, char* argv[]) {
     char zora_perl_path[512];
     char current_dir[512];
     
-#ifdef PLATFORM_WINDOWS
     GetCurrentDirectoryA(sizeof(current_dir), current_dir);
-#else
-    if (!getcwd(current_dir, sizeof(current_dir))) {
-        strcpy(current_dir, ".");
-    }
-#endif
     
     printf("Current working directory: %s\n", current_dir);
     
@@ -254,19 +241,11 @@ int main(int argc, char* argv[]) {
     for (int i = 0; i < 4; i++) {
         strcpy(zora_perl_path, possible_paths[i]);
         
-#ifdef PLATFORM_WINDOWS
         DWORD attrib = GetFileAttributesA(zora_perl_path);
         if (attrib != INVALID_FILE_ATTRIBUTES && (attrib & FILE_ATTRIBUTE_DIRECTORY)) {
             path_found = 1;
             break;
         }
-#else
-        struct stat st;
-        if (stat(zora_perl_path, &st) == 0 && S_ISDIR(st.st_mode)) {
-            path_found = 1;
-            break;
-        }
-#endif
     }
     
     if (!path_found) {
@@ -294,11 +273,7 @@ int main(int argc, char* argv[]) {
     char subdir_path[600];
     const char* subdirs[] = {"documents", "scripts", "data", "projects", "bin", "home", "tmp", "etc", "usr", "var"};
     for (int i = 0; i < 10; i++) {
-#ifdef PLATFORM_WINDOWS
         snprintf(subdir_path, sizeof(subdir_path), "%s\\%s", zora_perl_path, subdirs[i]);
-#else
-        snprintf(subdir_path, sizeof(subdir_path), "%s/%s", zora_perl_path, subdirs[i]);
-#endif
         create_directory_recursive(subdir_path);
     }
     

@@ -10,17 +10,10 @@
 #include <time.h>
 
 // Platform-specific includes
-#ifdef _WIN32
-    #include <windows.h>
-    #include <process.h>
-    #define usleep(x) Sleep((x)/1000)
-    #define sysconf(x) GetSystemInfo(&si); si.dwNumberOfProcessors
-#else
-    #include <pthread.h>
-    #include <sys/mman.h>
-    #include <unistd.h>
-    #include <sys/sysinfo.h>
-#endif
+#include <windows.h>
+#include <process.h>
+#define usleep(x) Sleep((x)/1000)
+#define sysconf(x) GetSystemInfo(&si); si.dwNumberOfProcessors
 
 static MeiseiVirtualSilicon* g_silicon = NULL;
 
@@ -52,46 +45,25 @@ typedef struct {
     size_t pool_size;
     size_t block_size;
     uint64_t allocations;
-#ifdef _WIN32
     CRITICAL_SECTION pool_mutex;
-#else
-    pthread_mutex_t pool_mutex;
-#endif
 } MeiseiMemoryPool;
 
 // Cross-platform thread count detection
 static int get_cpu_count(void) {
-#ifdef _WIN32
     SYSTEM_INFO si;
     GetSystemInfo(&si);
     return (int)si.dwNumberOfProcessors;
-#else
-    return (int)sysconf(_SC_NPROCESSORS_ONLN);
-#endif
 }
 
 // Cross-platform memory mapping
 static void* meisei_alloc_pool(size_t size) {
-#ifdef _WIN32
     // Use VirtualAlloc on Windows for better performance
     return VirtualAlloc(NULL, size, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
-#else
-    // Use mmap on Unix/Linux
-    void* ptr = mmap(NULL, size, PROT_READ | PROT_WRITE, 
-                     MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
-    return (ptr == MAP_FAILED) ? NULL : ptr;
-#endif
 }
 
 static void meisei_free_pool(void* ptr, size_t size) {
-#ifdef _WIN32
     VirtualFree(ptr, 0, MEM_RELEASE);
-#else
-    munmap(ptr, size);
-#endif
-}
-
-int meisei_silicon_init(void) {
+}int meisei_silicon_init(void) {
     printf("Initializing Meisei Virtual Silicon...\n");
     
     if (g_silicon) {
@@ -134,11 +106,7 @@ int meisei_silicon_init(void) {
         pool->allocations = 0;
         
         // Initialize mutex (cross-platform)
-#ifdef _WIN32
         InitializeCriticalSection(&pool->pool_mutex);
-#else
-        pthread_mutex_init(&pool->pool_mutex, NULL);
-#endif
         
         g_silicon->memory_pools[i] = pool;
     }
@@ -184,11 +152,7 @@ void* meisei_fast_malloc(size_t size) {
     MeiseiMemoryPool* pool = (MeiseiMemoryPool*)g_silicon->memory_pools[pool_id];
     
     // Cross-platform mutex lock
-#ifdef _WIN32
     EnterCriticalSection(&pool->pool_mutex);
-#else
-    pthread_mutex_lock(&pool->pool_mutex);
-#endif
     
     // Check if we have space in the pool
     if ((char*)pool->pool_current + pool->block_size > 
@@ -204,11 +168,7 @@ void* meisei_fast_malloc(size_t size) {
     g_silicon->pool_stats[pool_id]++;
     
     // Cross-platform mutex unlock
-#ifdef _WIN32
     LeaveCriticalSection(&pool->pool_mutex);
-#else
-    pthread_mutex_unlock(&pool->pool_mutex);
-#endif
     
     return result;
 }
@@ -363,11 +323,7 @@ void meisei_silicon_cleanup(void) {
             }
             
             // Destroy mutex (cross-platform)
-#ifdef _WIN32
             DeleteCriticalSection(&pool->pool_mutex);
-#else
-            pthread_mutex_destroy(&pool->pool_mutex);
-#endif
             free(pool);
         }
     }

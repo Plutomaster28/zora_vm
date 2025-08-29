@@ -27,11 +27,7 @@ int kernel_main(void) {
     // Kernel main loop
     while (kernel_running) {
         // Handle system tasks
-        #ifdef _WIN32
         Sleep(10);
-        #else
-        usleep(10000);
-        #endif
     }
     
     return 0;

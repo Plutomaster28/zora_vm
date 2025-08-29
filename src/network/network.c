@@ -3,18 +3,9 @@
 #include <stdlib.h>
 #include <string.h>
 #include "network/network.h"
-
-#ifdef _WIN32
-    #include <winsock2.h>
-    #include <ws2tcpip.h>
-    #include <iphlpapi.h>
-#else
-    #include <sys/socket.h>
-    #include <netinet/in.h>
-    #include <arpa/inet.h>
-    #include <netdb.h>
-    #include <unistd.h>
-#endif
+#include <winsock2.h>
+#include <ws2tcpip.h>
+#include <iphlpapi.h>
 
 // Remove the duplicate VirtualNetwork struct - it's already in the header!
 
@@ -51,7 +42,6 @@ int network_init(void) {
     vnet->allow_dns = 1;
     vnet->block_dangerous_ports = 1;
     
-#ifdef _WIN32
     // Initialize Winsock
     WSADATA wsaData;
     if (WSAStartup(MAKEWORD(2, 2), &wsaData) != 0) {
@@ -60,7 +50,6 @@ int network_init(void) {
         vnet = NULL;
         return -1;
     }
-#endif
     
     printf("Virtual Network initialized successfully\n");
     printf("VM Network Configuration:\n");
@@ -81,9 +70,7 @@ void network_cleanup(void) {
     
     printf("Cleaning up virtual network...\n");
     
-#ifdef _WIN32
     WSACleanup();
-#endif
     
     free(vnet);
     vnet = NULL;

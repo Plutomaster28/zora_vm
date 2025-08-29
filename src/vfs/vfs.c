@@ -9,7 +9,6 @@
 // Windows-specific directory handling
 #include <windows.h>
 #include <direct.h>
-#include <sys/stat.h>
 
 // Virtual file system that stays in memory
 static VirtualFS* vm_fs = NULL;
@@ -153,7 +152,6 @@ int create_directory_recursive(const char* path) {
     }
     
     // Create the final directory
-#ifdef PLATFORM_WINDOWS
     DWORD attrib = GetFileAttributesA(temp_path);
     if (attrib == INVALID_FILE_ATTRIBUTES) {
         if (CreateDirectoryA(temp_path, NULL) == 0) {
@@ -164,15 +162,6 @@ int create_directory_recursive(const char* path) {
             }
         }
     }
-#else
-    struct stat st;
-    if (stat(temp_path, &st) != 0) {
-        if (mkdir(temp_path, 0755) != 0) {
-            perror("mkdir");
-            return -1;
-        }
-    }
-#endif
     
     return 0;
 }
@@ -191,11 +180,7 @@ static char* vfs_get_host_path(VNode* node) {
     while (current && current->parent) {
         if (strlen(temp_path) > 0) {
             snprintf(path_buffer, sizeof(path_buffer), "%s%c%s", current->name, 
-#ifdef PLATFORM_WINDOWS
                      '\\',
-#else
-                     '/',
-#endif
                      temp_path);
         } else {
             strncpy(path_buffer, current->name, sizeof(path_buffer) - 1);
@@ -208,11 +193,7 @@ static char* vfs_get_host_path(VNode* node) {
     static char full_path[1024];
     if (strlen(path_buffer) > 0) {
         snprintf(full_path, sizeof(full_path), "%s%c%s", host_root_directory,
-#ifdef PLATFORM_WINDOWS
                  '\\',
-#else
-                 '/',
-#endif
                  path_buffer);
     } else {
         strncpy(full_path, host_root_directory, sizeof(full_path) - 1);
@@ -225,19 +206,11 @@ static char* vfs_get_host_path(VNode* node) {
 static int vfs_ensure_host_directory(const char* host_path) {
     if (!host_path) return -1;
     
-#ifdef PLATFORM_WINDOWS
     DWORD attrib = GetFileAttributesA(host_path);
     if (attrib == INVALID_FILE_ATTRIBUTES) {
         return CreateDirectoryA(host_path, NULL) ? 0 : -1;
     }
     return (attrib & FILE_ATTRIBUTE_DIRECTORY) ? 0 : -1;
-#else
-    struct stat st;
-    if (stat(host_path, &st) == 0) {
-        return S_ISDIR(st.st_mode) ? 0 : -1;
-    }
-    return mkdir(host_path, 0755);
-#endif
 }
 
 // NEW: Sync VFS node to host filesystem
@@ -504,10 +477,8 @@ void vfs_refresh_directory(VNode* vm_node) {
     if (!vm_node || !vm_node->is_directory || !vm_node->host_path) {
         return;
     }
-    
     printf("DEBUG: Refreshing directory: %s from %s\n", vm_node->name, vm_node->host_path);
     
-#ifdef PLATFORM_WINDOWS
     WIN32_FIND_DATAA find_data;
     char search_path[MAX_PATH];
     snprintf(search_path, sizeof(search_path), "%s\\*", vm_node->host_path);
@@ -568,69 +539,6 @@ void vfs_refresh_directory(VNode* vm_node) {
     
     FindClose(hFind);
     
-#else
-    // Linux implementation
-    DIR* dir = opendir(vm_node->host_path);
-    if (!dir) {
-        printf("DEBUG: Failed to refresh directory: %s\n", vm_node->host_path);
-        return;
-    }
-    
-    struct dirent* entry;
-    while ((entry = readdir(dir)) != NULL) {
-        // Skip . and ..
-        if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0) {
-            continue;
-        }
-        
-        // Check if this file/directory already exists in VM
-        VNode* existing = vm_node->children;
-        bool found = false;
-        while (existing) {
-            if (strcmp(existing->name, entry->d_name) == 0) {
-                found = true;
-                break;
-            }
-            existing = existing->next;
-        }
-        
-        if (!found) {
-            // New file/directory found, add it
-            printf("DEBUG: Found new entry: %s\n", entry->d_name);
-            char full_host_path[PATH_MAX];
-            snprintf(full_host_path, sizeof(full_host_path), "%s/%s", vm_node->host_path, entry->d_name);
-            
-            struct stat st;
-            if (stat(full_host_path, &st) == 0) {
-                if (S_ISDIR(st.st_mode)) {
-                    // New directory
-                    printf("DEBUG: Adding new directory: %s\n", entry->d_name);
-                    VNode* dir_node = vfs_create_directory_node(entry->d_name);
-                    if (dir_node) {
-                        vfs_add_child(vm_node, dir_node);
-                        vfs_load_host_directory(dir_node, full_host_path);
-                    }
-                } else {
-                    // New file
-                    printf("DEBUG: Adding new file: %s\n", entry->d_name);
-                    VNode* file_node = vfs_create_file_node(entry->d_name);
-                    if (file_node) {
-                        file_node->host_path = malloc(strlen(full_host_path) + 1);
-                        if (file_node->host_path) {
-                            strcpy(file_node->host_path, full_host_path);
-                        }
-                        file_node->size = st.st_size;
-                        vfs_add_child(vm_node, file_node);
-                        printf("DEBUG: Added new file: %s (size: %zu)\n", file_node->name, file_node->size);
-                    }
-                }
-            }
-        }
-    }
-    
-    closedir(dir);
-#endif
-    
     printf("DEBUG: Finished refreshing directory: %s\n", vm_node->name);
 }
 
@@ -638,7 +546,6 @@ void vfs_refresh_directory(VNode* vm_node) {
 void vfs_load_host_directory(VNode* vm_node, const char* host_path) {
     printf("DEBUG: Loading host directory from %s to %s\n", host_path, vm_node->name);
     
-#ifdef PLATFORM_WINDOWS
     // Windows implementation using FindFirstFile/FindNextFile
     WIN32_FIND_DATAA find_data;
     char search_path[MAX_PATH];
@@ -689,56 +596,6 @@ void vfs_load_host_directory(VNode* vm_node, const char* host_path) {
     } while (FindNextFileA(hFind, &find_data) != 0);
     
     FindClose(hFind);
-    
-#else
-    // Linux implementation
-    DIR* dir = opendir(host_path);
-    if (!dir) {
-        printf("DEBUG: Failed to open directory: %s\n", host_path);
-        return;
-    }
-    
-    struct dirent* entry;
-    while ((entry = readdir(dir)) != NULL) {
-        // Skip . and ..
-        if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0) {
-            continue;
-        }
-        
-        printf("DEBUG: Found entry: %s\n", entry->d_name);
-        
-        // Build full path
-        char full_host_path[PATH_MAX];
-        snprintf(full_host_path, sizeof(full_host_path), "%s/%s", host_path, entry->d_name);
-        
-        // Check if it's a directory or file
-        struct stat st;
-        if (stat(full_host_path, &st) == 0) {
-            if (S_ISDIR(st.st_mode)) {
-                // It's a directory
-                VNode* dir_node = vfs_create_directory_node(entry->d_name);
-                if (dir_node) {
-                    vfs_add_child(vm_node, dir_node);
-                    vfs_load_host_directory(dir_node, full_host_path);
-                }
-            } else {
-                // It's a file
-                VNode* file_node = vfs_create_file_node(entry->d_name);
-                if (file_node) {
-                    file_node->host_path = malloc(strlen(full_host_path) + 1);
-                    if (file_node->host_path) {
-                        strcpy(file_node->host_path, full_host_path);
-                    }
-                    file_node->size = st.st_size;
-                    // Note: content will be loaded on-demand via vfs_load_file_content()
-                    vfs_add_child(vm_node, file_node);
-                }
-            }
-        }
-    }
-    
-    closedir(dir);
-#endif
     
     printf("DEBUG: Finished loading directory: %s\n", host_path);
 }
@@ -868,11 +725,7 @@ int vfs_rmdir(const char* path) {
     if (strlen(host_root_directory) > 0) {
         char* host_path = vfs_get_host_path(node);
         if (host_path) {
-#ifdef PLATFORM_WINDOWS
             RemoveDirectoryA(host_path);
-#else
-            rmdir(host_path);
-#endif
         }
     }
 
@@ -908,11 +761,7 @@ int vfs_rmdir(const char* path) {
     if (strlen(host_root_directory) > 0) {
         char* host_path = vfs_get_host_path(node);
         if (host_path) {
-#ifdef PLATFORM_WINDOWS
             DeleteFileA(host_path);
-#else
-            unlink(host_path);
-#endif
         }
     }
 
@@ -1022,11 +871,7 @@ int vfs_mount_root_directories(const char* host_root, const char* const* dirs, s
         snprintf(vm_path, sizeof(vm_path), "/%s", name);
         vfs_create_directory(vm_path);
         // Build host path
-#ifdef PLATFORM_WINDOWS
         snprintf(host_path, sizeof(host_path), "%s\\%s", host_root, name);
-#else
-        snprintf(host_path, sizeof(host_path), "%s/%s", host_root, name);
-#endif
         create_directory_recursive(host_path);
         vfs_mount_persistent(vm_path, host_path);
     }
@@ -1037,7 +882,6 @@ int vfs_mount_root_autodiscover(const char* host_root) {
     if (!host_root) return -1;
     vfs_set_host_root(host_root);
     printf("Autodiscovering host root directories in %s...\n", host_root);
-#ifdef PLATFORM_WINDOWS
     WIN32_FIND_DATAA find_data;
     char search[MAX_PATH];
     snprintf(search, sizeof(search), "%s\\*", host_root);
@@ -1058,24 +902,6 @@ int vfs_mount_root_autodiscover(const char* host_root) {
         }
     } while (FindNextFileA(hFind, &find_data));
     FindClose(hFind);
-#else
-    DIR* dir = opendir(host_root);
-    if (!dir) return -1;
-    struct dirent* entry;
-    while ((entry = readdir(dir)) != NULL) {
-        if (strcmp(entry->d_name,".") == 0 || strcmp(entry->d_name,"..") == 0) continue;
-        char host_path[PATH_MAX];
-        snprintf(host_path, sizeof(host_path), "%s/%s", host_root, entry->d_name);
-        struct stat st; if (stat(host_path, &st) != 0) continue;
-        if (S_ISDIR(st.st_mode)) {
-            char vm_path[256];
-            snprintf(vm_path, sizeof(vm_path), "/%s", entry->d_name);
-            vfs_create_directory(vm_path);
-            vfs_mount_persistent(vm_path, host_path);
-        }
-    }
-    closedir(dir);
-#endif
     printf("Autodiscovery complete.\n");
     return 0;
 }

@@ -11,24 +11,13 @@
 #include "platform/platform.h"
 
 // Platform-specific includes and type definitions
-#ifdef PLATFORM_WINDOWS
-    #include <windows.h>
-    #include <process.h>
-    typedef HANDLE ProcessHandle;
-    typedef HANDLE ThreadHandle;
-    typedef void* ThreadParam;
-    typedef CRITICAL_SECTION thread_mutex_t;
-    #define THREAD_CALL WINAPI
-#else
-    #include <pthread.h>
-    #include <sys/types.h>
-    #include <unistd.h>
-    typedef pid_t ProcessHandle;
-    typedef pthread_t ThreadHandle;
-    typedef void* ThreadParam;
-    typedef pthread_mutex_t thread_mutex_t;
-    #define THREAD_CALL
-#endif
+#include <windows.h>
+#include <process.h>
+typedef HANDLE ProcessHandle;
+typedef HANDLE ThreadHandle;
+typedef void* ThreadParam;
+typedef CRITICAL_SECTION thread_mutex_t;
+#define THREAD_CALL WINAPI
 
 // Cross-platform syscall types
 typedef uint64_t SyscallNum;

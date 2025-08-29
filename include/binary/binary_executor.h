@@ -47,7 +47,6 @@ int execute_linux_binary(const char* path, char** argv, int argc);
 BinaryType detect_binary_type(const char* filename);
 
 // Platform-specific function declarations
-#ifdef PLATFORM_WINDOWS
 int binary_executor_init_windows(void);
 void binary_executor_cleanup_windows(void);
 int binary_executor_is_initialized_windows(void);
@@ -56,15 +55,5 @@ BinaryType detect_binary_type_windows(const char* filename);
 int execute_sandboxed_binary_windows(const char* path, char** argv, int argc);
 int execute_windows_binary_windows(const char* path, char** argv, int argc);
 int execute_linux_binary_windows(const char* path, char** argv, int argc);
-#else
-int binary_executor_init_linux(void);
-void binary_executor_cleanup_linux(void);
-int binary_executor_is_initialized_linux(void);
-int binary_executor_has_elf_support_linux(void);
-BinaryType detect_binary_type_linux(const char* filename);
-int execute_sandboxed_binary_linux(const char* path, char** argv, int argc);
-int execute_windows_binary_linux(const char* path, char** argv, int argc);
-int execute_linux_binary_linux(const char* path, char** argv, int argc);
-#endif
 
 #endif // BINARY_EXECUTOR_H
