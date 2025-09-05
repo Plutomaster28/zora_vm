@@ -3,6 +3,7 @@
 #include <signal.h>
 #include <string.h>
 #include <setjmp.h>  // Add this include
+#include <locale.h>
 
 // Windows-specific includes for directory handling
 #include <windows.h>
@@ -120,6 +121,25 @@ int vm_is_running(void) {
 }
 
 int main(int argc, char* argv[]) {
+    // Set locale and console encoding for proper Unicode/box-drawing character support
+    setlocale(LC_ALL, "");
+    
+    // Windows-specific console encoding fixes
+    #ifdef _WIN32
+    // Set console to UTF-8 for proper box-drawing characters
+    SetConsoleOutputCP(CP_UTF8);
+    SetConsoleCP(CP_UTF8);
+    
+    // Enable Unicode/UTF-8 output on Windows console
+    HANDLE hOut = GetStdHandle(STD_OUTPUT_HANDLE);
+    if (hOut != INVALID_HANDLE_VALUE) {
+        DWORD dwMode = 0;
+        GetConsoleMode(hOut, &dwMode);
+        dwMode |= ENABLE_VIRTUAL_TERMINAL_PROCESSING;
+        SetConsoleMode(hOut, dwMode);
+    }
+    #endif
+    
     // Set up signal handlers first
     signal(SIGINT, signal_handler);
     signal(SIGTERM, signal_handler);

@@ -89,6 +89,6 @@ set(SOURCES
 add_executable(zora_vm ${SOURCES})
 
 # Link libraries
-target_link_libraries(zora_vm ${LUA_LIBRARIES} kernel32 user32 ws2_32)
+target_link_libraries(zora_vm ${LUA_LIBRARIES} kernel32 user32 ws2_32 iphlpapi wininet psapi z)
 
 message(STATUS "Windows-only build configured successfully with icon and version info")

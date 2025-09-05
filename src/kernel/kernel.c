@@ -21,13 +21,13 @@ static CRITICAL_SECTION g_kernel_lock;
 // Boot splash and initialization
 static void kernel_display_boot_splash(void) {
     printf("\n");
-    printf("╔══════════════════════════════════════════════════════════════╗\n");
-    printf("║                        ZORA KERNEL v%d.%d.%d                        ║\n", 
+    printf("+--------------------------------------------------------------+\n");
+    printf("|                        ZORA KERNEL v%d.%d.%d                        |\n", 
            ZORA_KERNEL_VERSION_MAJOR, ZORA_KERNEL_VERSION_MINOR, ZORA_KERNEL_VERSION_PATCH);
-    printf("║              Advanced Virtual Machine Operating System          ║\n");
-    printf("║                    Built on %s at %s                    ║\n", 
+    printf("|              Advanced Virtual Machine Operating System          |\n");
+    printf("|                    Built on %s at %s                    |\n", 
            ZORA_KERNEL_BUILD_DATE, ZORA_KERNEL_BUILD_TIME);
-    printf("╚══════════════════════════════════════════════════════════════╝\n");
+    printf("+--------------------------------------------------------------+\n");
     printf("\n");
     
     if (g_boot_flags & BOOT_FLAG_SAFE_MODE) {
@@ -232,16 +232,16 @@ void kernel_panic(uint32_t error_code, const char* message) {
     g_panic_info.fault_address = 0; // Would be set by actual fault handler
     
     printf("\n");
-    printf("╔══════════════════════════════════════════════════════════════╗\n");
-    printf("║                       *** KERNEL PANIC ***                     ║\n");
-    printf("║                                                                ║\n");
-    printf("║  Error Code: 0x%08X                                        ║\n", error_code);
-    printf("║  Message: %-48s ║\n", message);
-    printf("║  Uptime: %llu ms                                               ║\n", kernel_get_uptime());
-    printf("║                                                                ║\n");
-    printf("║  The system has encountered a critical error and must halt.   ║\n");
-    printf("║  Please report this error to the kernel developers.           ║\n");
-    printf("╚══════════════════════════════════════════════════════════════╝\n");
+    printf("+--------------------------------------------------------------+\n");
+    printf("|                       *** KERNEL PANIC ***                     |\n");
+    printf("|                                                                |\n");
+    printf("|  Error Code: 0x%08X                                        |\n", error_code);
+    printf("|  Message: %-48s |\n", message);
+    printf("|  Uptime: %llu ms                                               |\n", kernel_get_uptime());
+    printf("|                                                                |\n");
+    printf("|  The system has encountered a critical error and must halt.   |\n");
+    printf("|  Please report this error to the kernel developers.           |\n");
+    printf("+--------------------------------------------------------------+\n");
     printf("\n");
     
     // Halt the system

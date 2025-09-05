@@ -902,6 +902,27 @@ int vfs_mount_root_autodiscover(const char* host_root) {
             snprintf(host_path, sizeof(host_path), "%s\\%s", host_root, find_data.cFileName);
             vfs_create_directory(vm_path);
             vfs_mount_persistent(vm_path, host_path);
+        } else {
+            // Handle files in root directory
+            char vm_path[256];
+            char host_path[MAX_PATH];
+            snprintf(vm_path, sizeof(vm_path), "/%s", find_data.cFileName);
+            snprintf(host_path, sizeof(host_path), "%s\\%s", host_root, find_data.cFileName);
+            
+            // Create file node in VFS
+            VNode* file_node = vfs_create_file_node(find_data.cFileName);
+            if (file_node) {
+                file_node->host_path = strdup(host_path);
+                file_node->is_persistent = 1;
+                
+                // Add to root directory
+                VNode* root = vfs_find_node("/");
+                if (root) {
+                    file_node->parent = root;
+                    file_node->next = root->children;
+                    root->children = file_node;
+                }
+            }
         }
     } while (FindNextFileA(hFind, &find_data));
     FindClose(hFind);

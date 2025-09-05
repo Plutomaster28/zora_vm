@@ -3,6 +3,7 @@
 #include <string.h>
 #include <time.h>
 #include <ctype.h>
+#include <stdarg.h>
 #include "platform/platform.h"  // FIXED: Use correct path
 #include "shell.h"
 #include "user.h"
@@ -21,6 +22,15 @@
 #include <windows.h>
 #include <io.h>
 #include <direct.h>
+#include <tlhelp32.h>
+#include <psapi.h>
+#include <winsock2.h>
+#include <ws2tcpip.h>
+#include <iphlpapi.h>
+#include <icmpapi.h>
+#include <wininet.h>
+#include <zlib.h>
+#include <iprtrmib.h>
 
 // Function prototypes
 void handle_command(char *command);
@@ -29,6 +39,8 @@ int execute_pipeline(char *pipeline_str);
 int execute_command_with_parsing(char *cmd_str);
 int execute_command_with_redirection(char *args[], int argc, char *input_file, char *output_file, int append_mode);
 void execute_simple_command(char *args[], int argc);
+void execute_simple_command_with_redirect(char *args[], int argc);
+void redirect_printf(const char* format, ...);
 void man_command(int argc, char **argv);
 void help_command(int argc, char **argv);
 void save_command(int argc, char* argv[]);
@@ -58,15 +70,16 @@ void desktop_command(int argc, char **argv);
 void theme_command(int argc, char **argv);
 void themes_command(int argc, char **argv);
 void find_command(int argc, char **argv);
-void find_command(int argc, char **argv);
 void find_files_recursive(const char* dir_path, const char* pattern);
 void tree_command(int argc, char **argv);
 void print_tree_recursive(const char* dir_path, int depth);
+void systeminfo_command(int argc, char **argv);
 
 // Helper function prototypes
 void expand_path(const char* input, char* output, size_t output_size);
 void add_to_history(const char* command);
 void resolve_script_path(const char* name, char* out, size_t out_sz);
+void calculate_directory_size(VNode* node, size_t* total_size, size_t* used_size);
 
 // Color support functions
 void set_color(int color);
@@ -137,22 +150,29 @@ void reset_color() {
 }
 
 void print_colored_prompt() {
-    // Windows console color codes
+    // Windows console color codes - using simpler, more robust approach
     HANDLE hConsole = GetStdHandle(STD_OUTPUT_HANDLE);
     
-    // Enable ANSI escape sequences on Windows 10+
+    // Enable ANSI escape sequences on Windows 10+ - but don't fail if it doesn't work
     DWORD dwMode = 0;
-    GetConsoleMode(hConsole, &dwMode);
-    dwMode |= ENABLE_VIRTUAL_TERMINAL_PROCESSING;
-    SetConsoleMode(hConsole, dwMode);
+    if (GetConsoleMode(hConsole, &dwMode)) {
+        dwMode |= ENABLE_VIRTUAL_TERMINAL_PROCESSING;
+        SetConsoleMode(hConsole, dwMode);
+    }
 
-    // Print colored prompt: user@hostname:path>
-    printf(KALI_USER_COLOR "%s" COLOR_RESET, current_user);
-    printf(KALI_AT_COLOR "@" COLOR_RESET);
-    printf(KALI_HOST_COLOR "%s" COLOR_RESET, hostname);
-    printf(COLOR_WHITE ":" COLOR_RESET);
-    printf(KALI_PATH_COLOR "%s" COLOR_RESET, current_path);
-    printf(KALI_PROMPT_COLOR "> " COLOR_RESET);
+    // Print colored prompt with proper flushing: user@hostname:path>
+    printf("%s%s%s", KALI_USER_COLOR, current_user, COLOR_RESET);
+    fflush(stdout);
+    printf("%s@%s", KALI_AT_COLOR, COLOR_RESET);
+    fflush(stdout);
+    printf("%s%s%s", KALI_HOST_COLOR, hostname, COLOR_RESET);
+    fflush(stdout);
+    printf("%s:%s", COLOR_WHITE, COLOR_RESET);
+    fflush(stdout);
+    printf("%s%s%s", KALI_PATH_COLOR, current_path, COLOR_RESET);
+    fflush(stdout);
+    printf("%s> %s", KALI_PROMPT_COLOR, COLOR_RESET);
+    fflush(stdout);
 }
 
 // Missing file system commands
@@ -481,21 +501,81 @@ static int job_count = 0;
 void htop_command(int argc, char **argv) {
     printf("=== Zora VM Process Monitor (htop) ===\n");
     printf("  PID USER      PR  NI    VIRT    RES    SHR S  %%CPU %%MEM     TIME+ COMMAND\n");
-    printf("    1 root      20   0    8192   4096   2048 S   0.0  1.6   0:00.01 init\n");
-    printf("    2 root      20   0   16384   8192   4096 S   0.0  3.2   0:00.05 kernel\n");
-    printf("    3 vm        20   0   32768  16384   8192 R   0.1  6.4   0:00.10 zora_vm\n");
-    printf("    4 vm        20   0   65536  32768  16384 S   0.0 12.8   0:00.25 merl_shell\n");
-    printf("    5 vm        20   0   24576  12288   6144 S   0.0  4.8   0:00.03 vfs_daemon\n");
-    printf("    6 vm        20   0   16384   8192   4096 S   0.0  3.2   0:00.02 network\n");
-    printf("\nTasks: 6 total, 1 running, 5 sleeping\n");
-    printf("CPU: 0.1%% us, 0.0%% sy, 0.0%% ni, 99.9%% id\n");
-    printf("Memory: 256M total, 86M used, 170M free\n");
+    
+    // Get real process information using Windows APIs
+    HANDLE hSnapshot = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
+    if (hSnapshot == INVALID_HANDLE_VALUE) {
+        printf("Failed to create process snapshot\n");
+        return;
+    }
+    
+    PROCESSENTRY32 pe32;
+    pe32.dwSize = sizeof(PROCESSENTRY32);
+    
+    int process_count = 0;
+    int running_count = 0;
+    DWORD total_memory = 0;
+    
+    if (Process32First(hSnapshot, &pe32)) {
+        do {
+            // Get memory information for this process
+            HANDLE hProcess = OpenProcess(PROCESS_QUERY_INFORMATION | PROCESS_VM_READ, FALSE, pe32.th32ProcessID);
+            if (hProcess) {
+                PROCESS_MEMORY_COUNTERS pmc;
+                if (GetProcessMemoryInfo(hProcess, &pmc, sizeof(pmc))) {
+                    // Convert bytes to KB for display
+                    DWORD virt_kb = (DWORD)(pmc.PagefileUsage / 1024);
+                    DWORD res_kb = (DWORD)(pmc.WorkingSetSize / 1024);
+                    total_memory += res_kb;
+                    
+                    // Get CPU time
+                    FILETIME ftCreation, ftExit, ftKernel, ftUser;
+                    if (GetProcessTimes(hProcess, &ftCreation, &ftExit, &ftKernel, &ftUser)) {
+                        ULARGE_INTEGER userTime;
+                        userTime.LowPart = ftUser.dwLowDateTime;
+                        userTime.HighPart = ftUser.dwHighDateTime;
+                        DWORD seconds = (DWORD)(userTime.QuadPart / 10000000);
+                        
+                        printf("%5lu %-8s 20   0 %8lu %7lu %6lu S   0.0 %4.1f   %d:%02d.%02d %s\n",
+                               pe32.th32ProcessID,
+                               "vm",
+                               virt_kb,
+                               res_kb,
+                               res_kb / 2,
+                               ((double)res_kb / 1024.0 / 1024.0) * 100.0,
+                               seconds / 60,
+                               seconds % 60,
+                               (int)(userTime.QuadPart / 100000) % 100,
+                               pe32.szExeFile);
+                    }
+                }
+                CloseHandle(hProcess);
+            }
+            process_count++;
+            running_count++; // Simplified - assume all are running
+        } while (Process32Next(hSnapshot, &pe32) && process_count < 10); // Limit to first 10 processes
+    }
+    
+    CloseHandle(hSnapshot);
+    
+    // Get system memory information
+    MEMORYSTATUSEX memStatus;
+    memStatus.dwLength = sizeof(memStatus);
+    if (GlobalMemoryStatusEx(&memStatus)) {
+        DWORD total_mb = (DWORD)(memStatus.ullTotalPhys / 1024 / 1024);
+        DWORD used_mb = total_memory / 1024;
+        DWORD free_mb = total_mb - used_mb;
+        
+        printf("\nTasks: %d total, %d running, %d sleeping\n", process_count, running_count, 0);
+        printf("CPU: 0.1%% us, 0.0%% sy, 0.0%% ni, 99.9%% id\n");
+        printf("Memory: %luM total, %luM used, %luM free\n", total_mb, used_mb, free_mb);
+    }
+    
     printf("\nPress 'q' to quit, any other key to refresh...\n");
     
     char c = getchar();
     if (c != 'q' && c != 'Q') {
-        // In a real implementation, this would refresh
-        printf("Refreshed (simulated)\n");
+        printf("Use 'htop' again to refresh\n");
     }
 }
 
@@ -541,11 +621,64 @@ void date_command(int argc, char **argv) {
 
 void df_command(int argc, char **argv) {
     printf("Filesystem     1K-blocks    Used Available Use%% Mounted on\n");
-    printf("vfs_root          262144   65536    196608  26%% /\n");
-    printf("vfs_persistent    131072   32768     98304  26%% /persistent\n");
-    printf("vfs_tmp            32768    4096     28672  13%% /tmp\n");
-    printf("vfs_home           65536   16384     49152  26%% /home\n");
-    printf("vfs_scripts        16384    8192      8192  50%% /scripts\n");
+    
+    // Calculate real VFS usage
+    VNode* root = vfs_find_node("/");
+    if (root) {
+        size_t total_size = 0;
+        size_t used_size = 0;
+        
+        // Recursively calculate directory sizes
+        calculate_directory_size(root, &total_size, &used_size);
+        
+        size_t total_kb = total_size / 1024;
+        size_t used_kb = used_size / 1024;
+        size_t available_kb = total_kb - used_kb;
+        int use_percent = total_kb > 0 ? (int)((used_kb * 100) / total_kb) : 0;
+        
+        printf("vfs_root      %8lu %8lu %8lu %4d%% /\n", 
+               total_kb > 0 ? total_kb : 262144, used_kb, available_kb, use_percent);
+    }
+    
+    // Show individual directories
+    const char* dirs[] = {"/scripts", "/projects", "/documents", "/data", "/tmp", "/home"};
+    const int dir_count = sizeof(dirs) / sizeof(dirs[0]);
+    
+    for (int i = 0; i < dir_count; i++) {
+        VNode* dir = vfs_find_node(dirs[i]);
+        if (dir && dir->is_directory) {
+            size_t dir_total = 0;
+            size_t dir_used = 0;
+            calculate_directory_size(dir, &dir_total, &dir_used);
+            
+            size_t total_kb = dir_total / 1024;
+            size_t used_kb = dir_used / 1024;
+            size_t available_kb = total_kb - used_kb;
+            int use_percent = total_kb > 0 ? (int)((used_kb * 100) / total_kb) : 0;
+            
+            printf("vfs_%-9s %8lu %8lu %8lu %4d%% %s\n", 
+                   dirs[i] + 1, // Skip leading '/'
+                   total_kb > 0 ? total_kb : 65536, 
+                   used_kb, available_kb, use_percent, dirs[i]);
+        }
+    }
+}
+
+// Helper function to calculate directory size
+void calculate_directory_size(VNode* node, size_t* total_size, size_t* used_size) {
+    if (!node) return;
+    
+    if (node->is_directory) {
+        *total_size += 4096; // Directory entry size
+        VNode* child = node->children;
+        while (child) {
+            calculate_directory_size(child, total_size, used_size);
+            child = child->next;
+        }
+    } else {
+        *total_size += node->size;
+        *used_size += node->size;
+    }
 }
 
 void du_command(int argc, char **argv) {
@@ -635,6 +768,53 @@ void scp_command(int argc, char **argv) {
 }
 
 // Archiving commands
+// Simple tar header structure (simplified for demo)
+struct tar_header {
+    char name[100];
+    char mode[8];
+    char uid[8];
+    char gid[8];
+    char size[12];
+    char mtime[12];
+    char checksum[8];
+    char typeflag;
+    char linkname[100];
+    char magic[6];
+    char version[2];
+    char uname[32];
+    char gname[32];
+    char devmajor[8];
+    char devminor[8];
+    char prefix[155];
+    char padding[12];
+};
+
+void write_tar_header(FILE* tar_file, const char* filename, size_t filesize) {
+    struct tar_header header;
+    memset(&header, 0, sizeof(header));
+    
+    strncpy(header.name, filename, sizeof(header.name) - 1);
+    strcpy(header.mode, "0000644");
+    strcpy(header.uid, "0000000");
+    strcpy(header.gid, "0000000");
+    snprintf(header.size, sizeof(header.size), "%011zo", filesize);
+    snprintf(header.mtime, sizeof(header.mtime), "%011ld", time(NULL));
+    header.typeflag = '0'; // regular file
+    strcpy(header.magic, "ustar");
+    strcpy(header.version, "00");
+    
+    // Calculate checksum
+    unsigned int checksum = 0;
+    memset(header.checksum, ' ', 8);
+    unsigned char* ptr = (unsigned char*)&header;
+    for (int i = 0; i < sizeof(header); i++) {
+        checksum += ptr[i];
+    }
+    snprintf(header.checksum, sizeof(header.checksum), "%06o", checksum);
+    
+    fwrite(&header, sizeof(header), 1, tar_file);
+}
+
 void tar_command(int argc, char **argv) {
     if (argc < 3) {
         printf("Usage: tar [options] archive_name files...\n");
@@ -647,19 +827,84 @@ void tar_command(int argc, char **argv) {
     char* archive = argv[2];
     
     if (strstr(options, "c")) {
-        printf("tar: Creating archive %s\n", archive);
-        for (int i = 3; i < argc; i++) {
-            printf("tar: Adding %s\n", argv[i]);
+        // Create archive
+        FILE* tar_file = fopen(archive, "wb");
+        if (!tar_file) {
+            printf("tar: cannot create '%s': Permission denied\n", archive);
+            return;
         }
+        
+        printf("tar: Creating archive %s\n", archive);
+        
+        for (int i = 3; i < argc; i++) {
+            FILE* input_file = vm_fopen(argv[i], "rb");
+            if (!input_file) {
+                printf("tar: '%s': No such file or directory\n", argv[i]);
+                continue;
+            }
+            
+            // Get file size
+            fseek(input_file, 0, SEEK_END);
+            size_t filesize = ftell(input_file);
+            fseek(input_file, 0, SEEK_SET);
+            
+            printf("tar: Adding %s (%zu bytes)\n", argv[i], filesize);
+            
+            // Write tar header
+            write_tar_header(tar_file, argv[i], filesize);
+            
+            // Write file content
+            char buffer[512];
+            size_t bytes_read;
+            while ((bytes_read = fread(buffer, 1, sizeof(buffer), input_file)) > 0) {
+                fwrite(buffer, 1, bytes_read, tar_file);
+            }
+            
+            // Pad to 512-byte boundary
+            size_t padding = (512 - (filesize % 512)) % 512;
+            if (padding > 0) {
+                memset(buffer, 0, padding);
+                fwrite(buffer, 1, padding, tar_file);
+            }
+            
+            fclose(input_file);
+        }
+        
+        // Write two zero blocks to end archive
+        char zero_block[512];
+        memset(zero_block, 0, sizeof(zero_block));
+        fwrite(zero_block, sizeof(zero_block), 1, tar_file);
+        fwrite(zero_block, sizeof(zero_block), 1, tar_file);
+        
+        fclose(tar_file);
         printf("tar: Archive created successfully\n");
-    } else if (strstr(options, "x")) {
-        printf("tar: Extracting from %s\n", archive);
-        printf("tar: Extracted (simulated)\n");
+        
     } else if (strstr(options, "t")) {
+        // List contents
+        FILE* tar_file = fopen(archive, "rb");
+        if (!tar_file) {
+            printf("tar: cannot access '%s': No such file or directory\n", archive);
+            return;
+        }
+        
         printf("tar: Contents of %s:\n", archive);
-        printf("tar: file1.txt\n");
-        printf("tar: file2.txt\n");
-        printf("tar: subdir/\n");
+        
+        struct tar_header header;
+        while (fread(&header, sizeof(header), 1, tar_file) == 1) {
+            if (header.name[0] == '\0') break; // End of archive
+            
+            size_t filesize = strtoul(header.size, NULL, 8);
+            printf("tar: %s (%zu bytes)\n", header.name, filesize);
+            
+            // Skip file content
+            size_t skip = ((filesize + 511) / 512) * 512;
+            fseek(tar_file, skip, SEEK_CUR);
+        }
+        
+        fclose(tar_file);
+        
+    } else if (strstr(options, "x")) {
+        printf("tar: Extraction not yet implemented (use -t to list contents)\n");
     }
 }
 
@@ -670,8 +915,62 @@ void gzip_command(int argc, char **argv) {
     }
     
     char* filename = argv[1];
-    printf("gzip: Compressing %s to %s.gz (simulated)\n", filename, filename);
-    printf("gzip: Compression ratio: 65%%\n");
+    char output_name[512];
+    snprintf(output_name, sizeof(output_name), "%s.gz", filename);
+    
+    // Open input file using VFS
+    FILE* input = vm_fopen(filename, "rb");
+    if (!input) {
+        printf("gzip: cannot access '%s': No such file or directory\n", filename);
+        return;
+    }
+    
+    // Open output file using VFS 
+    FILE* output_test = vm_fopen(output_name, "wb");
+    if (output_test) {
+        fclose(output_test);
+    }
+    
+    // For now, create in host filesystem for gzip library compatibility
+    gzFile output = gzopen(output_name, "wb");
+    if (!output) {
+        printf("gzip: cannot create '%s': Permission denied\n", output_name);
+        fclose(input);
+        return;
+    }
+    
+    // Compress file
+    char buffer[8192];
+    size_t bytes_read;
+    size_t total_in = 0, total_out = 0;
+    
+    while ((bytes_read = fread(buffer, 1, sizeof(buffer), input)) > 0) {
+        total_in += bytes_read;
+        if (gzwrite(output, buffer, bytes_read) != (int)bytes_read) {
+            printf("gzip: error writing to '%s'\n", output_name);
+            break;
+        }
+    }
+    
+    fclose(input);
+    gzclose(output);
+    
+    // Get output file size
+    FILE* test_output = fopen(output_name, "rb");
+    if (test_output) {
+        fseek(test_output, 0, SEEK_END);
+        total_out = ftell(test_output);
+        fclose(test_output);
+    }
+    
+    // Calculate compression ratio
+    double ratio = total_in > 0 ? (1.0 - (double)total_out / (double)total_in) * 100.0 : 0.0;
+    
+    printf("gzip: compressed '%s' -> '%s' (%zu -> %zu bytes, %.1f%% reduction)\n", 
+           filename, output_name, total_in, total_out, ratio);
+    
+    // Note: In VFS environment, we keep both files for demonstration
+    printf("gzip: original file '%s' preserved in VFS\n", filename);
 }
 
 void gunzip_command(int argc, char **argv) {
@@ -688,9 +987,57 @@ void gunzip_command(int argc, char **argv) {
     char* gz_ext = strstr(output_name, ".gz");
     if (gz_ext) {
         *gz_ext = '\0';
+    } else {
+        // If no .gz extension, assume it's still compressed
+        snprintf(output_name, sizeof(output_name), "%s.out", filename);
     }
     
-    printf("gunzip: Decompressing %s to %s (simulated)\n", filename, output_name);
+    // Open compressed file
+    gzFile input = gzopen(filename, "rb");
+    if (!input) {
+        printf("gunzip: cannot access '%s': No such file or directory\n", filename);
+        return;
+    }
+    
+    // Open output file
+    FILE* output = fopen(output_name, "wb");
+    if (!output) {
+        printf("gunzip: cannot create '%s': Permission denied\n", output_name);
+        gzclose(input);
+        return;
+    }
+    
+    // Decompress file
+    char buffer[8192];
+    int bytes_read;
+    size_t total_in = 0, total_out = 0;
+    
+    while ((bytes_read = gzread(input, buffer, sizeof(buffer))) > 0) {
+        total_out += bytes_read;
+        if (fwrite(buffer, 1, bytes_read, output) != (size_t)bytes_read) {
+            printf("gunzip: error writing to '%s'\n", output_name);
+            break;
+        }
+    }
+    
+    gzclose(input);
+    fclose(output);
+    
+    // Get input file size
+    FILE* test_input = fopen(filename, "rb");
+    if (test_input) {
+        fseek(test_input, 0, SEEK_END);
+        total_in = ftell(test_input);
+        fclose(test_input);
+    }
+    
+    printf("gunzip: decompressed '%s' -> '%s' (%zu -> %zu bytes)\n", 
+           filename, output_name, total_in, total_out);
+    
+    // Remove compressed file (like real gunzip)
+    if (remove(filename) == 0) {
+        printf("gunzip: removed '%s'\n", filename);
+    }
 }
 
 void zip_command(int argc, char **argv) {
@@ -1389,9 +1736,9 @@ void clear_command(int argc, char **argv) {
 
 void echo_command(int argc, char **argv) {
     for (int i = 1; i < argc; i++) {
-        printf("%s ", argv[i]);
+        redirect_printf("%s ", argv[i]);
     }
-    printf("\n");
+    redirect_printf("\n");
 }
 
 void find_command(int argc, char **argv) {
@@ -1650,10 +1997,94 @@ void fork_wrapper(int argc, char **argv) {
     route_command("fork", argc, argv);
 }
 void kill_wrapper(int argc, char **argv) {
-    route_command("kill", argc, argv);
+    if (argc < 2) {
+        printf("Usage: kill <pid> [signal]\n");
+        printf("  kill <pid>     - Terminate process\n");
+        printf("  kill -9 <pid>  - Force terminate process\n");
+        return;
+    }
+    
+    DWORD pid;
+    BOOL force_kill = FALSE;
+    
+    // Parse arguments
+    if (argc >= 3 && (strcmp(argv[1], "-9") == 0 || strcmp(argv[1], "-KILL") == 0)) {
+        force_kill = TRUE;
+        pid = atoi(argv[2]);
+    } else {
+        pid = atoi(argv[1]);
+    }
+    
+    if (pid == 0) {
+        printf("kill: invalid process ID '%s'\n", argc >= 3 ? argv[2] : argv[1]);
+        return;
+    }
+    
+    // Open the process
+    HANDLE hProcess = OpenProcess(PROCESS_TERMINATE, FALSE, pid);
+    if (hProcess == NULL) {
+        DWORD error = GetLastError();
+        if (error == ERROR_ACCESS_DENIED) {
+            printf("kill: (%lu) - Access denied (insufficient privileges)\n", pid);
+        } else if (error == ERROR_INVALID_PARAMETER) {
+            printf("kill: (%lu) - No such process\n", pid);
+        } else {
+            printf("kill: (%lu) - Error %lu\n", pid, error);
+        }
+        return;
+    }
+    
+    // Terminate the process
+    UINT exit_code = force_kill ? 9 : 0;
+    if (TerminateProcess(hProcess, exit_code)) {
+        printf("kill: process %lu terminated\n", pid);
+    } else {
+        printf("kill: failed to terminate process %lu (error %lu)\n", pid, GetLastError());
+    }
+    
+    CloseHandle(hProcess);
 }
 void ps_wrapper(int argc, char **argv) {
-    route_command("ps", argc, argv);
+    printf("=== Process List (ps) ===\n");
+    printf("  PID    PPID  CMD\n");
+    
+    HANDLE hProcessSnap;
+    PROCESSENTRY32 pe32;
+    
+    // Take a snapshot of all processes in the system
+    hProcessSnap = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
+    if (hProcessSnap == INVALID_HANDLE_VALUE) {
+        printf("ps: CreateToolhelp32Snapshot failed\n");
+        return;
+    }
+    
+    pe32.dwSize = sizeof(PROCESSENTRY32);
+    
+    // Retrieve information about the first process
+    if (!Process32First(hProcessSnap, &pe32)) {
+        printf("ps: Process32First failed\n");
+        CloseHandle(hProcessSnap);
+        return;
+    }
+    
+    // Walk through the processes
+    int count = 0;
+    do {
+        printf("%6lu %6lu  %s\n", 
+               pe32.th32ProcessID, 
+               pe32.th32ParentProcessID,
+               pe32.szExeFile);
+        count++;
+        
+        // Limit output to prevent overwhelming display
+        if (count > 50) {
+            printf("... (truncated - showing first 50 processes)\n");
+            break;
+        }
+    } while (Process32Next(hProcessSnap, &pe32));
+    
+    printf("\nTotal processes shown: %d\n", count);
+    CloseHandle(hProcessSnap);
 }
 void read_wrapper(int argc, char **argv) {
     route_command("read", argc, argv);
@@ -1781,6 +2212,7 @@ Command command_table[] = {
     {"df", df_command, "Display disk space usage"},
     {"du", du_command, "Display disk usage of files and directories"},
     {"uname", uname_command, "Print system information"},
+    {"systeminfo", systeminfo_command, "Display detailed system information"},
     {"history", history_command, "Display command history"},
     {"scp", scp_command, "Secure copy for transferring files over SSH"},
     {"tar", tar_command, "Archive files and directories"},
@@ -2043,7 +2475,7 @@ int execute_pipeline(char *pipeline_str) {
         // Execute first command with output redirected to temp file
         printf("Executing pipeline: %s | %s\n", first_cmd, second_cmd);
         
-        // Parse first command
+        // Parse first command (increased buffer size)
         char *first_args[256];
         int first_argc = 0;
         char *first_copy = strdup(first_cmd);
@@ -2144,12 +2576,12 @@ int execute_command_with_parsing(char *cmd_str) {
         *(end + 1) = '\0';
     }
     
-    // Parse command and arguments
-    char *args[10];
+    // Parse command and arguments (increased buffer size for safety)
+    char *args[256];  // Increased from 10 to 256 for safety
     int argc = 0;
     
     char *token = strtok(work_copy, " \t");
-    while (token != NULL && argc < 9) {
+    while (token != NULL && argc < 255) {  // Leave room for NULL terminator
         args[argc++] = token;
         token = strtok(NULL, " \t");
     }
@@ -2164,41 +2596,133 @@ int execute_command_with_parsing(char *cmd_str) {
     return result;
 }
 
-int execute_command_with_redirection(char *args[], int argc, char *input_file, char *output_file, int append_mode) {
-    // Handle output redirection using freopen
-    FILE *original_stdout = NULL;
-    char original_stdout_filename[256] = {0};
+// Capture output buffer for VFS redirection
+static char redirect_buffer[65536];
+static size_t redirect_buffer_size = 0;
+static int redirect_active = 0;
+
+// Custom printf for redirection - captures output instead of printing
+void redirect_printf(const char* format, ...) {
+    if (!redirect_active) {
+        va_list args;
+        va_start(args, format);
+        vprintf(format, args);
+        va_end(args);
+        return;
+    }
     
+    va_list args;
+    va_start(args, format);
+    int len = vsnprintf(redirect_buffer + redirect_buffer_size, 
+                       sizeof(redirect_buffer) - redirect_buffer_size, 
+                       format, args);
+    va_end(args);
+    
+    if (len > 0 && redirect_buffer_size + len < sizeof(redirect_buffer)) {
+        redirect_buffer_size += len;
+    }
+}
+
+int execute_command_with_redirection(char *args[], int argc, char *input_file, char *output_file, int append_mode) {
+    // Handle output redirection using VFS
     if (output_file && strlen(output_file) > 0) {
-        printf("Redirecting output to: %s (%s)\n", output_file, append_mode ? "append" : "overwrite");
+        // Build absolute path if relative
+        char full_path[512];
+        if (output_file[0] != '/') {
+            char* cwd = vfs_getcwd();
+            snprintf(full_path, sizeof(full_path), "%s/%s", cwd, output_file);
+        } else {
+            strcpy(full_path, output_file);
+        }
+        
+        printf("Redirecting output to: %s (%s)\n", full_path, append_mode ? "append" : "overwrite");
         fflush(stdout);
         
-        // Save current stdout and redirect to file
-        if (freopen(output_file, append_mode ? "a" : "w", stdout) == NULL) {
-            printf("Error: Cannot redirect output to file '%s'\n", output_file);
-            return 1;
+        // Initialize redirect buffer
+        redirect_buffer_size = 0;
+        redirect_active = 1;
+        
+        // If append mode, read existing content first
+        if (append_mode) {
+            void* existing_data;
+            size_t existing_size;
+            if (vfs_read_file(full_path, &existing_data, &existing_size) == 0 && existing_data) {
+                if (existing_size < sizeof(redirect_buffer)) {
+                    memcpy(redirect_buffer, existing_data, existing_size);
+                    redirect_buffer_size = existing_size;
+                }
+            }
+        }
+        
+        // Execute the command with output captured
+        execute_simple_command_with_redirect(args, argc);
+        
+        // Stop capturing and write to VFS
+        redirect_active = 0;
+        
+        // Create file if it doesn't exist
+        if (vfs_find_node(full_path) == NULL) {
+            vfs_create_file(full_path);
+        }
+        
+        // Write captured output to VFS
+        if (redirect_buffer_size > 0) {
+            if (vfs_write_file(full_path, redirect_buffer, redirect_buffer_size) == 0) {
+                printf("Output redirection completed to: %s (%zu bytes)\n", full_path, redirect_buffer_size);
+            } else {
+                printf("Error: Failed to write to VFS file '%s'\n", full_path);
+            }
+        } else {
+            printf("Output redirection completed to: %s (empty)\n", full_path);
+        }
+    } else {
+        // No redirection, execute normally
+        execute_simple_command(args, argc);
+    }
+    
+    // Handle input redirection (TODO: implement properly)
+    if (input_file && strlen(input_file) > 0) {
+        printf("Note: Input redirection from '%s' not yet fully implemented\n", input_file);
+    }
+    
+    return 0;
+}
+
+void execute_simple_command_with_redirect(char *args[], int argc) {
+    // Skip empty commands
+    if (argc == 0) return;
+
+    // Search for the command in the command table
+    for (int i = 0; i < command_table_size; i++) {
+        if (command_table[i].name && strcmp(args[0], command_table[i].name) == 0) {
+            // Execute the command handler safely
+            if (command_table[i].handler) {
+                command_table[i].handler(argc, args);
+            }
+            return;
         }
     }
-    
-    // Handle input redirection (simplified - just notify for now)
-    if (input_file && strlen(input_file) > 0) {
-        printf("Input redirection from: %s (simplified implementation)\n", input_file);
-    }
-    
-    // Execute the actual command
-    execute_simple_command(args, argc);
-    
-    // Restore stdout if redirected
-    if (output_file && strlen(output_file) > 0) {
-        fflush(stdout);
+
+    // Command not found - use redirect_printf for consistency
+    if (args[0] && strlen(args[0]) > 0 && strlen(args[0]) < 256) {
+        // Check if the string contains only printable characters
+        int is_valid = 1;
+        for (int j = 0; args[0][j]; j++) {
+            if (!isprint((unsigned char)args[0][j])) {
+                is_valid = 0;
+                break;
+            }
+        }
         
-        // Redirect stdout back to console (this is platform specific)
-        freopen("CON", "w", stdout);
-        
-        printf("Output redirection completed to: %s\n", output_file);
+        if (is_valid) {
+            redirect_printf("Unknown command: '%s'\n", args[0]);
+        } else {
+            redirect_printf("Unknown command: [invalid characters]\n");
+        }
+    } else {
+        redirect_printf("Unknown command: [empty or invalid]\n");
     }
-    
-    return 0;  // Assume success for now
+    redirect_printf("Type 'help' to see available commands.\n");
 }
 
 void execute_simple_command(char *args[], int argc) {
@@ -2216,8 +2740,25 @@ void execute_simple_command(char *args[], int argc) {
         }
     }
 
-    // Command not found - just print error message and return
-    printf("Unknown command: '%s'\n", args[0]);
+    // Command not found - validate args[0] before printing
+    if (args[0] && strlen(args[0]) > 0 && strlen(args[0]) < 256) {
+        // Check if the string contains only printable characters
+        int is_valid = 1;
+        for (int j = 0; args[0][j]; j++) {
+            if (!isprint((unsigned char)args[0][j])) {
+                is_valid = 0;
+                break;
+            }
+        }
+        
+        if (is_valid) {
+            printf("Unknown command: '%s'\n", args[0]);
+        } else {
+            printf("Unknown command: [invalid characters]\n");
+        }
+    } else {
+        printf("Unknown command: [empty or invalid]\n");
+    }
     printf("Type 'help' to see available commands.\n");
 }
 
@@ -2330,19 +2871,178 @@ void ping_command(int argc, char **argv) {
     }
     
     char* target = argv[1];
-    network_simulate_ping(target);
+    printf("PING %s:\n", target);
+    
+    // Initialize Winsock
+    WSADATA wsaData;
+    if (WSAStartup(MAKEWORD(2, 2), &wsaData) != 0) {
+        printf("ping: Failed to initialize network\n");
+        return;
+    }
+    
+    // Resolve hostname to IP
+    struct addrinfo hints, *result;
+    memset(&hints, 0, sizeof(hints));
+    hints.ai_family = AF_INET;
+    hints.ai_socktype = SOCK_RAW;
+    
+    int status = getaddrinfo(target, NULL, &hints, &result);
+    if (status != 0) {
+        printf("ping: cannot resolve %s: %s\n", target, gai_strerror(status));
+        WSACleanup();
+        return;
+    }
+    
+    struct sockaddr_in* addr_in = (struct sockaddr_in*)result->ai_addr;
+    char ip_str[INET_ADDRSTRLEN];
+    inet_ntop(AF_INET, &(addr_in->sin_addr), ip_str, INET_ADDRSTRLEN);
+    
+    printf("PING %s (%s) from virtual interface:\n", target, ip_str);
+    
+    // Create ICMP handle
+    HANDLE hIcmpFile = IcmpCreateFile();
+    if (hIcmpFile == INVALID_HANDLE_VALUE) {
+        printf("ping: Could not create ICMP handle\n");
+        freeaddrinfo(result);
+        WSACleanup();
+        return;
+    }
+    
+    // Ping data
+    char sendData[32] = "Zora VM ping test data";
+    DWORD replySize = sizeof(ICMP_ECHO_REPLY) + sizeof(sendData);
+    LPVOID replyBuffer = malloc(replySize);
+    
+    if (!replyBuffer) {
+        printf("ping: Memory allocation failed\n");
+        IcmpCloseHandle(hIcmpFile);
+        freeaddrinfo(result);
+        WSACleanup();
+        return;
+    }
+    
+    // Send 4 ping packets
+    for (int i = 1; i <= 4; i++) {
+        DWORD dwRetVal = IcmpSendEcho(hIcmpFile, addr_in->sin_addr.s_addr,
+                                      sendData, sizeof(sendData),
+                                      NULL, replyBuffer, replySize, 5000);
+        
+        if (dwRetVal != 0) {
+            PICMP_ECHO_REPLY pEchoReply = (PICMP_ECHO_REPLY)replyBuffer;
+            if (pEchoReply->Status == IP_SUCCESS) {
+                printf("64 bytes from %s (%s): icmp_seq=%d ttl=%d time=%ldms\n",
+                       target, ip_str, i, pEchoReply->Options.Ttl, pEchoReply->RoundTripTime);
+            } else {
+                printf("Request timed out (seq=%d)\n", i);
+            }
+        } else {
+            printf("Request timed out (seq=%d)\n", i);
+        }
+        
+        Sleep(1000); // Wait 1 second between pings
+    }
+    
+    printf("\n--- %s ping statistics ---\n", target);
+    printf("4 packets transmitted, 4 received, 0%% packet loss\n");
+    
+    // Cleanup
+    free(replyBuffer);
+    IcmpCloseHandle(hIcmpFile);
+    freeaddrinfo(result);
+    WSACleanup();
 }
 
 void netstat_command(int argc, char **argv) {
     if (argc == 1) {
-        network_show_connections();
+        // Show TCP connections
+        printf("=== Active Network Connections (TCP) ===\n");
+        printf("  Proto  Local Address          Foreign Address        State\n");
+        
+        DWORD dwSize = 0;
+        DWORD dwRetVal = 0;
+        
+        // Get the size of the TCP table
+        dwRetVal = GetTcpTable(NULL, &dwSize, FALSE);
+        if (dwRetVal == ERROR_INSUFFICIENT_BUFFER) {
+            PMIB_TCPTABLE pTcpTable = (MIB_TCPTABLE*)malloc(dwSize);
+            if (pTcpTable == NULL) {
+                printf("Error allocating memory for TCP table\n");
+                return;
+            }
+            
+            // Get the actual TCP table
+            dwRetVal = GetTcpTable(pTcpTable, &dwSize, TRUE);
+            if (dwRetVal == NO_ERROR) {
+                for (int i = 0; i < (int)pTcpTable->dwNumEntries; i++) {
+                    struct in_addr local_addr, remote_addr;
+                    local_addr.s_addr = pTcpTable->table[i].dwLocalAddr;
+                    remote_addr.s_addr = pTcpTable->table[i].dwRemoteAddr;
+                    
+                    char* state;
+                    switch (pTcpTable->table[i].dwState) {
+                        case MIB_TCP_STATE_CLOSED: state = "CLOSED"; break;
+                        case MIB_TCP_STATE_LISTEN: state = "LISTENING"; break;
+                        case MIB_TCP_STATE_SYN_SENT: state = "SYN_SENT"; break;
+                        case MIB_TCP_STATE_SYN_RCVD: state = "SYN_RCVD"; break;
+                        case MIB_TCP_STATE_ESTAB: state = "ESTABLISHED"; break;
+                        case MIB_TCP_STATE_FIN_WAIT1: state = "FIN_WAIT1"; break;
+                        case MIB_TCP_STATE_FIN_WAIT2: state = "FIN_WAIT2"; break;
+                        case MIB_TCP_STATE_CLOSE_WAIT: state = "CLOSE_WAIT"; break;
+                        case MIB_TCP_STATE_CLOSING: state = "CLOSING"; break;
+                        case MIB_TCP_STATE_LAST_ACK: state = "LAST_ACK"; break;
+                        case MIB_TCP_STATE_TIME_WAIT: state = "TIME_WAIT"; break;
+                        case MIB_TCP_STATE_DELETE_TCB: state = "DELETE_TCB"; break;
+                        default: state = "UNKNOWN"; break;
+                    }
+                    
+                    printf("  TCP    %s:%-5d          %s:%-5d          %s\n",
+                           inet_ntoa(local_addr), ntohs((u_short)pTcpTable->table[i].dwLocalPort),
+                           inet_ntoa(remote_addr), ntohs((u_short)pTcpTable->table[i].dwRemotePort),
+                           state);
+                }
+            }
+            free(pTcpTable);
+        }
+        
     } else if (argc == 2) {
         if (strcmp(argv[1], "-r") == 0) {
-            network_show_routes();
+            // Show routing table
+            printf("=== IPv4 Route Table ===\n");
+            printf("Network Destination    Netmask          Gateway       Interface  Metric\n");
+            
+            DWORD dwSize = 0;
+            DWORD dwRetVal = GetIpForwardTable(NULL, &dwSize, FALSE);
+            if (dwRetVal == ERROR_INSUFFICIENT_BUFFER) {
+                PMIB_IPFORWARDTABLE pIpForwardTable = (MIB_IPFORWARDTABLE*)malloc(dwSize);
+                if (pIpForwardTable == NULL) {
+                    printf("Error allocating memory for route table\n");
+                    return;
+                }
+                
+                dwRetVal = GetIpForwardTable(pIpForwardTable, &dwSize, TRUE);
+                if (dwRetVal == NO_ERROR) {
+                    for (int i = 0; i < (int)pIpForwardTable->dwNumEntries; i++) {
+                        struct in_addr dest, mask, gateway, iface;
+                        dest.s_addr = pIpForwardTable->table[i].dwForwardDest;
+                        mask.s_addr = pIpForwardTable->table[i].dwForwardMask;
+                        gateway.s_addr = pIpForwardTable->table[i].dwForwardNextHop;
+                        iface.s_addr = pIpForwardTable->table[i].dwForwardNextHop;
+                        
+                        printf("%-18s %-15s %-13s %-9s %d\n",
+                               inet_ntoa(dest), inet_ntoa(mask), inet_ntoa(gateway),
+                               inet_ntoa(iface), pIpForwardTable->table[i].dwForwardMetric1);
+                    }
+                }
+                free(pIpForwardTable);
+            }
+            
         } else if (strcmp(argv[1], "-i") == 0) {
             network_show_interfaces();
         } else {
             printf("Usage: netstat [-r|-i]\n");
+            printf("  (no options)  Display active TCP connections\n");
+            printf("  -r            Display routing table\n");
+            printf("  -i            Display interface statistics\n");
         }
     }
 }
@@ -2355,24 +3055,46 @@ void nslookup_command(int argc, char **argv) {
     
     char* hostname = argv[1];
     
-    // Simulate DNS lookup
-    printf("Server: %s\n", "8.8.8.8");
-    printf("Address: %s#53\n", "8.8.8.8");
+    printf("Server: 8.8.8.8\n");
+    printf("Address: 8.8.8.8#53\n");
     printf("\n");
     
-    // Simulate response
+    // Initialize Winsock
+    WSADATA wsaData;
+    int result = WSAStartup(MAKEWORD(2, 2), &wsaData);
+    if (result != 0) {
+        printf("WSAStartup failed: %d\n", result);
+        return;
+    }
+    
+    // Perform DNS lookup
+    struct hostent* host_entry = gethostbyname(hostname);
+    if (host_entry == NULL) {
+        printf("*** Can't find %s: Non-existent domain\n", hostname);
+        WSACleanup();
+        return;
+    }
+    
     printf("Non-authoritative answer:\n");
     printf("Name: %s\n", hostname);
     
-    // Generate fake IP addresses for common domains
-    if (strstr(hostname, "google.com")) {
-        printf("Address: 142.250.191.14\n");
-    } else if (strstr(hostname, "github.com")) {
-        printf("Address: 140.82.112.4\n");
-    } else if (strstr(hostname, "stackoverflow.com")) {
-        printf("Address: 151.101.1.69\n");
-    } else {
-        // Generate random IP
+    // Print all IP addresses
+    for (int i = 0; host_entry->h_addr_list[i] != 0; i++) {
+        struct in_addr addr;
+        memcpy(&addr, host_entry->h_addr_list[i], sizeof(struct in_addr));
+        printf("Address: %s\n", inet_ntoa(addr));
+    }
+    
+    // Print aliases if any
+    if (host_entry->h_aliases[0] != NULL) {
+        printf("Aliases:\n");
+        for (int i = 0; host_entry->h_aliases[i] != NULL; i++) {
+            printf("    %s\n", host_entry->h_aliases[i]);
+        }
+    }
+    
+    WSACleanup();
+}
         printf("Address: %d.%d.%d.%d\n", 
                (rand() % 223) + 1, rand() % 256, rand() % 256, rand() % 256);
     }
@@ -2404,30 +3126,92 @@ void wget_command(int argc, char **argv) {
     }
     
     char* url = argv[1];
-    
-    printf("--2024-01-01 12:00:00--  %s\n", url);
+    printf("--wget--  %s\n", url);
     printf("Resolving host... ");
     
-    // Simulate DNS resolution
-    printf("192.168.1.100\n");
-    printf("Connecting to host|192.168.1.100|:80... connected.\n");
-    printf("HTTP request sent, awaiting response... 200 OK\n");
-    printf("Length: 1024 (1.0K) [text/html]\n");
-    printf("Saving to: 'index.html'\n");
-    printf("\n");
-    printf("index.html      100%%[===================>]   1.00K  --.-KB/s    in 0s\n");
-    printf("\n");
-    printf("2024-01-01 12:00:01 (1.00 MB/s) - 'index.html' saved [1024/1024]\n");
-    
-    // Create simulated downloaded file in VFS
-    vfs_create_file("index.html");
-    VNode* node = vfs_find_node("index.html");
-    if (node) {
-        const char* content = "<html><body><h1>Simulated Web Page</h1></body></html>";
-        node->data = malloc(strlen(content) + 1);
-        strcpy(node->data, content);
-        node->size = strlen(content);
+    // Initialize WinINet
+    HINTERNET hInternet = InternetOpen("Zora VM wget", INTERNET_OPEN_TYPE_DIRECT, NULL, NULL, 0);
+    if (!hInternet) {
+        printf("Failed to initialize internet connection\n");
+        return;
     }
+    
+    printf("connected.\n");
+    printf("HTTP request sent, awaiting response... ");
+    
+    // Open URL
+    HINTERNET hUrl = InternetOpenUrl(hInternet, url, NULL, 0, INTERNET_FLAG_RELOAD, 0);
+    if (!hUrl) {
+        printf("Failed to open URL\n");
+        InternetCloseHandle(hInternet);
+        return;
+    }
+    
+    printf("200 OK\n");
+    
+    // Get content length
+    DWORD dwIndex = 0;
+    DWORD dwSize = sizeof(DWORD);
+    DWORD contentLength = 0;
+    HttpQueryInfo(hUrl, HTTP_QUERY_CONTENT_LENGTH | HTTP_QUERY_FLAG_NUMBER, &contentLength, &dwSize, &dwIndex);
+    
+    printf("Length: %lu bytes\n", contentLength);
+    
+    // Extract filename from URL
+    char filename[256];
+    char* lastSlash = strrchr(url, '/');
+    if (lastSlash && strlen(lastSlash + 1) > 0) {
+        strcpy(filename, lastSlash + 1);
+    } else {
+        strcpy(filename, "index.html");
+    }
+    
+    printf("Saving to: '%s'\n", filename);
+    
+    // Read data from URL
+    char buffer[4096];
+    DWORD bytesRead;
+    DWORD totalBytes = 0;
+    
+    // Create file in VFS
+    char full_path[512];
+    char* cwd = vfs_getcwd();
+    snprintf(full_path, sizeof(full_path), "%s/%s", cwd, filename);
+    vfs_create_file(full_path);
+    
+    // Download and write data
+    char* fileContent = malloc(contentLength + 1);
+    char* contentPtr = fileContent;
+    
+    while (InternetReadFile(hUrl, buffer, sizeof(buffer), &bytesRead) && bytesRead > 0) {
+        memcpy(contentPtr, buffer, bytesRead);
+        contentPtr += bytesRead;
+        totalBytes += bytesRead;
+        
+        if (contentLength > 0) {
+            int percent = (totalBytes * 100) / contentLength;
+            printf("\r%s      %d%%[", filename, percent);
+            int bars = percent / 5;
+            for (int i = 0; i < 20; i++) {
+                printf(i < bars ? "=" : " ");
+            }
+            printf("] %lu bytes", totalBytes);
+            fflush(stdout);
+        }
+    }
+    
+    if (fileContent && totalBytes > 0) {
+        fileContent[totalBytes] = '\0';
+        vfs_write_file(full_path, fileContent, totalBytes);
+        printf("\n\n'%s' saved [%lu/%lu]\n", filename, totalBytes, contentLength);
+    } else {
+        printf("\nDownload failed\n");
+    }
+    
+    // Cleanup
+    if (fileContent) free(fileContent);
+    InternetCloseHandle(hUrl);
+    InternetCloseHandle(hInternet);
 }
 
 void curl_command(int argc, char **argv) {
@@ -2737,4 +3521,72 @@ void env_command(int argc, char **argv) {
             printf("%s=%s\n", env_vars[i].name, env_vars[i].value);
         }
     }
+}
+
+void systeminfo_command(int argc, char **argv) {
+    printf("=== ZoraVM System Information ===\n\n");
+    
+    // Host OS Information
+    OSVERSIONINFO osvi;
+    osvi.dwOSVersionInfoSize = sizeof(OSVERSIONINFO);
+    if (GetVersionEx(&osvi)) {
+        printf("Host OS Name:          Microsoft Windows %d.%d\n", 
+               osvi.dwMajorVersion, osvi.dwMinorVersion);
+        printf("Host OS Version:       %d.%d Build %d\n", 
+               osvi.dwMajorVersion, osvi.dwMinorVersion, osvi.dwBuildNumber);
+    }
+    
+    // Computer Name
+    char computer_name[MAX_COMPUTERNAME_LENGTH + 1];
+    DWORD name_len = sizeof(computer_name);
+    if (GetComputerName(computer_name, &name_len)) {
+        printf("Host Computer Name:    %s\n", computer_name);
+    }
+    
+    // Memory Information
+    MEMORYSTATUSEX memInfo;
+    memInfo.dwLength = sizeof(MEMORYSTATUSEX);
+    if (GlobalMemoryStatusEx(&memInfo)) {
+        printf("Host Physical Memory:  %llu MB\n", memInfo.ullTotalPhys / (1024 * 1024));
+        printf("Host Available Memory: %llu MB\n", memInfo.ullAvailPhys / (1024 * 1024));
+        printf("Host Memory Load:      %lu%%\n", memInfo.dwMemoryLoad);
+    }
+    
+    // Processor Information
+    SYSTEM_INFO sysInfo;
+    GetSystemInfo(&sysInfo);
+    printf("Host Processors:       %lu CPUs\n", sysInfo.dwNumberOfProcessors);
+    printf("Host Processor Arch:   ");
+    switch (sysInfo.wProcessorArchitecture) {
+        case PROCESSOR_ARCHITECTURE_AMD64:
+            printf("x64 (AMD or Intel)\n");
+            break;
+        case PROCESSOR_ARCHITECTURE_INTEL:
+            printf("Intel x86\n");
+            break;
+        case PROCESSOR_ARCHITECTURE_ARM:
+            printf("ARM\n");
+            break;
+        case PROCESSOR_ARCHITECTURE_ARM64:
+            printf("ARM64\n");
+            break;
+        default:
+            printf("Unknown\n");
+            break;
+    }
+    
+    printf("\n=== ZoraVM Configuration ===\n");
+    printf("VM OS Name:            Zora Virtual Machine OS\n");
+    printf("VM Kernel Version:     2.1.0\n");
+    printf("VM Memory Limit:       64 MB\n");
+    printf("VM CPU Limit:          80%%\n");
+    printf("VM Shell:              MERL Shell\n");
+    printf("VM Network:            Virtual NAT (10.0.2.0/24)\n");
+    printf("VM Filesystem:         Virtual FS with host mapping\n");
+    printf("VM Security:           Sandbox enabled\n");
+    
+    // Build Information
+    printf("\nBuild Date:            %s %s\n", __DATE__, __TIME__);
+    printf("Build Platform:        Windows (MinGW)\n");
+    printf("Virtual Silicon:       Meisei Engine\n");
 }
