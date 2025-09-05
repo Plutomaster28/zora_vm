@@ -4,8 +4,8 @@ project(zora_vm C)
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_STANDARD_REQUIRED ON)
 
-# Windows-only build
-if(NOT WIN32)
+# Windows-only build (including MSYS2/MinGW environments)
+if(NOT WIN32 AND NOT MSYS AND NOT MINGW)
     message(FATAL_ERROR "This project only supports Windows")
 endif()
 
@@ -19,23 +19,52 @@ endif()
 # Enable Windows resource compilation
 enable_language(RC)
 
-# Find Lua
+# Find Lua with better error handling
 find_path(LUA_INCLUDE_DIR lua.h
-    HINTS C:/msys64/ucrt64/include/lua5.4 C:/msys64/ucrt64/include/lua
+    HINTS 
+        C:/msys64/ucrt64/include/lua5.4 
+        C:/msys64/ucrt64/include/lua
+        /ucrt64/include/lua5.4
+        /ucrt64/include/lua
+        ${CMAKE_PREFIX_PATH}/include/lua5.4
+        ${CMAKE_PREFIX_PATH}/include/lua
 )
+
 find_library(LUA_LIBRARIES
     NAMES lua5.4 lua54 lua
-    HINTS C:/msys64/ucrt64/lib
+    HINTS 
+        C:/msys64/ucrt64/lib
+        /ucrt64/lib
+        ${CMAKE_PREFIX_PATH}/lib
 )
 
 if(NOT LUA_INCLUDE_DIR OR NOT LUA_LIBRARIES)
-    message(FATAL_ERROR "Lua not found! Install with: pacman -S mingw-w64-ucrt-x86_64-lua")
+    message(STATUS "Lua not found in standard locations")
+    message(STATUS "Searched for headers in:")
+    message(STATUS "  - C:/msys64/ucrt64/include/lua5.4")
+    message(STATUS "  - C:/msys64/ucrt64/include/lua") 
+    message(STATUS "  - /ucrt64/include/lua5.4")
+    message(STATUS "  - /ucrt64/include/lua")
+    message(STATUS "Searched for libraries in:")
+    message(STATUS "  - C:/msys64/ucrt64/lib")
+    message(STATUS "  - /ucrt64/lib")
+    message(STATUS "")
+    message(STATUS "To install Lua in MSYS2/UCRT64:")
+    message(STATUS "  pacman -S mingw-w64-ucrt-x86_64-lua")
+    message(STATUS "")
+    message(STATUS "Or run the automated build script:")
+    message(STATUS "  ./build_zora_vm.sh")
+    message(FATAL_ERROR "Lua development files not found!")
+else()
+    message(STATUS "Found Lua headers: ${LUA_INCLUDE_DIR}")
+    message(STATUS "Found Lua library: ${LUA_LIBRARIES}")
 endif()
 
 # Include directories
 include_directories(include include/platform include/binary include/merl include/vfs 
                    include/syscall include/virtualization include/network include/lua 
                    include/python include/perl include/meisei include/desktop include/sandbox
+                   include/terminal
                    MERL ${LUA_INCLUDE_DIR})
 
 # Source files - simple and direct
@@ -71,6 +100,7 @@ set(SOURCES
     src/meisei/virtual_silicon.c
     src/meisei/script_accelerator.c
     src/desktop/desktop.c
+    src/terminal/terminal_style.c
     
     # MERL shell
     MERL/color-and-test.c

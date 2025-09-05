@@ -17,6 +17,7 @@
 #include "binary/binary_executor.h"
 #include "desktop/desktop.h"
 #include "vm.h"  // For crash guard control
+#include "terminal/terminal_style.h"  // Add terminal styling support
 
 // Windows-specific includes
 #include <windows.h>
@@ -73,7 +74,6 @@ void find_command(int argc, char **argv);
 void find_files_recursive(const char* dir_path, const char* pattern);
 void tree_command(int argc, char **argv);
 void print_tree_recursive(const char* dir_path, int depth);
-void systeminfo_command(int argc, char **argv);
 
 // Helper function prototypes
 void expand_path(const char* input, char* output, size_t output_size);
@@ -160,19 +160,13 @@ void print_colored_prompt() {
         SetConsoleMode(hConsole, dwMode);
     }
 
-    // Print colored prompt with proper flushing: user@hostname:path>
-    printf("%s%s%s", KALI_USER_COLOR, current_user, COLOR_RESET);
-    fflush(stdout);
-    printf("%s@%s", KALI_AT_COLOR, COLOR_RESET);
-    fflush(stdout);
-    printf("%s%s%s", KALI_HOST_COLOR, hostname, COLOR_RESET);
-    fflush(stdout);
-    printf("%s:%s", COLOR_WHITE, COLOR_RESET);
-    fflush(stdout);
-    printf("%s%s%s", KALI_PATH_COLOR, current_path, COLOR_RESET);
-    fflush(stdout);
-    printf("%s> %s", KALI_PROMPT_COLOR, COLOR_RESET);
-    fflush(stdout);
+    // Print colored prompt: user@hostname:path>
+    printf(KALI_USER_COLOR "%s" COLOR_RESET, current_user);
+    printf(KALI_AT_COLOR "@" COLOR_RESET);
+    printf(KALI_HOST_COLOR "%s" COLOR_RESET, hostname);
+    printf(COLOR_WHITE ":" COLOR_RESET);
+    printf(KALI_PATH_COLOR "%s" COLOR_RESET, current_path);
+    printf(KALI_PROMPT_COLOR "> " COLOR_RESET);
 }
 
 // Missing file system commands
@@ -1082,6 +1076,282 @@ void hostname_command(int argc, char **argv) {
     }
 }
 
+// Terminal styling command implementations
+void style_command(int argc, char **argv) {
+    if (argc < 2) {
+        printf("Terminal Style Configuration:\n");
+        printf("  Font: %s\n", terminal_get_current_font());
+        printf("  Cursor: %s\n", 
+               terminal_get_cursor_style() == 0 ? "Block" :
+               terminal_get_cursor_style() == 1 ? "Underscore" : "Vertical");
+        printf("\nUsage: style <init|reset|save|load>\n");
+        printf("  init  - Initialize terminal styling with defaults\n");
+        printf("  reset - Reset to original terminal settings\n");
+        printf("  save  - Save current styling configuration\n");
+        printf("  load  - Load saved styling configuration\n");
+        return;
+    }
+    
+    if (strcmp(argv[1], "init") == 0) {
+        terminal_init_styling();
+        printf("Terminal styling initialized with Campbell colors and MS Mincho font\n");
+    } else if (strcmp(argv[1], "reset") == 0) {
+        terminal_reset_colors();
+        printf("Terminal colors reset\n");
+    } else if (strcmp(argv[1], "save") == 0) {
+        terminal_save_config();
+    } else if (strcmp(argv[1], "load") == 0) {
+        terminal_load_config();
+    } else {
+        printf("Unknown style command: %s\n", argv[1]);
+    }
+}
+
+void font_command(int argc, char **argv) {
+    if (argc < 2) {
+        printf("Current font: %s\n", terminal_get_current_font());
+        printf("Usage: font <name> [size]\n");
+        printf("Available fonts:\n");
+        printf("  - MS Mincho (recommended retro font)\n");
+        printf("  - Consolas\n");
+        printf("  - Courier New\n");
+        printf("  - Lucida Console\n");
+        return;
+    }
+    
+    int size = 12;  // Default size
+    if (argc >= 3) {
+        size = atoi(argv[2]);
+        if (size < 8 || size > 72) {
+            printf("Font size must be between 8 and 72\n");
+            return;
+        }
+    }
+    
+    terminal_set_font(argv[1], size);
+    printf("Font preference set to: %s, size %d\n", argv[1], size);
+    printf("Note: You may need to manually configure your terminal for full font support\n");
+}
+
+void cursor_command(int argc, char **argv) {
+    if (argc < 2) {
+        const char* current_style = 
+            terminal_get_cursor_style() == 0 ? "block" :
+            terminal_get_cursor_style() == 1 ? "underscore" : "vertical";
+        printf("Current cursor style: %s\n", current_style);
+        printf("Usage: cursor <block|underscore|vertical> [blink|solid]\n");
+        printf("Examples:\n");
+        printf("  cursor block        - Retro block cursor (default)\n");
+        printf("  cursor vertical     - Modern vertical bar cursor\n");
+        printf("  cursor underscore   - Classic underscore cursor\n");
+        return;
+    }
+    
+    int style = -1;
+    int blink = 1;  // Default to blinking
+    
+    if (strcmp(argv[1], "block") == 0) {
+        style = CURSOR_BLOCK;
+    } else if (strcmp(argv[1], "underscore") == 0) {
+        style = CURSOR_UNDERSCORE;
+    } else if (strcmp(argv[1], "vertical") == 0) {
+        style = CURSOR_VERTICAL;
+    } else {
+        printf("Unknown cursor style: %s\n", argv[1]);
+        return;
+    }
+    
+    if (argc >= 3) {
+        if (strcmp(argv[2], "solid") == 0) {
+            blink = 0;
+        } else if (strcmp(argv[2], "blink") == 0) {
+            blink = 1;
+        }
+    }
+    
+    terminal_set_cursor_style(style, blink);
+}
+
+void colors_command(int argc, char **argv) {
+    if (argc < 2) {
+        printf("Color scheme management:\n");
+        printf("Usage: colors <campbell|reset|demo>\n");
+        printf("  campbell - Apply Campbell PowerShell color scheme\n");
+        printf("  reset    - Reset to default colors\n");
+        printf("  demo     - Show color palette demonstration\n");
+        return;
+    }
+    
+    if (strcmp(argv[1], "campbell") == 0) {
+        terminal_apply_campbell_colors();
+        printf("Campbell color scheme applied\n");
+    } else if (strcmp(argv[1], "reset") == 0) {
+        terminal_reset_colors();
+        printf("Colors reset to default\n");
+    } else if (strcmp(argv[1], "demo") == 0) {
+        printf("Campbell Color Scheme Demo:\n\n");
+        printf("\033[30mBlack\033[0m  ");
+        printf("\033[31mDark Red\033[0m  ");
+        printf("\033[32mDark Green\033[0m  ");
+        printf("\033[33mDark Yellow\033[0m  ");
+        printf("\033[34mDark Blue\033[0m  ");
+        printf("\033[35mDark Magenta\033[0m  ");
+        printf("\033[36mDark Cyan\033[0m  ");
+        printf("\033[37mLight Gray\033[0m\n");
+        printf("\033[90mDark Gray\033[0m  ");
+        printf("\033[91mRed\033[0m  ");
+        printf("\033[92mGreen\033[0m  ");
+        printf("\033[93mYellow\033[0m  ");
+        printf("\033[94mBlue\033[0m  ");
+        printf("\033[95mMagenta\033[0m  ");
+        printf("\033[96mCyan\033[0m  ");
+        printf("\033[97mWhite\033[0m\n\n");
+    } else {
+        printf("Unknown color command: %s\n", argv[1]);
+    }
+}
+
+void retro_command(int argc, char **argv) {
+    if (argc < 2) {
+        printf("Retro mode settings:\n");
+        printf("Usage: retro <on|off|banner|demo>\n");
+        printf("  on     - Enable retro terminal mode\n");
+        printf("  off    - Disable retro terminal mode\n");
+        printf("  banner - Display retro banner\n");
+        printf("  demo   - Show retro features demonstration\n");
+        return;
+    }
+    
+    if (strcmp(argv[1], "on") == 0) {
+        terminal_enable_retro_mode(1);
+        terminal_print_retro_banner();
+    } else if (strcmp(argv[1], "off") == 0) {
+        terminal_enable_retro_mode(0);
+    } else if (strcmp(argv[1], "banner") == 0) {
+        terminal_print_retro_banner();
+    } else if (strcmp(argv[1], "demo") == 0) {
+        printf("Retro Terminal Features Demo:\n\n");
+        printf("1. Typewriter effect: ");
+        terminal_typewriter_effect("This is a retro typewriter effect!", 50);
+        printf("\n\n2. Retro prompt style:\n");
+        terminal_print_retro_prompt("demo_user", "retro-machine", "/demo/path");
+        printf("\n\n3. Syntax highlighting:\n");
+        terminal_print_command("ls");
+        printf(" ");
+        terminal_print_argument("-la");
+        printf(" ");
+        terminal_print_path("/home/user");
+        printf(" ");
+        terminal_print_operator(">");
+        printf(" ");
+        terminal_print_string("output.txt");
+        printf("\n\n");
+    } else {
+        printf("Unknown retro command: %s\n", argv[1]);
+    }
+}
+
+void syntax_command(int argc, char **argv) {
+    if (argc < 2) {
+        printf("Syntax highlighting settings:\n");
+        printf("Usage: syntax <on|off|demo>\n");
+        printf("  on   - Enable command syntax highlighting\n");
+        printf("  off  - Disable command syntax highlighting\n");
+        printf("  demo - Show syntax highlighting examples\n");
+        return;
+    }
+    
+    if (strcmp(argv[1], "on") == 0) {
+        terminal_enable_syntax_highlighting(1);
+    } else if (strcmp(argv[1], "off") == 0) {
+        terminal_enable_syntax_highlighting(0);
+    } else if (strcmp(argv[1], "demo") == 0) {
+        printf("Syntax Highlighting Demo:\n\n");
+        
+        printf("Commands: ");
+        terminal_print_command("cat");
+        printf(" ");
+        terminal_print_command("grep");
+        printf(" ");
+        terminal_print_command("find");
+        printf("\n");
+        
+        printf("Paths: ");
+        terminal_print_path("/home/user/documents");
+        printf(" ");
+        terminal_print_path("./relative/path");
+        printf("\n");
+        
+        printf("Strings: ");
+        terminal_print_string("\"quoted string\"");
+        printf(" ");
+        terminal_print_string("'single quoted'");
+        printf("\n");
+        
+        printf("Operators: ");
+        terminal_print_operator(">");
+        printf(" ");
+        terminal_print_operator(">>");
+        printf(" ");
+        terminal_print_operator("|");
+        printf(" ");
+        terminal_print_operator("&&");
+        printf("\n");
+        
+        printf("Errors: ");
+        terminal_print_error("command not found");
+        printf("\n\n");
+    } else {
+        printf("Unknown syntax command: %s\n", argv[1]);
+    }
+}
+
+void terminal_demo_command(int argc, char **argv) {
+    printf("Terminal Enhancement Demo\n");
+    printf("=========================\n\n");
+    
+    // Initialize styling if not done already
+    terminal_init_styling();
+    
+    printf("1. Retro Banner:\n");
+    terminal_print_retro_banner();
+    
+    printf("2. Enhanced Prompt:\n");
+    terminal_print_retro_prompt("demo", "zora-vm", "/demo");
+    printf("\n\n");
+    
+    printf("3. Syntax Highlighting:\n");
+    terminal_print_command("cat");
+    printf(" ");
+    terminal_print_path("/etc/passwd");
+    printf(" ");
+    terminal_print_operator("|");
+    printf(" ");
+    terminal_print_command("grep");
+    printf(" ");
+    terminal_print_string("\"root\"");
+    printf(" ");
+    terminal_print_operator(">");
+    printf(" ");
+    terminal_print_path("output.txt");
+    printf("\n\n");
+    
+    printf("4. Typewriter Effect:\n");
+    terminal_typewriter_effect("Welcome to the enhanced Zora VM terminal!", 30);
+    printf("\n\n");
+    
+    printf("5. Color Palette:\n");
+    colors_command(2, (char*[]){"colors", "demo"});
+    
+    printf("Configuration:\n");
+    printf("  Font: MS Mincho (retro Japanese)\n");
+    printf("  Colors: Campbell PowerShell scheme\n");
+    printf("  Cursor: Block style (classic retro)\n");
+    printf("  Features: Syntax highlighting, retro effects\n\n");
+    
+    printf("Use 'style init' to apply these settings permanently.\n");
+}
+
 // End of missing command implementations
 
 // Binary execution commands
@@ -1307,9 +1577,15 @@ void start_shell() {
     // Initialize environment variables
     init_default_env_vars();
 
+    // Initialize terminal styling with MS Mincho font and Campbell colors
+    terminal_init_styling();
+
     printf("=== Zora VM - MERL Shell ===\n");
     printf("Virtual Machine OS with MERL Shell\n");
-    printf("Type 'help' for available commands, 'exit' to quit VM.\n");
+    printf("Enhanced Terminal: MS Mincho font, Campbell colors, Block cursor\n");
+    printf("Type 'help' for available commands, 'terminal-demo' for styling demo.\n");
+    printf("Terminal commands: 'style', 'font', 'cursor', 'colors', 'retro', 'syntax'\n");
+    printf("Type 'exit' to quit VM.\n");
     printf("VM Commands: vmstat, reboot, shutdown\n\n");
 
     while (1) {
@@ -2226,6 +2502,15 @@ Command command_table[] = {
     {"export", export_command, "Export environment variable"},
     {"env", env_command, "Display environment variables"},
     
+    // Terminal styling commands
+    {"style", style_command, "Configure terminal styling (init/reset/save/load)"},
+    {"font", font_command, "Set terminal font (MS Mincho recommended)"},
+    {"cursor", cursor_command, "Set cursor style (block/underscore/vertical)"},
+    {"colors", colors_command, "Manage color schemes (Campbell PowerShell)"},
+    {"retro", retro_command, "Enable/disable retro terminal mode"},
+    {"syntax", syntax_command, "Toggle command syntax highlighting"},
+    {"terminal-demo", terminal_demo_command, "Demonstrate terminal enhancements"},
+    
     #ifdef PYTHON_SCRIPTING
     {"python", python_command, "Execute Python script from /scripts (fallback legacy path)"},
     {"pycode", pycode_command, "Execute Python code directly"},
@@ -2740,25 +3025,8 @@ void execute_simple_command(char *args[], int argc) {
         }
     }
 
-    // Command not found - validate args[0] before printing
-    if (args[0] && strlen(args[0]) > 0 && strlen(args[0]) < 256) {
-        // Check if the string contains only printable characters
-        int is_valid = 1;
-        for (int j = 0; args[0][j]; j++) {
-            if (!isprint((unsigned char)args[0][j])) {
-                is_valid = 0;
-                break;
-            }
-        }
-        
-        if (is_valid) {
-            printf("Unknown command: '%s'\n", args[0]);
-        } else {
-            printf("Unknown command: [invalid characters]\n");
-        }
-    } else {
-        printf("Unknown command: [empty or invalid]\n");
-    }
+    // Command not found - just print error message and return
+    printf("Unknown command: '%s'\n", args[0]);
     printf("Type 'help' to see available commands.\n");
 }
 
