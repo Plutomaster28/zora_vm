@@ -43,6 +43,7 @@ void execute_simple_command_with_redirect(char *args[], int argc);
 void redirect_printf(const char* format, ...);
 void man_command(int argc, char **argv);
 void help_command(int argc, char **argv);
+void theme_command(int argc, char **argv);
 void save_command(int argc, char* argv[]);
 void load_command(int argc, char* argv[]);
 void mount_command(int argc, char* argv[]);
@@ -1546,11 +1547,6 @@ void sandbox_status_command(int argc, char **argv) {
     printf("   • Real machine code execution with syscall interception\n");
 }
 
-void theme_command(int argc, char **argv) {
-    printf("Theme switching disabled (desktop system removed)\n");
-    printf("Available terminal themes: Campbell (default)\n");
-}
-
 void themes_command(int argc, char **argv) {
     (void)argc; (void)argv; 
     printf("Available themes: Campbell (terminal)\n");
@@ -1643,9 +1639,9 @@ void start_shell() {
     // Initialize environment variables
     init_default_env_vars();
 
-    // Initialize terminal styling with MS Mincho font and Campbell colors
+    // Initialize ZoraVM Terminal Styling (font only)
     terminal_init_styling();
-
+    
     printf("=== Zora VM - MERL Shell ===\n");
     printf("Virtual Machine OS with MERL Shell\n");
     printf("Enhanced Terminal: MS Mincho font, Campbell colors, Block cursor\n");
@@ -2700,6 +2696,7 @@ void vm_shutdown_command(int argc, char **argv) {
 Command command_table[] = {
     {"man", man_command, "Displays information about commands."},
     {"help", help_command, "Displays the help menu."},
+    {"theme", theme_command, "Change ZoraVM visual theme."},
     {"sysinfo", sysinfo_command, "Displays system information and credits."},
     {"pwd", pwd_command, "Prints the current working directory."},
     {"ls", ls_command, "Lists the contents of the current directory."},
@@ -3705,6 +3702,27 @@ void help_command(int argc, char **argv) {
     printf("  Type 'which <command>' to locate a command\n");
     printf("  Use Tab completion for command names and file paths\n");
     printf("\n");
+}
+
+void theme_command(int argc, char **argv) {
+    if (argc < 2) {
+        printf("Usage: theme [font-only]\n");
+        printf("ZoraVM Terminal Styling:\n");
+        printf("  font-only - Uses MS Mincho font with original Campbell colors\n");
+        printf("  Current: Enhanced terminal with MS Mincho font\n");
+        return;
+    }
+    
+    char* theme_name = argv[1];
+    
+    if (strcmp(theme_name, "font-only") == 0) {
+        printf("ZoraVM is using font-only mode with MS Mincho font.\n");
+        printf("Terminal colors remain as Campbell scheme.\n");
+        printf("This provides better readability while preserving familiar colors.\n");
+    } else {
+        printf("Unknown theme: %s\n", theme_name);
+        printf("Available: font-only\n");
+    }
 }
 
 void save_command(int argc, char* argv[]) {
