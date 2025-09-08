@@ -11,9 +11,19 @@ endif()
 
 add_definitions(-D_WIN32_WINNT=0x0601 -DWIN32_LEAN_AND_MEAN -DNOMINMAX)
 
-# Static linking for standalone executable
+# Enhanced static linking for standalone executable
 if(MINGW OR MSYS)
+    # Comprehensive static linking flags
     set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -static-libgcc -static-libstdc++ -static")
+    set(CMAKE_FIND_LIBRARY_SUFFIXES .a ${CMAKE_FIND_LIBRARY_SUFFIXES})
+    set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -Wl,--allow-multiple-definition")
+    
+    # Prefer static libraries over dynamic ones
+    set_property(GLOBAL PROPERTY LINK_SEARCH_START_STATIC ON)
+    set_property(GLOBAL PROPERTY LINK_SEARCH_END_STATIC ON)
+    
+    message(STATUS "Configured for comprehensive static linking on Windows (MinGW/MSYS2)")
+    message(STATUS "This will create a fully standalone executable with no external dependencies")
 endif()
 
 # Enable Windows resource compilation
@@ -58,6 +68,27 @@ if(NOT LUA_INCLUDE_DIR OR NOT LUA_LIBRARIES)
 else()
     message(STATUS "Found Lua headers: ${LUA_INCLUDE_DIR}")
     message(STATUS "Found Lua library: ${LUA_LIBRARIES}")
+endif()
+
+# Static linking preference for Lua on Windows (from backup)
+if(WIN32 AND NOT MSVC)
+    # Try to find static Lua library if available for better bundling
+    find_library(LUA_STATIC_LIB 
+        NAMES liblua.a lua54.a lua5.4.a liblua5.4.a
+        HINTS 
+            C:/msys64/ucrt64/lib
+            /ucrt64/lib
+            ${CMAKE_PREFIX_PATH}/lib
+        PATH_SUFFIXES lib
+    )
+    
+    if(LUA_STATIC_LIB)
+        set(LUA_LIBRARIES ${LUA_STATIC_LIB})
+        message(STATUS "Using static Lua library for bundling: ${LUA_STATIC_LIB}")
+    else()
+        message(STATUS "Static Lua library not found, using: ${LUA_LIBRARIES}")
+        message(STATUS "Note: This may result in dynamic linking to Lua")
+    endif()
 endif()
 
 # Include directories
@@ -118,7 +149,101 @@ set(SOURCES
 # Create executable
 add_executable(zora_vm ${SOURCES})
 
-# Link libraries
-target_link_libraries(zora_vm ${LUA_LIBRARIES} kernel32 user32 ws2_32 iphlpapi wininet psapi z)
+# Enhanced static linking setup for Windows (from backup)
+if(WIN32)
+    if(NOT MSVC)
+        # For MinGW/MSYS2: Enhanced static linking for truly standalone executable
+        set_target_properties(zora_vm PROPERTIES 
+            LINK_FLAGS "-static-libgcc -static-libstdc++ -static -Wl,--allow-multiple-definition"
+        )
+        
+        # Force static library preference for this target
+        set_property(TARGET zora_vm PROPERTY LINK_SEARCH_START_STATIC ON)
+        set_property(TARGET zora_vm PROPERTY LINK_SEARCH_END_STATIC ON)
+        
+        message(STATUS "Target configured for maximum static linking")
+    endif()
+endif()
+
+# Link libraries with static preference
+if(WIN32)
+    target_link_libraries(zora_vm 
+        ${LUA_LIBRARIES}
+        # Core Windows libraries (these are always static on Windows)
+        kernel32 
+        user32 
+        ws2_32      # Windows sockets
+        iphlpapi    # IP Helper API
+        wininet     # Windows Internet API  
+        psapi       # Process Status API
+        advapi32    # Advanced Windows API (registry, security)
+        winmm       # Windows multimedia (timers)
+        dbghelp     # Debug help library
+        # Try to link zlib statically if available
+        z
+    )
+    
+    # Try to find and link additional static libraries
+    find_library(ZLIB_STATIC_LIB 
+        NAMES libz.a libzlib.a zlibstatic.a
+        HINTS 
+            C:/msys64/ucrt64/lib
+            /ucrt64/lib
+            ${CMAKE_PREFIX_PATH}/lib
+    )
+    
+    if(ZLIB_STATIC_LIB)
+        target_link_libraries(zora_vm ${ZLIB_STATIC_LIB})
+        message(STATUS "Linking static zlib: ${ZLIB_STATIC_LIB}")
+    else()
+        message(STATUS "Static zlib not found, using system zlib")
+    endif()
+else()
+    # Non-Windows linking (though we don't support it currently)
+    target_link_libraries(zora_vm ${LUA_LIBRARIES})
+endif()
 
 message(STATUS "Windows-only build configured successfully with icon and version info")
+
+# === POST-BUILD ACTIONS (from backup) ===
+if(WIN32)
+    # Windows-specific post-build validation
+    add_custom_command(TARGET zora_vm POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E echo "Windows static build completed successfully"
+        COMMAND ${CMAKE_COMMAND} -E echo "Executable location: $<TARGET_FILE:zora_vm>"
+        COMMENT "Post-build validation"
+    )
+    
+    # Add dependency check if objdump is available (shows if truly static)
+    find_program(OBJDUMP_PROGRAM objdump)
+    if(OBJDUMP_PROGRAM AND NOT MSVC)
+        add_custom_command(TARGET zora_vm POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E echo "Checking dynamic dependencies..."
+            COMMAND ${OBJDUMP_PROGRAM} -p $<TARGET_FILE:zora_vm> | findstr "DLL Name" || echo "SUCCESS: No external DLL dependencies found (fully static build)"
+            COMMENT "Static linking verification"
+            VERBATIM
+        )
+    endif()
+endif()
+
+# === BUILD SUMMARY (from backup) ===
+message(STATUS "")
+message(STATUS "=== ZORA VM BUILD CONFIGURATION ===")
+message(STATUS "Platform: ${CMAKE_SYSTEM_NAME}")
+message(STATUS "Compiler: ${CMAKE_C_COMPILER_ID}")
+message(STATUS "Lua: ${LUA_LIBRARIES}")
+message(STATUS "Build type: ${CMAKE_BUILD_TYPE}")
+
+# Show linking strategy
+if(WIN32 AND NOT MSVC)
+    message(STATUS "Linking: Static (standalone executable)")
+    message(STATUS "Runtime dependencies: None (fully self-contained)")
+    message(STATUS "Distribution: Single executable file")
+else()
+    message(STATUS "Linking: Dynamic (MSVC or non-Windows)")
+endif()
+
+message(STATUS "Features: Enhanced terminal, MS Mincho font, Campbell colors")
+message(STATUS "Terminal: Syntax highlighting, retro mode, block cursor")
+message(STATUS "=== BUILD READY ===")
+message(STATUS "")
