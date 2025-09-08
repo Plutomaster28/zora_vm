@@ -73,6 +73,14 @@ void find_files_recursive(const char* dir_path, const char* pattern);
 void tree_command(int argc, char **argv);
 void print_tree_recursive(const char* dir_path, int depth);
 void systeminfo_command(int argc, char **argv);
+void sort_command(int argc, char **argv);
+void uniq_command(int argc, char **argv);
+void wc_command(int argc, char **argv);
+void awk_command(int argc, char **argv);
+void which_command(int argc, char **argv);
+void ln_command(int argc, char **argv);
+void diff_command(int argc, char **argv);
+void exit_command(int argc, char **argv);
 
 // Enhanced command parsing and execution
 void parse_and_execute_command_line(char *command_line);
@@ -102,6 +110,50 @@ char* get_flag_value(ParsedCommand* cmd, const char* flag);
 void print_command_syntax(const char* command_line);
 void highlight_command_parts(char* command_line);
 void calculate_directory_size(VNode* node, size_t* total_size, size_t* used_size);
+
+// Path normalization function
+void normalize_path(char* path) {
+    // Remove double slashes
+    char* src = path;
+    char* dst = path;
+    int last_was_slash = 0;
+    
+    while (*src) {
+        if (*src == '/') {
+            if (!last_was_slash) {
+                *dst++ = *src;
+                last_was_slash = 1;
+            }
+        } else {
+            *dst++ = *src;
+            last_was_slash = 0;
+        }
+        src++;
+    }
+    *dst = '\0';
+    
+    // Ensure root path is just "/"
+    if (strcmp(path, "") == 0) {
+        strcpy(path, "/");
+    }
+}
+
+// Helper function to build normalized paths
+void build_full_path(char* full_path, size_t size, const char* cwd, const char* relative_path) {
+    if (relative_path[0] == '/') {
+        // Absolute path
+        strncpy(full_path, relative_path, size - 1);
+    } else {
+        // Relative path
+        if (strcmp(cwd, "/") == 0) {
+            snprintf(full_path, size, "/%s", relative_path);
+        } else {
+            snprintf(full_path, size, "%s/%s", cwd, relative_path);
+        }
+    }
+    full_path[size - 1] = '\0';
+    normalize_path(full_path);
+}
 
 // Color support functions
 void set_color(int color);
@@ -423,13 +475,21 @@ void tail_command(int argc, char **argv) {
 }
 
 void grep_command(int argc, char **argv) {
-    if (argc < 3) {
-        printf("Usage: grep <pattern> <filename>\n");
+    if (argc < 2) {
+        printf("Usage: grep <pattern> [filename]\n");
+        printf("If no filename provided, reads from standard input (pipeline)\n");
         return;
     }
     
     char* pattern = argv[1];
-    char* filename = argv[2];
+    char* filename = (argc >= 3) ? argv[2] : NULL;
+    
+    // If no filename provided, this means we're in a pipeline - should not happen
+    // since pipeline code adds the temp file as argument
+    if (!filename) {
+        printf("grep: no input source specified\n");
+        return;
+    }
     
     char expanded_path[512];
     expand_path(filename, expanded_path, sizeof(expanded_path));
@@ -468,7 +528,7 @@ void grep_command(int argc, char **argv) {
                 
                 // Check if line contains pattern
                 if (strstr(line, pattern) != NULL) {
-                    printf("%d: %s\n", line_num, line);
+                    printf("%s\n", line);
                 }
                 
                 line_num++;
@@ -2749,6 +2809,16 @@ Command command_table[] = {
     #endif
 
     {"test-sandbox", test_sandbox_command, "Test sandbox security and isolation"},
+    
+    // Additional essential Unix commands
+    {"sort", sort_command, "Sort lines in text files"},
+    {"uniq", uniq_command, "Report or omit repeated lines"},
+    {"wc", wc_command, "Count lines, words, and characters in files"},
+    {"awk", awk_command, "Text processing and pattern scanning"},
+    {"which", which_command, "Locate a command"},
+    {"ln", ln_command, "Create links between files"},
+    {"diff", diff_command, "Compare files line by line"},
+    {"exit", exit_command, "Exit the shell and VM"},
 
     {NULL, NULL, NULL}
 };
@@ -2994,14 +3064,13 @@ int execute_pipeline(char *pipeline_str) {
         while (*first_cmd == ' ' || *first_cmd == '\t') first_cmd++;
         while (*second_cmd == ' ' || *second_cmd == '\t') second_cmd++;
         
-        // For now, implement basic pipe by redirecting first command to temp file
-        // and feeding that to second command (can be enhanced with real pipes later)
-        char temp_pipe_file[] = "/tmp/pipe_XXXXXX";
+        // Create temp file for pipe communication
+        char temp_pipe_file[] = "/tmp/pipe_data";
         
         // Execute first command with output redirected to temp file
         printf("Executing pipeline: %s | %s\n", first_cmd, second_cmd);
         
-        // Parse first command (increased buffer size)
+        // Parse first command
         char *first_args[256];
         int first_argc = 0;
         char *first_copy = strdup(first_cmd);
@@ -3012,13 +3081,13 @@ int execute_pipeline(char *pipeline_str) {
         }
         first_args[first_argc] = NULL;
         
-        // Execute first command (output would be captured in real implementation)
+        // Execute first command and capture output
         int result = 0;
         if (first_argc > 0) {
             execute_command_with_redirection(first_args, first_argc, NULL, temp_pipe_file, 0);
         }
         
-        // Execute second command with temp file as input
+        // Parse second command and modify it to read from temp file
         char *second_args[256];
         int second_argc = 0;
         char *second_copy = strdup(second_cmd);
@@ -3030,7 +3099,29 @@ int execute_pipeline(char *pipeline_str) {
         second_args[second_argc] = NULL;
         
         if (second_argc > 0) {
-            execute_command_with_redirection(second_args, second_argc, temp_pipe_file, NULL, 0);
+            // Special handling for commands that expect piped input
+            if (strcmp(second_args[0], "grep") == 0) {
+                // For grep, we need to modify arguments to read from temp file
+                if (second_argc >= 2) {
+                    // Shift arguments and add temp file as last argument
+                    second_args[second_argc] = temp_pipe_file;
+                    second_argc++;
+                    second_args[second_argc] = NULL;
+                    execute_simple_command(second_args, second_argc);
+                } else {
+                    printf("Error: grep requires a pattern argument\n");
+                }
+            } else if (strcmp(second_args[0], "head") == 0 || strcmp(second_args[0], "tail") == 0 || 
+                      strcmp(second_args[0], "cat") == 0 || strcmp(second_args[0], "less") == 0) {
+                // For file display commands, add temp file as argument
+                second_args[second_argc] = temp_pipe_file;
+                second_argc++;
+                second_args[second_argc] = NULL;
+                execute_simple_command(second_args, second_argc);
+            } else {
+                // For other commands, use input redirection
+                execute_command_with_redirection(second_args, second_argc, temp_pipe_file, NULL, 0);
+            }
         }
         
         // Clean up temp file
@@ -3152,14 +3243,10 @@ void redirect_printf(const char* format, ...) {
 int execute_command_with_redirection(char *args[], int argc, char *input_file, char *output_file, int append_mode) {
     // Handle output redirection using VFS
     if (output_file && strlen(output_file) > 0) {
-        // Build absolute path if relative
+        // Build normalized absolute path
         char full_path[512];
-        if (output_file[0] != '/') {
-            char* cwd = vfs_getcwd();
-            snprintf(full_path, sizeof(full_path), "%s/%s", cwd, output_file);
-        } else {
-            strcpy(full_path, output_file);
-        }
+        char* cwd = vfs_getcwd();
+        build_full_path(full_path, sizeof(full_path), cwd ? cwd : "/", output_file);
         
         printf("Redirecting output to: %s (%s)\n", full_path, append_mode ? "append" : "overwrite");
         fflush(stdout);
@@ -3179,11 +3266,48 @@ int execute_command_with_redirection(char *args[], int argc, char *input_file, c
                 }
             }
         }
+
+        // Create a temporary filename for stdout redirection
+        char temp_filename[256];
+        snprintf(temp_filename, sizeof(temp_filename), "temp_stdout_%d.tmp", (int)time(NULL));
         
-        // Execute the command with output captured
-        execute_simple_command_with_redirect(args, argc);
+        // Simple approach: just use freopen and restore with freopen
+        FILE* temp_file = freopen(temp_filename, "w", stdout);
+        if (temp_file) {
+            // Execute the command with stdout redirected
+            execute_simple_command(args, argc);
+            
+            // Flush and close
+            fflush(stdout);
+            fclose(temp_file);
+            
+            // Restore stdout to console - simple approach
+            freopen("CON", "w", stdout);
+            
+            // Read the captured output from temp file
+            FILE* read_temp = fopen(temp_filename, "r");
+            if (read_temp) {
+                fseek(read_temp, 0, SEEK_END);
+                long size = ftell(read_temp);
+                fseek(read_temp, 0, SEEK_SET);
+                
+                if (size > 0 && size < sizeof(redirect_buffer)) {
+                    redirect_buffer_size = fread(redirect_buffer, 1, size, read_temp);
+                    // Ensure buffer is properly terminated
+                    if (redirect_buffer_size < sizeof(redirect_buffer)) {
+                        redirect_buffer[redirect_buffer_size] = '\0';
+                    }
+                }
+                
+                fclose(read_temp);
+                remove(temp_filename); // Clean up temp file
+            }
+        } else {
+            // Fallback to original method if freopen fails
+            execute_simple_command_with_redirect(args, argc);
+        }
         
-        // Stop capturing and write to VFS
+        // Stop capturing
         redirect_active = 0;
         
         // Create file if it doesn't exist
@@ -3436,27 +3560,151 @@ void man_command(int argc, char **argv) {
 }
 
 void help_command(int argc, char **argv) {
-    printf("Available commands:\n");
-    for (int i = 0; i < command_table_size; i++) {
-        printf("  %s - %s\n", command_table[i].name, command_table[i].description);
+    if (argc > 1) {
+        // Show help for specific command
+        char* command_name = argv[1];
+        
+        // Search for the command in the command table
+        for (int i = 0; i < command_table_size; i++) {
+            if (command_table[i].name && strcmp(command_name, command_table[i].name) == 0) {
+                printf("\n=== Help for '%s' ===\n", command_name);
+                printf("Description: %s\n", command_table[i].description ? command_table[i].description : "No description available");
+                printf("Usage: %s\n", command_name);
+                
+                // Show specific usage examples for common commands
+                if (strcmp(command_name, "grep") == 0) {
+                    printf("Examples:\n");
+                    printf("  grep pattern file.txt       - Search for pattern in file\n");
+                    printf("  command | grep pattern       - Filter command output\n");
+                } else if (strcmp(command_name, "sort") == 0) {
+                    printf("Examples:\n");
+                    printf("  sort file.txt               - Sort lines alphabetically\n");
+                    printf("  sort -r file.txt            - Sort in reverse order\n");
+                    printf("  sort -n numbers.txt         - Sort numerically\n");
+                } else if (strcmp(command_name, "wc") == 0) {
+                    printf("Examples:\n");
+                    printf("  wc file.txt                 - Count lines, words, chars\n");
+                    printf("  wc -l file.txt              - Count lines only\n");
+                    printf("  command | wc                - Count command output\n");
+                }
+                printf("\n");
+                return;
+            }
+        }
+        printf("Command '%s' not found. Type 'help' to see all commands.\n", command_name);
+        return;
     }
     
-    printf("\nShell operators:\n");
-    printf("  ;           - Sequential execution (cmd1 ; cmd2)\n");
-    printf("  &&          - Conditional AND (cmd1 && cmd2 - run cmd2 only if cmd1 succeeds)\n");
-    printf("  ||          - Conditional OR (cmd1 || cmd2 - run cmd2 only if cmd1 fails)\n");
-    printf("  |           - Pipe output (cmd1 | cmd2 - send cmd1 output to cmd2)\n");
-    printf("  >           - Redirect output to file (cmd > file.txt)\n");
-    printf("  >>          - Append output to file (cmd >> file.txt)\n");
-    printf("  <           - Redirect input from file (cmd < file.txt)\n");
+    // Show categorized help
+    printf("\n");
+    printf("╔══════════════════════════════════════════════════════════════════════════════╗\n");
+    printf("║                            ZORA VM - MERL SHELL                            ║\n");
+    printf("║                        Unix-Compatible Command Environment                    ║\n");
+    printf("╚══════════════════════════════════════════════════════════════════════════════╝\n");
+    printf("\n");
     
-    printf("\nExamples:\n");
-    printf("  ls ; pwd                     - List files then show current directory\n");
-    printf("  test -f file.txt && cat file.txt  - Show file only if it exists\n");
-    printf("  ls missing_dir || echo 'Not found'  - Show error message if ls fails\n");
+    printf(" FILE SYSTEM COMMANDS:\n");
+    printf("  %-12s - List directory contents          %-12s - Print working directory\n", "ls", "pwd");
+    printf("  %-12s - Change directory                 %-12s - Create directory\n", "cd", "mkdir");
+    printf("  %-12s - Remove directory                 %-12s - Create empty file\n", "rmdir", "touch");
+    printf("  %-12s - Remove file                      %-12s - Copy file\n", "rm", "cp");
+    printf("  %-12s - Move/rename file                 %-12s - Display file contents\n", "mv", "cat");
+    printf("  %-12s - Edit text file                   %-12s - Find files by pattern\n", "edit", "find");
+    printf("  %-12s - Show directory tree              %-12s - Search files by name\n", "tree", "search");
+    printf("\n");
+    
+    printf(" FILE VIEWING & PROCESSING:\n");
+    printf("  %-12s - View file page by page           %-12s - Show file beginning\n", "less", "head");
+    printf("  %-12s - Show file end                    %-12s - Search patterns in files\n", "tail", "grep");
+    printf("  %-12s - Sort file lines                  %-12s - Remove duplicate lines\n", "sort", "uniq");
+    printf("  %-12s - Count lines/words/chars          %-12s - Text processing tool\n", "wc", "awk");
+    printf("  %-12s - Compare files                    %-12s - Create file links\n", "diff", "ln");
+    printf("\n");
+    
+    printf(" SYSTEM & PROCESS MANAGEMENT:\n");
+    printf("  %-12s - Show system information          %-12s - Display processes\n", "sysinfo", "htop");
+    printf("  %-12s - List active processes            %-12s - Create new process\n", "ps", "fork");
+    printf("  %-12s - Terminate process                %-12s - List background jobs\n", "kill", "jobs");
+    printf("  %-12s - Background process               %-12s - Foreground process\n", "bg", "fg");
+    printf("  %-12s - Show current date/time           %-12s - Show disk usage\n", "date", "df");
+    printf("  %-12s - Directory disk usage             %-12s - System information\n", "du", "uname");
+    printf("\n");
+    
+    printf(" NETWORK COMMANDS:\n");
+    printf("  %-12s - Configure network interface      %-12s - Send ping packets\n", "ifconfig", "ping");
+    printf("  %-12s - Show network connections         %-12s - DNS lookup\n", "netstat", "nslookup");
+    printf("  %-12s - Remote terminal access           %-12s - Download files\n", "ssh", "wget");
+    printf("  %-12s - Transfer data                    %-12s - Secure file copy\n", "curl", "scp");
+    printf("  %-12s - Configure firewall               %-12s - Set hostname\n", "iptables", "hostname");
+    printf("\n");
+    
+    printf(" ARCHIVE & COMPRESSION:\n");
+    printf("  %-12s - Archive files                    %-12s - Compress files\n", "tar", "gzip");
+    printf("  %-12s - Decompress files                 %-12s - Create zip archives\n", "gunzip", "zip");
+    printf("  %-12s - Extract zip archives             \n", "unzip");
+    printf("\n");
+    
+    printf(" PERMISSIONS & USERS:\n");
+    printf("  %-12s - Change file permissions          %-12s - Change file owner\n", "chmod", "chown");
+    printf("  %-12s - Show current user                %-12s - User login\n", "whoami", "login");
+    printf("  %-12s - User logout                      %-12s - Add new user\n", "logout", "useradd");
+    printf("  %-12s - Change password                  \n", "passwd");
+    printf("\n");
+    
+    printf(" ENVIRONMENT & VARIABLES:\n");
+    printf("  %-12s - Set environment variable         %-12s - Remove environment var\n", "set", "unset");
+    printf("  %-12s - Export environment variable      %-12s - Show all variables\n", "export", "env");
+    printf("  %-12s - Command history                  %-12s - Locate command\n", "history", "which");
+    printf("\n");
+    
+    printf(" TERMINAL CUSTOMIZATION:\n");
+    printf("  %-12s - Configure terminal styling       %-12s - Set terminal font\n", "style", "font");
+    printf("  %-12s - Set cursor style                 %-12s - Manage color schemes\n", "cursor", "colors");
+    printf("  %-12s - Toggle retro mode                %-12s - Syntax highlighting\n", "retro", "syntax");
+    printf("  %-12s - Theme control                    %-12s - List available themes\n", "theme", "themes");
+    printf("\n");
+    
+    printf(" VM SPECIFIC COMMANDS:\n");
+    printf("  %-12s - VM status information            %-12s - Reboot virtual machine\n", "vmstat", "reboot");
+    printf("  %-12s - Shutdown VM                      %-12s - Test VFS functionality\n", "shutdown", "testvfs");
+    printf("  %-12s - Debug VFS structure              %-12s - Execute binary files\n", "debugvfs", "exec");
+    printf("  %-12s - Sandbox status                   %-12s - Security testing\n", "sandbox-status", "test-sandbox");
+    printf("  %-12s - Exit shell and VM\n", "exit");
+    printf("\n");
+    
+    printf(" SCRIPTING & PROGRAMMING:\n");
+    printf("  %-12s - Execute Lua scripts              %-12s - Run Lua code directly\n", "lua", "luacode");
+    printf("  %-12s - Package management               %-12s - Sub-shell switcher\n", "tetra", "flipper");
+    printf("  %-12s - Repository management            \n", "pull");
+    printf("\n");
+    
+    printf(" SHELL OPERATORS:\n");
+    printf("  %-12s - Sequential execution (cmd1 ; cmd2)\n", ";");
+    printf("  %-12s - Conditional AND (cmd1 && cmd2 - run cmd2 only if cmd1 succeeds)\n", "&&");
+    printf("  %-12s - Conditional OR (cmd1 || cmd2 - run cmd2 only if cmd1 fails)\n", "||");
+    printf("  %-12s - Pipe output (cmd1 | cmd2 - send cmd1 output to cmd2)\n", "|");
+    printf("  %-12s - Redirect output to file (cmd > file.txt)\n", ">");
+    printf("  %-12s - Append output to file (cmd >> file.txt)\n", ">>");
+    printf("  %-12s - Redirect input from file (cmd < file.txt)\n", "<");
+    printf("\n");
+    
+    printf(" USAGE EXAMPLES:\n");
+    printf("  help grep                    - Get detailed help for grep command\n");
     printf("  ls | grep .txt               - List files and filter for .txt files\n");
-    printf("  echo 'Hello World' > output.txt     - Write text to file\n");
-    printf("  echo 'More text' >> output.txt      - Append text to file\n");
+    printf("  ps | grep myprocess          - Find specific processes\n");
+    printf("  help | grep file             - Find all file-related commands\n");
+    printf("  sort data.txt | uniq         - Sort and remove duplicates\n");
+    printf("  cat file.txt | wc -l         - Count lines in file\n");
+    printf("  echo 'Hello' > output.txt    - Write text to file\n");
+    printf("  command1 && command2         - Run command2 only if command1 succeeds\n");
+    printf("\n");
+    
+    printf(" QUICK HELP:\n");
+    printf("  Type 'help <command>' for detailed help on specific commands\n");
+    printf("  Type 'man <command>' for manual pages\n");
+    printf("  Type 'which <command>' to locate a command\n");
+    printf("  Use Tab completion for command names and file paths\n");
+    printf("\n");
 }
 
 void save_command(int argc, char* argv[]) {
@@ -4224,4 +4472,572 @@ void systeminfo_command(int argc, char **argv) {
     printf("\nBuild Date:            %s %s\n", __DATE__, __TIME__);
     printf("Build Platform:        Windows (MinGW)\n");
     printf("Virtual Silicon:       Meisei Engine\n");
+}
+
+// Additional Unix command implementations
+
+void sort_command(int argc, char **argv) {
+    if (argc < 2) {
+        printf("Usage: sort [OPTIONS] <filename>\n");
+        printf("Options:\n");
+        printf("  -r, --reverse      reverse sort order\n");
+        printf("  -n, --numeric      sort numerically\n");
+        printf("  -u, --unique       remove duplicates\n");
+        printf("  -h, --help         show this help message\n");
+        return;
+    }
+    
+    // Check for help flags first
+    for (int i = 1; i < argc; i++) {
+        if (strcmp(argv[i], "--help") == 0 || strcmp(argv[i], "-h") == 0) {
+            printf("sort - Sort lines in text files\n\n");
+            printf("Usage: sort [OPTIONS] <filename>\n\n");
+            printf("Options:\n");
+            printf("  -r, --reverse      Sort in reverse (descending) order\n");
+            printf("  -n, --numeric      Sort numerically instead of alphabetically\n");
+            printf("  -u, --unique       Remove duplicate lines from output\n");
+            printf("  -h, --help         Show this help message\n\n");
+            printf("Examples:\n");
+            printf("  sort file.txt              Sort file alphabetically\n");
+            printf("  sort -r file.txt           Sort file in reverse order\n");
+            printf("  sort -n numbers.txt        Sort file numerically\n");
+            printf("  sort -u file.txt           Sort and remove duplicates\n");
+            printf("  sort -rn file.txt          Sort numerically in reverse\n");
+            return;
+        }
+    }
+    
+    // Parse flags
+    int reverse = 0, numeric = 0, unique = 0;
+    char* filename = NULL;
+    
+    for (int i = 1; i < argc; i++) {
+        if (strcmp(argv[i], "-r") == 0 || strcmp(argv[i], "--reverse") == 0) {
+            reverse = 1;
+        } else if (strcmp(argv[i], "-n") == 0 || strcmp(argv[i], "--numeric") == 0) {
+            numeric = 1;
+        } else if (strcmp(argv[i], "-u") == 0 || strcmp(argv[i], "--unique") == 0) {
+            unique = 1;
+        } else {
+            filename = argv[i];
+        }
+    }
+    
+    if (!filename) {
+        printf("sort: no input file specified\n");
+        return;
+    }
+    
+    // Build full path
+    char full_path[512];
+    char* cwd = vfs_getcwd();
+    build_full_path(full_path, sizeof(full_path), cwd ? cwd : "/", filename);
+    
+    // Read file
+    void* data = NULL;
+    size_t size = 0;
+    if (vfs_read_file(full_path, &data, &size) != 0 || !data) {
+        printf("sort: %s: No such file or directory\n", full_path);
+        return;
+    }
+    
+    // Split into lines
+    char** lines = malloc(1000 * sizeof(char*));
+    int line_count = 0;
+    char* content = (char*)data;
+    char* line_start = content;
+    
+    for (size_t i = 0; i <= size; i++) {
+        if (i == size || content[i] == '\n') {
+            int line_len = (content + i) - line_start;
+            lines[line_count] = malloc(line_len + 1);
+            strncpy(lines[line_count], line_start, line_len);
+            lines[line_count][line_len] = '\0';
+            line_count++;
+            line_start = content + i + 1;
+            
+            if (line_count >= 1000) break; // Limit
+        }
+    }
+    
+    // Sort lines (simple bubble sort)
+    for (int i = 0; i < line_count - 1; i++) {
+        for (int j = 0; j < line_count - i - 1; j++) {
+            int compare;
+            if (numeric) {
+                compare = atoi(lines[j]) - atoi(lines[j + 1]);
+            } else {
+                compare = strcmp(lines[j], lines[j + 1]);
+            }
+            
+            if ((reverse && compare < 0) || (!reverse && compare > 0)) {
+                char* temp = lines[j];
+                lines[j] = lines[j + 1];
+                lines[j + 1] = temp;
+            }
+        }
+    }
+    
+    // Print sorted lines
+    for (int i = 0; i < line_count; i++) {
+        if (unique && i > 0 && strcmp(lines[i], lines[i-1]) == 0) {
+            continue; // Skip duplicates
+        }
+        printf("%s\n", lines[i]);
+        free(lines[i]);
+    }
+    
+    free(lines);
+}
+
+void uniq_command(int argc, char **argv) {
+    if (argc < 2) {
+        printf("Usage: uniq [OPTIONS] <filename>\n");
+        printf("Options:\n");
+        printf("  -c         prefix lines with count\n");
+        printf("  -d         only print duplicate lines\n");
+        printf("  -u         only print unique lines\n");
+        return;
+    }
+    
+    // Parse flags
+    int count = 0, duplicates_only = 0, unique_only = 0;
+    char* filename = NULL;
+    
+    for (int i = 1; i < argc; i++) {
+        if (strcmp(argv[i], "-c") == 0) {
+            count = 1;
+        } else if (strcmp(argv[i], "-d") == 0) {
+            duplicates_only = 1;
+        } else if (strcmp(argv[i], "-u") == 0) {
+            unique_only = 1;
+        } else {
+            filename = argv[i];
+        }
+    }
+    
+    if (!filename) {
+        printf("uniq: no input file specified\n");
+        return;
+    }
+    
+    // Build full path
+    char full_path[512];
+    char* cwd = vfs_getcwd();
+    build_full_path(full_path, sizeof(full_path), cwd ? cwd : "/", filename);
+    
+    // Read file
+    void* data = NULL;
+    size_t size = 0;
+    if (vfs_read_file(full_path, &data, &size) != 0 || !data) {
+        printf("uniq: %s: No such file or directory\n", full_path);
+        return;
+    }
+    
+    // Process lines
+    char* content = (char*)data;
+    char prev_line[1024] = "";
+    char curr_line[1024];
+    int line_count = 1;
+    int line_pos = 0;
+    
+    for (size_t i = 0; i <= size; i++) {
+        if (i == size || content[i] == '\n') {
+            curr_line[line_pos] = '\0';
+            
+            if (strcmp(curr_line, prev_line) == 0) {
+                line_count++;
+            } else {
+                // Print previous line if conditions met
+                if (strlen(prev_line) > 0) {
+                    int should_print = 1;
+                    if (duplicates_only && line_count == 1) should_print = 0;
+                    if (unique_only && line_count > 1) should_print = 0;
+                    
+                    if (should_print) {
+                        if (count) {
+                            printf("%6d %s\n", line_count, prev_line);
+                        } else {
+                            printf("%s\n", prev_line);
+                        }
+                    }
+                }
+                strcpy(prev_line, curr_line);
+                line_count = 1;
+            }
+            line_pos = 0;
+        } else {
+            if (line_pos < 1023) {
+                curr_line[line_pos++] = content[i];
+            }
+        }
+    }
+    
+    // Handle last line
+    if (strlen(prev_line) > 0) {
+        int should_print = 1;
+        if (duplicates_only && line_count == 1) should_print = 0;
+        if (unique_only && line_count > 1) should_print = 0;
+        
+        if (should_print) {
+            if (count) {
+                printf("%6d %s\n", line_count, prev_line);
+            } else {
+                printf("%s\n", prev_line);
+            }
+        }
+    }
+}
+
+void wc_command(int argc, char **argv) {
+    if (argc < 2) {
+        printf("Usage: wc [OPTIONS] <filename>\n");
+        printf("Options:\n");
+        printf("  -l         count lines only\n");
+        printf("  -w         count words only\n");
+        printf("  -c         count characters only\n");
+        return;
+    }
+    
+    // Parse flags
+    int lines_only = 0, words_only = 0, chars_only = 0;
+    char* filename = NULL;
+    
+    for (int i = 1; i < argc; i++) {
+        if (strcmp(argv[i], "-l") == 0) {
+            lines_only = 1;
+        } else if (strcmp(argv[i], "-w") == 0) {
+            words_only = 1;
+        } else if (strcmp(argv[i], "-c") == 0) {
+            chars_only = 1;
+        } else {
+            filename = argv[i];
+        }
+    }
+    
+    if (!filename) {
+        printf("wc: no input file specified\n");
+        return;
+    }
+    
+    // Build full path
+    char full_path[512];
+    char* cwd = vfs_getcwd();
+    build_full_path(full_path, sizeof(full_path), cwd ? cwd : "/", filename);
+    
+    // Read file
+    void* data = NULL;
+    size_t size = 0;
+    if (vfs_read_file(full_path, &data, &size) != 0 || !data) {
+        printf("wc: %s: No such file or directory\n", full_path);
+        return;
+    }
+    
+    // Count lines, words, characters
+    char* content = (char*)data;
+    int lines = 0, words = 0, chars = (int)size;
+    int in_word = 0;
+    
+    for (size_t i = 0; i < size; i++) {
+        if (content[i] == '\n') {
+            lines++;
+        }
+        
+        if (isspace(content[i])) {
+            in_word = 0;
+        } else if (!in_word) {
+            words++;
+            in_word = 1;
+        }
+    }
+    
+    // Print results
+    if (lines_only) {
+        printf("%d\n", lines);
+    } else if (words_only) {
+        printf("%d\n", words);
+    } else if (chars_only) {
+        printf("%d\n", chars);
+    } else {
+        printf("%8d %8d %8d %s\n", lines, words, chars, filename);
+    }
+}
+
+void awk_command(int argc, char **argv) {
+    if (argc < 3) {
+        printf("Usage: awk '<pattern>' <filename>\n");
+        printf("Simple awk implementation - basic pattern matching only\n");
+        printf("Examples:\n");
+        printf("  awk '{print $1}' file.txt    - print first field\n");
+        printf("  awk '{print $NF}' file.txt   - print last field\n");
+        printf("  awk '{print NF}' file.txt    - print number of fields\n");
+        return;
+    }
+    
+    char* pattern = argv[1];
+    char* filename = argv[2];
+    
+    // Build full path
+    char full_path[512];
+    char* cwd = vfs_getcwd();
+    build_full_path(full_path, sizeof(full_path), cwd ? cwd : "/", filename);
+    
+    // Read file
+    void* data = NULL;
+    size_t size = 0;
+    if (vfs_read_file(full_path, &data, &size) != 0 || !data) {
+        printf("awk: %s: No such file or directory\n", full_path);
+        return;
+    }
+    
+    // Process each line
+    char* content = (char*)data;
+    char line[1024];
+    int line_pos = 0;
+    
+    for (size_t i = 0; i <= size; i++) {
+        if (i == size || content[i] == '\n') {
+            line[line_pos] = '\0';
+            
+            // Simple awk processing
+            if (strstr(pattern, "print $1")) {
+                // Print first field
+                char* token = strtok(line, " \t");
+                if (token) printf("%s\n", token);
+            } else if (strstr(pattern, "print $NF")) {
+                // Print last field
+                char* fields[100];
+                int field_count = 0;
+                char* token = strtok(line, " \t");
+                while (token && field_count < 100) {
+                    fields[field_count++] = token;
+                    token = strtok(NULL, " \t");
+                }
+                if (field_count > 0) printf("%s\n", fields[field_count - 1]);
+            } else if (strstr(pattern, "print NF")) {
+                // Print number of fields
+                int field_count = 0;
+                char* token = strtok(line, " \t");
+                while (token) {
+                    field_count++;
+                    token = strtok(NULL, " \t");
+                }
+                printf("%d\n", field_count);
+            } else {
+                printf("awk: pattern '%s' not implemented\n", pattern);
+                break;
+            }
+            
+            line_pos = 0;
+        } else {
+            if (line_pos < 1023) {
+                line[line_pos++] = content[i];
+            }
+        }
+    }
+}
+
+void which_command(int argc, char **argv) {
+    if (argc < 2) {
+        printf("Usage: which [OPTIONS] <command>\n");
+        printf("Options:\n");
+        printf("  -h, --help         show this help message\n");
+        return;
+    }
+    
+    // Check for help flags first
+    if (strcmp(argv[1], "--help") == 0 || strcmp(argv[1], "-h") == 0) {
+        printf("which - Locate a command\n\n");
+        printf("Usage: which <command>\n\n");
+        printf("Description:\n");
+        printf("  Searches for the specified command in the shell's command table\n");
+        printf("  and virtual filesystem paths, then displays the full path.\n\n");
+        printf("Examples:\n");
+        printf("  which ls               Show location of 'ls' command\n");
+        printf("  which sort             Show location of 'sort' command\n");
+        printf("  which nonexistent      Show error for missing command\n");
+        return;
+    }
+    
+    char* command = argv[1];
+    
+    // Check if command exists in command table
+    for (int i = 0; i < command_table_size; i++) {
+        if (command_table[i].name && strcmp(command, command_table[i].name) == 0) {
+            printf("/bin/%s\n", command);
+            return;
+        }
+    }
+    
+    // Check common binary paths
+    const char* paths[] = {"/bin", "/usr/bin", "/scripts"};
+    for (int i = 0; i < 3; i++) {
+        char full_path[512];
+        snprintf(full_path, sizeof(full_path), "%s/%s", paths[i], command);
+        if (vfs_find_node(full_path)) {
+            printf("%s\n", full_path);
+            return;
+        }
+    }
+    
+    printf("which: %s: command not found\n", command);
+}
+
+void ln_command(int argc, char **argv) {
+    if (argc < 3) {
+        printf("Usage: ln [OPTIONS] <target> <link_name>\n");
+        printf("Options:\n");
+        printf("  -s         create symbolic link\n");
+        return;
+    }
+    
+    int symbolic = 0;
+    char* target = NULL;
+    char* link_name = NULL;
+    
+    for (int i = 1; i < argc; i++) {
+        if (strcmp(argv[i], "-s") == 0) {
+            symbolic = 1;
+        } else if (!target) {
+            target = argv[i];
+        } else if (!link_name) {
+            link_name = argv[i];
+        }
+    }
+    
+    if (!target || !link_name) {
+        printf("ln: missing target or link name\n");
+        return;
+    }
+    
+    if (symbolic) {
+        printf("ln: Created symbolic link '%s' -> '%s' (simulated)\n", link_name, target);
+    } else {
+        printf("ln: Created hard link '%s' -> '%s' (simulated)\n", link_name, target);
+    }
+    printf("Note: Link creation is simulated in the VM environment\n");
+}
+
+void diff_command(int argc, char **argv) {
+    if (argc < 3) {
+        printf("Usage: diff <file1> <file2>\n");
+        return;
+    }
+    
+    char* file1 = argv[1];
+    char* file2 = argv[2];
+    
+    // Build full paths
+    char full_path1[512], full_path2[512];
+    char* cwd = vfs_getcwd();
+    build_full_path(full_path1, sizeof(full_path1), cwd ? cwd : "/", file1);
+    build_full_path(full_path2, sizeof(full_path2), cwd ? cwd : "/", file2);
+    
+    // Read both files
+    void* data1 = NULL, *data2 = NULL;
+    size_t size1 = 0, size2 = 0;
+    
+    if (vfs_read_file(full_path1, &data1, &size1) != 0 || !data1) {
+        printf("diff: %s: No such file or directory\n", full_path1);
+        return;
+    }
+    
+    if (vfs_read_file(full_path2, &data2, &size2) != 0 || !data2) {
+        printf("diff: %s: No such file or directory\n", full_path2);
+        return;
+    }
+    
+    // Simple comparison
+    if (size1 == size2 && memcmp(data1, data2, size1) == 0) {
+        // Files are identical
+        return;
+    }
+    
+    printf("--- %s\n", file1);
+    printf("+++ %s\n", file2);
+    
+    // Split into lines and compare
+    char** lines1 = malloc(1000 * sizeof(char*));
+    char** lines2 = malloc(1000 * sizeof(char*));
+    int count1 = 0, count2 = 0;
+    
+    // Split file1 into lines
+    char* content1 = (char*)data1;
+    char* line_start = content1;
+    for (size_t i = 0; i <= size1; i++) {
+        if (i == size1 || content1[i] == '\n') {
+            int line_len = (content1 + i) - line_start;
+            lines1[count1] = malloc(line_len + 1);
+            strncpy(lines1[count1], line_start, line_len);
+            lines1[count1][line_len] = '\0';
+            count1++;
+            line_start = content1 + i + 1;
+            if (count1 >= 1000) break;
+        }
+    }
+    
+    // Split file2 into lines
+    char* content2 = (char*)data2;
+    line_start = content2;
+    for (size_t i = 0; i <= size2; i++) {
+        if (i == size2 || content2[i] == '\n') {
+            int line_len = (content2 + i) - line_start;
+            lines2[count2] = malloc(line_len + 1);
+            strncpy(lines2[count2], line_start, line_len);
+            lines2[count2][line_len] = '\0';
+            count2++;
+            line_start = content2 + i + 1;
+            if (count2 >= 1000) break;
+        }
+    }
+    
+    // Simple line-by-line comparison
+    int max_lines = (count1 > count2) ? count1 : count2;
+    for (int i = 0; i < max_lines; i++) {
+        char* line1 = (i < count1) ? lines1[i] : NULL;
+        char* line2 = (i < count2) ? lines2[i] : NULL;
+        
+        if (!line1) {
+            printf("+%s\n", line2);
+        } else if (!line2) {
+            printf("-%s\n", line1);
+        } else if (strcmp(line1, line2) != 0) {
+            printf("-%s\n", line1);
+            printf("+%s\n", line2);
+        }
+    }
+    
+    // Cleanup
+    for (int i = 0; i < count1; i++) free(lines1[i]);
+    for (int i = 0; i < count2; i++) free(lines2[i]);
+    free(lines1);
+    free(lines2);
+}
+
+void exit_command(int argc, char **argv) {
+    int exit_code = 0;
+    
+    // Check for help flags
+    if (argc > 1 && (strcmp(argv[1], "--help") == 0 || strcmp(argv[1], "-h") == 0)) {
+        printf("exit - Exit the shell\n\n");
+        printf("Usage: exit [exit_code]\n\n");
+        printf("Description:\n");
+        printf("  Terminates the shell and VM with an optional exit code.\n");
+        printf("  If no exit code is provided, defaults to 0 (success).\n\n");
+        printf("Examples:\n");
+        printf("  exit                   Exit with code 0\n");
+        printf("  exit 1                 Exit with code 1\n");
+        return;
+    }
+    
+    // Parse exit code if provided
+    if (argc > 1) {
+        exit_code = atoi(argv[1]);
+    }
+    
+    printf("Exiting VM with code %d...\n", exit_code);
+    fflush(stdout);
+    
+    // Exit the VM
+    exit(exit_code);
 }

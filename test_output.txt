@@ -1,0 +1,632 @@
+Starting Zora VM...
+Initializing VM crash protection...
+VM crash protection installed (disabled by default)
+Initializing sandbox...
+Initializing Windows sandbox environment...
+Windows sandbox environment initialized
+Setting memory limit to 64 MB...
+Memory limit set to: 67108864 bytes (64.00 MB)
+  - Virtual memory allocation will be monitored
+  - Out-of-memory protection enabled
+CPU limit set to: 80%
+  - Process priority will be adjusted
+  - CPU usage monitoring enabled
+Enabling strict sandbox mode...
+Windows sandbox strict mode: ENABLED
+  - Enhanced Windows security policies activated
+  - Stricter resource monitoring enabled
+  - Additional access controls applied
+Network access: BLOCKED
+  - All outbound network connections blocked
+  - Socket creation restricted
+  - DNS resolution blocked
+File system access: BLOCKED
+  - Host file system access blocked
+  - Only VFS operations allowed
+  - System directories protected
+System calls: BLOCKED
+  - Dangerous system calls blocked
+  - Process creation restricted
+  - Registry access blocked
+Initializing virtualization layer...
+Virtual filesystem initialized
+System call interception initialized
+Virtualization layer initialized
+Initializing VM environment...
+VM environment initialized
+Initializing ZORA Kernel...
+
++--------------------------------------------------------------+
+|                        ZORA KERNEL v2.1.0                        |
+|              Advanced Virtual Machine Operating System          |
+|                    Built on Sep  8 2025 at 13:53:42                    |
++--------------------------------------------------------------+
+
+[KERNEL] DEBUG MODE ENABLED
+[KERNEL] VERBOSE LOGGING ENABLED
+[17:51:50.788] [INFO] [HWDET] Starting hardware detection...
+[17:51:50.788] [INFO] [HWDET] CPU Architecture: x86_64
+[17:51:50.788] [INFO] [HWDET] CPU Count: 20 cores
+[17:51:50.788] [INFO] [HWDET] Page Size: 4096 bytes
+[17:51:50.788] [INFO] [HWDET] Total Physical Memory: 32627 MB
+[17:51:50.788] [INFO] [HWDET] Available Physical Memory: 18377 MB
+[17:51:50.788] [INFO] [INIT] Starting late initialization phase...
+[17:51:50.788] [INFO] [MM] Initializing memory management subsystem...
+Allocating 67108864 bytes (64 MB) for VM memory...
+Memory initialized successfully: 64 MB allocated
+[17:51:50.799] [INFO] [MM] Memory manager initialized - 64 MB virtual memory
+[17:51:50.799] [INFO] [SCHED] Initializing process scheduler...
+[17:51:50.799] [INFO] [SCHED] Scheduler initialized - preemptive multitasking enabled
+[17:51:50.799] [INFO] [DEVMGR] Initializing device manager...
+[DEVMGR] Device manager initialized
+[DEVMGR] Registered driver: Terminal Driver v1.0
+[DEVMGR] Registered driver: Virtual Disk Driver v1.0
+[DEVMGR] Registered driver: Virtual Network Driver v1.0
+[DEVMGR] Created device: ID=1, Name=Virtual Terminal, Class=3, Type=12
+[DEVDRV] Terminal driver initialized for device Virtual Terminal
+[DEVMGR] Registered device Virtual Terminal with driver Terminal Driver
+[DEVMGR] Created device: ID=2, Name=Virtual Disk, Class=0, Type=0
+[DEVDRV] Disk driver initialized for device Virtual Disk
+[DEVMGR] Registered device Virtual Disk with driver Virtual Disk Driver
+[DEVMGR] Created device: ID=3, Name=Virtual Network, Class=1, Type=5
+[DEVDRV] Network driver initialized for device Virtual Network
+[DEVMGR] Registered device Virtual Network with driver Virtual Network Driver
+[DEVMGR] Device subsystem initialized with 3 devices
+[17:51:50.799] [INFO] [DEVMGR] Device manager initialized
+[17:51:50.799] [INFO] [VFS] Initializing virtual file system...
+[17:51:50.799] [INFO] [VFS] Virtual file system ready
+[17:51:50.799] [INFO] [NET] Initializing network stack...
+[17:51:50.799] [INFO] [NET] Network stack ready
+CPU initialized
+[17:51:50.799] [INFO] [INIT] Late initialization completed successfully
+[17:51:50.799] [INFO] [INIT] ðŸš€ Zora Kernel is now running!
+[17:51:50.799] [INFO] [INIT] System ready for user applications
+Initializing CPU...
+CPU initialized
+Initializing memory (64 MB)...
+Memory already initialized
+Memory initialization successful!
+Initializing MERL shell...
+MERL shell initialized in VM environment
+Initializing VFS...
+Autodiscovering host root directories in ./ZoraPerl...
+Autodiscovery complete.
+Initializing virtual network...
+Initializing Zora VM Virtual Network...
+Virtual Network initialized successfully
+VM Network Configuration:
+   IP Address:    10.0.2.15
+   Gateway:       10.0.2.1
+   Subnet Mask:   255.255.255.0
+   DNS Server:    10.0.2.3
+   NAT:           ENABLED
+   Security:      ENABLED (Safe Mode)
+Initializing Lua scripting engine...
+Lua VM initialized successfully with security restrictions
+Initializing binary executor...
+Initializing Windows binary executor...
+Initializing Meisei Virtual Silicon...
+Initializing Meisei Virtual Silicon...
+Virtual Silicon using 40 worker threads
+Meisei Virtual Silicon initialized successfully!
+Target performance boost: 700minimum
+Zora VM initialized successfully. Starting MERL shell...
+========================================
+Desktop subsystem initializing...
+Desktop: GTK2_RC_FILES=./ZoraPerl\etc\themes\cde\gtk-2.0\gtkrc
+Desktop: Theme applied (cde)
+Applied Campbell color scheme
+MS Mincho font preference set (manual terminal config may be required)
+To manually set font: Right-click terminal title bar > Properties > Font
+Terminal styling initialized with Campbell colors and MS Mincho font
+=== Zora VM - MERL Shell ===
+Virtual Machine OS with MERL Shell
+Enhanced Terminal: MS Mincho font, Campbell colors, Block cursor
+Type 'help' for available commands, 'terminal-demo' for styling demo.
+Terminal commands: 'style', 'font', 'cursor', 'colors', 'retro', 'syntax'
+Type 'exit' to quit VM.
+VM Commands: vmstat, reboot, shutdown
+
+[92mguest[0m[37m@[0m[94mzora-vm[0m[37m:[0m[96m/[0m[92m> [0m$ [1m[96mhelp[0m
+Available commands:
+  man - Displays information about commands.
+  help - Displays the help menu.
+  sysinfo - Displays system information and credits.
+  pwd - Prints the current working directory.
+  ls - Lists the contents of the current directory.
+  cd - Changes the current working directory.
+  mkdir - Creates a new directory.
+  rmdir - Removes a directory.
+  touch - Creates a new file.
+  rm - Removes a file.
+  cp - Copies a file.
+  mv - Moves a file.
+  rename - Renames a file.
+  search - Searches for files matching a pattern.
+  edit - Edits a text file.
+  run - Runs an external program.
+  clear - Clears the screen.
+  echo - Prints a string to the console.
+  cat - Displays the contents of a file.
+  tetra - Handles package management.
+  flipper - Switches to sub-shells.
+  pull - Takes a directory from the MERL goodies repository.
+  whoami - Displays the current logged-in user.
+  useradd - Adds a new user (placeholder).
+  login - Logs in as a specified user.
+  logout - Logs out the current user.
+  passwd - Changes the password for the current user (placeholder).
+  route - Routes commands to the appropriate handlers.
+  fork - Creates a new process.
+  kill - Terminates a process by ID.
+  ps - Lists all active processes.
+  read - Reads a file.
+  write - Writes to a file.
+  color-and-test - Displays colors and system info.
+  neofetch - Display system information with logo (alias for color-and-test).
+  vmstat - Shows virtual machine status.
+  reboot - Reboots the virtual machine.
+  shutdown - Shuts down the virtual machine.
+  save - Save file to persistent storage
+  load - Load directory from persistent storage
+  mount - Mount host directory to VM path
+  sync - Sync all persistent storage
+  pls - List persistent storage contents
+  ifconfig - Configure network interface
+  ping - Send ICMP ping packets
+  netstat - Display network connections
+  nslookup - Query DNS servers
+  telnet - Connect to remote host
+  wget - Download files from web
+  curl - Transfer data from servers
+  ssh - Secure shell connection
+  iptables - Configure firewall rules
+  testvfs - Test VFS functionality
+  debugvfs - Debug VFS structure
+  lua - Execute Lua script from /scripts (fallback /persistent/scripts)
+  luacode - Execute Lua code directly.
+  exec - Execute binary from /persistent/data/
+  run-windows - Execute Windows binary with sandboxing
+  list-binaries - List available binaries and their types
+  sandbox-status - Show sandbox execution status
+  desktop - Desktop control (restart/status)
+  theme - Switch desktop theme
+  themes - List available desktop themes
+  find - Search for files by name pattern
+  tree - Display directory tree structure
+  less - View file contents page by page
+  head - Display the beginning of a file
+  tail - Display the end of a file
+  grep - Search for patterns within files
+  chmod - Change file permissions
+  chown - Change file owner and group
+  htop - Display sorted information about processes in real-time
+  jobs - List background jobs
+  bg - Send a stopped process to the background
+  fg - Bring a background process to the foreground
+  date - Display or set the system date and time
+  df - Display disk space usage
+  du - Display disk usage of files and directories
+  uname - Print system information
+  systeminfo - Display detailed system information
+  history - Display command history
+  scp - Secure copy for transferring files over SSH
+  tar - Archive files and directories
+  gzip - Compress files
+  gunzip - Decompress files
+  zip - Create zip archives
+  unzip - Extract zip archives
+  hostname - Display or set the system hostname
+  set - Set environment variable
+  unset - Unset environment variable
+  export - Export environment variable
+  env - Display environment variables
+  style - Configure terminal styling (init/reset/save/load)
+  font - Set terminal font (MS Mincho recommended)
+  cursor - Set cursor style (block/underscore/vertical)
+  colors - Manage color schemes (Campbell PowerShell)
+  retro - Enable/disable retro terminal mode
+  syntax - Toggle command syntax highlighting
+  terminal-demo - Demonstrate terminal enhancements
+  test-sandbox - Test sandbox security and isolation
+  (null) - (null)
+
+Shell operators:
+  ;           - Sequential execution (cmd1 ; cmd2)
+  &&          - Conditional AND (cmd1 && cmd2 - run cmd2 only if cmd1 succeeds)
+  ||          - Conditional OR (cmd1 || cmd2 - run cmd2 only if cmd1 fails)
+  |           - Pipe output (cmd1 | cmd2 - send cmd1 output to cmd2)
+  >           - Redirect output to file (cmd > file.txt)
+  >>          - Append output to file (cmd >> file.txt)
+  <           - Redirect input from file (cmd < file.txt)
+
+Examples:
+  ls ; pwd                     - List files then show current directory
+  test -f file.txt && cat file.txt  - Show file only if it exists
+  ls missing_dir || echo 'Not found'  - Show error message if ls fails
+  ls | grep .txt               - List files and filter for .txt files
+  echo 'Hello World' > output.txt     - Write text to file
+  echo 'More text' >> output.txt      - Append text to file
+[92mguest[0m[37m@[0m[94mzora-vm[0m[37m:[0m[96m/[0m[92m> [0m$ [1m[96mhelp[0m [97mgrep[0m
+Available commands:
+  man - Displays information about commands.
+  help - Displays the help menu.
+  sysinfo - Displays system information and credits.
+  pwd - Prints the current working directory.
+  ls - Lists the contents of the current directory.
+  cd - Changes the current working directory.
+  mkdir - Creates a new directory.
+  rmdir - Removes a directory.
+  touch - Creates a new file.
+  rm - Removes a file.
+  cp - Copies a file.
+  mv - Moves a file.
+  rename - Renames a file.
+  search - Searches for files matching a pattern.
+  edit - Edits a text file.
+  run - Runs an external program.
+  clear - Clears the screen.
+  echo - Prints a string to the console.
+  cat - Displays the contents of a file.
+  tetra - Handles package management.
+  flipper - Switches to sub-shells.
+  pull - Takes a directory from the MERL goodies repository.
+  whoami - Displays the current logged-in user.
+  useradd - Adds a new user (placeholder).
+  login - Logs in as a specified user.
+  logout - Logs out the current user.
+  passwd - Changes the password for the current user (placeholder).
+  route - Routes commands to the appropriate handlers.
+  fork - Creates a new process.
+  kill - Terminates a process by ID.
+  ps - Lists all active processes.
+  read - Reads a file.
+  write - Writes to a file.
+  color-and-test - Displays colors and system info.
+  neofetch - Display system information with logo (alias for color-and-test).
+  vmstat - Shows virtual machine status.
+  reboot - Reboots the virtual machine.
+  shutdown - Shuts down the virtual machine.
+  save - Save file to persistent storage
+  load - Load directory from persistent storage
+  mount - Mount host directory to VM path
+  sync - Sync all persistent storage
+  pls - List persistent storage contents
+  ifconfig - Configure network interface
+  ping - Send ICMP ping packets
+  netstat - Display network connections
+  nslookup - Query DNS servers
+  telnet - Connect to remote host
+  wget - Download files from web
+  curl - Transfer data from servers
+  ssh - Secure shell connection
+  iptables - Configure firewall rules
+  testvfs - Test VFS functionality
+  debugvfs - Debug VFS structure
+  lua - Execute Lua script from /scripts (fallback /persistent/scripts)
+  luacode - Execute Lua code directly.
+  exec - Execute binary from /persistent/data/
+  run-windows - Execute Windows binary with sandboxing
+  list-binaries - List available binaries and their types
+  sandbox-status - Show sandbox execution status
+  desktop - Desktop control (restart/status)
+  theme - Switch desktop theme
+  themes - List available desktop themes
+  find - Search for files by name pattern
+  tree - Display directory tree structure
+  less - View file contents page by page
+  head - Display the beginning of a file
+  tail - Display the end of a file
+  grep - Search for patterns within files
+  chmod - Change file permissions
+  chown - Change file owner and group
+  htop - Display sorted information about processes in real-time
+  jobs - List background jobs
+  bg - Send a stopped process to the background
+  fg - Bring a background process to the foreground
+  date - Display or set the system date and time
+  df - Display disk space usage
+  du - Display disk usage of files and directories
+  uname - Print system information
+  systeminfo - Display detailed system information
+  history - Display command history
+  scp - Secure copy for transferring files over SSH
+  tar - Archive files and directories
+  gzip - Compress files
+  gunzip - Decompress files
+  zip - Create zip archives
+  unzip - Extract zip archives
+  hostname - Display or set the system hostname
+  set - Set environment variable
+  unset - Unset environment variable
+  export - Export environment variable
+  env - Display environment variables
+  style - Configure terminal styling (init/reset/save/load)
+  font - Set terminal font (MS Mincho recommended)
+  cursor - Set cursor style (block/underscore/vertical)
+  colors - Manage color schemes (Campbell PowerShell)
+  retro - Enable/disable retro terminal mode
+  syntax - Toggle command syntax highlighting
+  terminal-demo - Demonstrate terminal enhancements
+  test-sandbox - Test sandbox security and isolation
+  (null) - (null)
+
+Shell operators:
+  ;           - Sequential execution (cmd1 ; cmd2)
+  &&          - Conditional AND (cmd1 && cmd2 - run cmd2 only if cmd1 succeeds)
+  ||          - Conditional OR (cmd1 || cmd2 - run cmd2 only if cmd1 fails)
+  |           - Pipe output (cmd1 | cmd2 - send cmd1 output to cmd2)
+  >           - Redirect output to file (cmd > file.txt)
+  >>          - Append output to file (cmd >> file.txt)
+  <           - Redirect input from file (cmd < file.txt)
+
+Examples:
+  ls ; pwd                     - List files then show current directory
+  test -f file.txt && cat file.txt  - Show file only if it exists
+  ls missing_dir || echo 'Not found'  - Show error message if ls fails
+  ls | grep .txt               - List files and filter for .txt files
+  echo 'Hello World' > output.txt     - Write text to file
+  echo 'More text' >> output.txt      - Append text to file
+[92mguest[0m[37m@[0m[94mzora-vm[0m[37m:[0m[96m/[0m[92m> [0m$ [1m[96mecho[0m [97m"Testing[0m [97mbasic[0m [97mcommands"[0m
+"Testing basic commands" 
+[92mguest[0m[37m@[0m[94mzora-vm[0m[37m:[0m[96m/[0m[92m> [0m$ [1m[96mpwd[0m
+Current Directory: /
+[92mguest[0m[37m@[0m[94mzora-vm[0m[37m:[0m[96m/[0m[92m> [0m$ [1m[96mls[0m
+Contents of [4m[94m/[0m:
+test_vfs.txt  testfile.txt  test2.txt  test.txt  [4m[94mscripts[0m/  [4m[94mprojects[0m/  newfile2.txt  json  [4m[94mdocuments[0m/  [4m[94mdata[0m/  [4m[94mvar[0m/  [4m[94musr[0m/  [4m[94metc[0m/  [4m[94mtmp[0m/  [4m[94mhome[0m/  [4m[94mbin[0m/  
+[92mguest[0m[37m@[0m[94mzora-vm[0m[37m:[0m[96m/[0m[92m> [0m$ [1m[96mmkdir[0m [97mtestdir[0m
+Directory created: //testdir
+[92mguest[0m[37m@[0m[94mzora-vm[0m[37m:[0m[96m/[0m[92m> [0m$ [1m[96mcd[0m [97mtestdir[0m
+Changed directory to: /testdir
+[92mguest[0m[37m@[0m[94mzora-vm[0m[37m:[0m[96m/testdir[0m[92m> [0m$ [1m[96mpwd[0m
+Current Directory: /testdir
+[92mguest[0m[37m@[0m[94mzora-vm[0m[37m:[0m[96m/testdir[0m[92m> [0m$ [1m[96mecho[0m [97m"Hello[0m [97mWorld"[0m [93m>[0m [4m[94mtest.txt[0m
+Redirecting output to: /testdir/test.txt (overwrite)
+Output redirection completed to: /testdir/test.txt (15 bytes)
+[91mUnknown command: '[0mÂñ%ö[91m'
+[0mType [1m[96mhelp[0m to see available commands.
+[92mguest[0m[37m@[0m[94mzora-vm[0m[37m:[0m[96m/testdir[0m[92m> [0m$ [1m[96mcat[0m [4m[94mtest.txt[0m
+"Hello World" 
+[92mguest[0m[37m@[0m[94mzora-vm[0m[37m:[0m[96m/testdir[0m[92m> [0m$ [1m[96mecho[0m [97m"Line[0m [97m1"[0m [93m>[0m [4m[94mdata.txt[0m
+Redirecting output to: /testdir/data.txt (overwrite)
+Output redirection completed to: /testdir/data.txt (10 bytes)
+[91mUnknown command: '[0mÂñ%ö[91m'
+[0mType [1m[96mhelp[0m to see available commands.
+[92mguest[0m[37m@[0m[94mzora-vm[0m[37m:[0m[96m/testdir[0m[92m> [0m$ [1m[96mecho[0m [97m"Line[0m [97m3"[0m [93m>>[0m [4m[94mdata.txt[0m
+Redirecting output to: /testdir/data.txt (append)
+Output redirection completed to: /testdir/data.txt (20 bytes)
+[91mUnknown command: '[0mÂñ%ö[91m'
+[0mType [1m[96mhelp[0m to see available commands.
+[92mguest[0m[37m@[0m[94mzora-vm[0m[37m:[0m[96m/testdir[0m[92m> [0m$ [1m[96mecho[0m [97m"Line[0m [97m2"[0m [93m>>[0m [4m[94mdata.txt[0m
+Redirecting output to: /testdir/data.txt (append)
+Output redirection completed to: /testdir/data.txt (30 bytes)
+[91mUnknown command: '[0mÂñ%ö[91m'
+[0mType [1m[96mhelp[0m to see available commands.
+[92mguest[0m[37m@[0m[94mzora-vm[0m[37m:[0m[96m/testdir[0m[92m> [0m$ [1m[96mecho[0m [97m"Line[0m [97m1"[0m [93m>>[0m [4m[94mdata.txt[0m
+Redirecting output to: /testdir/data.txt (append)
+Output redirection completed to: /testdir/data.txt (40 bytes)
+[91mUnknown command: '[0mÂñ%ö[91m'
+[0mType [1m[96mhelp[0m to see available commands.
+[92mguest[0m[37m@[0m[94mzora-vm[0m[37m:[0m[96m/testdir[0m[92m> [0m$ [1m[96msort[0m [4m[94mdata.txt[0m
+[91mUnknown command: '[0msort[91m'
+[0mType [1m[96mhelp[0m to see available commands.
+[92mguest[0m[37m@[0m[94mzora-vm[0m[37m:[0m[96m/testdir[0m[92m> [0m$ [1m[96msort[0m [4m[94mdata.txt[0m [93m|[0m [97muniq[0m
+Executing pipeline: sort data.txt  | uniq
+Redirecting output to: /tmp/pipe_XXXXXX (overwrite)
+Output redirection completed to: /tmp/pipe_XXXXXX (63 bytes)
+[91mUnknown command: '[0muniq[91m'
+[0mType [1m[96mhelp[0m to see available commands.
+Note: Input redirection from '/tmp/pipe_XXXXXX' not yet fully implemented
+[92mguest[0m[37m@[0m[94mzora-vm[0m[37m:[0m[96m/testdir[0m[92m> [0m$ [1m[96mwc[0m [4m[94mdata.txt[0m
+[91mUnknown command: '[0mwc[91m'
+[0mType [1m[96mhelp[0m to see available commands.
+[92mguest[0m[37m@[0m[94mzora-vm[0m[37m:[0m[96m/testdir[0m[92m> [0m$ [1m[96mcat[0m [4m[94mdata.txt[0m [93m|[0m [97mwc[0m [95m-l[0m
+Executing pipeline: cat data.txt  | wc -l
+Redirecting output to: /tmp/pipe_XXXXXX (overwrite)
+"Line 1" 
+"Line 3" 
+"Line 2" 
+"Line 1" 
+Output redirection completed to: /tmp/pipe_XXXXXX (empty)
+[91mUnknown command: '[0mwc[91m'
+[0mType [1m[96mhelp[0m to see available commands.
+Note: Input redirection from '/tmp/pipe_XXXXXX' not yet fully implemented
+[92mguest[0m[37m@[0m[94mzora-vm[0m[37m:[0m[96m/testdir[0m[92m> [0m$ [1m[96mhelp[0m [93m|[0m [97mgrep[0m [97mfile[0m
+Executing pipeline: help  | grep file
+Redirecting output to: /tmp/pipe_XXXXXX (overwrite)
+Available commands:
+  man - Displays information about commands.
+  help - Displays the help menu.
+  sysinfo - Displays system information and credits.
+  pwd - Prints the current working directory.
+  ls - Lists the contents of the current directory.
+  cd - Changes the current working directory.
+  mkdir - Creates a new directory.
+  rmdir - Removes a directory.
+  touch - Creates a new file.
+  rm - Removes a file.
+  cp - Copies a file.
+  mv - Moves a file.
+  rename - Renames a file.
+  search - Searches for files matching a pattern.
+  edit - Edits a text file.
+  run - Runs an external program.
+  clear - Clears the screen.
+  echo - Prints a string to the console.
+  cat - Displays the contents of a file.
+  tetra - Handles package management.
+  flipper - Switches to sub-shells.
+  pull - Takes a directory from the MERL goodies repository.
+  whoami - Displays the current logged-in user.
+  useradd - Adds a new user (placeholder).
+  login - Logs in as a specified user.
+  logout - Logs out the current user.
+  passwd - Changes the password for the current user (placeholder).
+  route - Routes commands to the appropriate handlers.
+  fork - Creates a new process.
+  kill - Terminates a process by ID.
+  ps - Lists all active processes.
+  read - Reads a file.
+  write - Writes to a file.
+  color-and-test - Displays colors and system info.
+  neofetch - Display system information with logo (alias for color-and-test).
+  vmstat - Shows virtual machine status.
+  reboot - Reboots the virtual machine.
+  shutdown - Shuts down the virtual machine.
+  save - Save file to persistent storage
+  load - Load directory from persistent storage
+  mount - Mount host directory to VM path
+  sync - Sync all persistent storage
+  pls - List persistent storage contents
+  ifconfig - Configure network interface
+  ping - Send ICMP ping packets
+  netstat - Display network connections
+  nslookup - Query DNS servers
+  telnet - Connect to remote host
+  wget - Download files from web
+  curl - Transfer data from servers
+  ssh - Secure shell connection
+  iptables - Configure firewall rules
+  testvfs - Test VFS functionality
+  debugvfs - Debug VFS structure
+  lua - Execute Lua script from /scripts (fallback /persistent/scripts)
+  luacode - Execute Lua code directly.
+  exec - Execute binary from /persistent/data/
+  run-windows - Execute Windows binary with sandboxing
+  list-binaries - List available binaries and their types
+  sandbox-status - Show sandbox execution status
+  desktop - Desktop control (restart/status)
+  theme - Switch desktop theme
+  themes - List available desktop themes
+  find - Search for files by name pattern
+  tree - Display directory tree structure
+  less - View file contents page by page
+  head - Display the beginning of a file
+  tail - Display the end of a file
+  grep - Search for patterns within files
+  chmod - Change file permissions
+  chown - Change file owner and group
+  htop - Display sorted information about processes in real-time
+  jobs - List background jobs
+  bg - Send a stopped process to the background
+  fg - Bring a background process to the foreground
+  date - Display or set the system date and time
+  df - Display disk space usage
+  du - Display disk usage of files and directories
+  uname - Print system information
+  systeminfo - Display detailed system information
+  history - Display command history
+  scp - Secure copy for transferring files over SSH
+  tar - Archive files and directories
+  gzip - Compress files
+  gunzip - Decompress files
+  zip - Create zip archives
+  unzip - Extract zip archives
+  hostname - Display or set the system hostname
+  set - Set environment variable
+  unset - Unset environment variable
+  export - Export environment variable
+  env - Display environment variables
+  style - Configure terminal styling (init/reset/save/load)
+  font - Set terminal font (MS Mincho recommended)
+  cursor - Set cursor style (block/underscore/vertical)
+  colors - Manage color schemes (Campbell PowerShell)
+  retro - Enable/disable retro terminal mode
+  syntax - Toggle command syntax highlighting
+  terminal-demo - Demonstrate terminal enhancements
+  test-sandbox - Test sandbox security and isolation
+  (null) - (null)
+
+Shell operators:
+  ;           - Sequential execution (cmd1 ; cmd2)
+  &&          - Conditional AND (cmd1 && cmd2 - run cmd2 only if cmd1 succeeds)
+  ||          - Conditional OR (cmd1 || cmd2 - run cmd2 only if cmd1 fails)
+  |           - Pipe output (cmd1 | cmd2 - send cmd1 output to cmd2)
+  >           - Redirect output to file (cmd > file.txt)
+  >>          - Append output to file (cmd >> file.txt)
+  <           - Redirect input from file (cmd < file.txt)
+
+Examples:
+  ls ; pwd                     - List files then show current directory
+  test -f file.txt && cat file.txt  - Show file only if it exists
+  ls missing_dir || echo 'Not found'  - Show error message if ls fails
+  ls | grep .txt               - List files and filter for .txt files
+  echo 'Hello World' > output.txt     - Write text to file
+  echo 'More text' >> output.txt      - Append text to file
+Output redirection completed to: /tmp/pipe_XXXXXX (empty)
+Usage: grep <pattern> <filename>
+Note: Input redirection from '/tmp/pipe_XXXXXX' not yet fully implemented
+[92mguest[0m[37m@[0m[94mzora-vm[0m[37m:[0m[96m/testdir[0m[92m> [0m$ [1m[96mwhich[0m [97mls[0m
+[91mUnknown command: '[0mwhich[91m'
+[0mType [1m[96mhelp[0m to see available commands.
+[92mguest[0m[37m@[0m[94mzora-vm[0m[37m:[0m[96m/testdir[0m[92m> [0m$ [1m[96mwhich[0m [97mnonexistent[0m
+[91mUnknown command: '[0mwhich[91m'
+[0mType [1m[96mhelp[0m to see available commands.
+[92mguest[0m[37m@[0m[94mzora-vm[0m[37m:[0m[96m/testdir[0m[92m> [0m$ [1m[96mln[0m [95m-s[0m [4m[94mtest.txt[0m [4m[94mlink.txt[0m
+[91mUnknown command: '[0mln[91m'
+[0mType [1m[96mhelp[0m to see available commands.
+[92mguest[0m[37m@[0m[94mzora-vm[0m[37m:[0m[96m/testdir[0m[92m> [0m$ [1m[96mdiff[0m [4m[94mtest.txt[0m [4m[94mdata.txt[0m
+[91mUnknown command: '[0mdiff[91m'
+[0mType [1m[96mhelp[0m to see available commands.
+[92mguest[0m[37m@[0m[94mzora-vm[0m[37m:[0m[96m/testdir[0m[92m> [0m$ [1m[96mdate[0m
+Mon Sep  8 17:51:50 2025
+[92mguest[0m[37m@[0m[94mzora-vm[0m[37m:[0m[96m/testdir[0m[92m> [0m$ [1m[96muname[0m [95m-a[0m
+ZoraVM 1.0 zora-vm x86_64 x86_64 x86_64 Windows
+[92mguest[0m[37m@[0m[94mzora-vm[0m[37m:[0m[96m/testdir[0m[92m> [0m$ [1m[96mtree[0m
+Directory tree for /testdir:
+ðŸ“„ data.txt (40 bytes)
+ðŸ“„ test.txt (15 bytes)
+Executing pipeline: ˜ | ¨“ú
+Redirecting output to: /tmp/pipe_XXXXXX (overwrite)
+Output redirection completed to: /tmp/pipe_XXXXXX (77 bytes)
+[91mUnknown command: '[0m¨“ú[91m'
+[0mType [1m[96mhelp[0m to see available commands.
+Note: Input redirection from '/tmp/pipe_XXXXXX' not yet fully implemented
+[92mguest[0m[37m@[0m[94mzora-vm[0m[37m:[0m[96m/testdir[0m[92m> [0m$ [1m[96mvmstat[0m
+=== Zora VM Status ===
+CPU: Running
+Memory: 256MB allocated
+Shell: MERL v1.0 (VM Mode)
+OS: Zora Custom OS
+Uptime: Running
+[92mguest[0m[37m@[0m[94mzora-vm[0m[37m:[0m[96m/testdir[0m[92m> [0m$ [1m[96mexit[0m
+[91mUnknown command: '[0mexit[91m'
+[0mType [1m[96mhelp[0m to see available commands.
+[92mguest[0m[37m@[0m[94mzora-vm[0m[37m:[0m[96m/testdir[0m[92m> [0m
+Exiting VM...
+
+Shutting down Zora VM...
+MERL shell cleaned up
+[DEVMGR] Destroyed device Virtual Network
+[DEVMGR] Destroyed device Virtual Disk
+[DEVMGR] Destroyed device Virtual Terminal
+[DEVMGR] Device manager cleaned up
+Memory cleaned up
+CPU cleaned up
+Syncing persistent storage before shutdown...
+Syncing all persistent storage...
+Sync completed
+VM environment cleaned up
+System call interception cleaned up
+Virtual filesystem cleaned up
+Virtualization layer cleaned up
+Cleaning up Windows sandbox environment...
+Windows sandbox cleanup complete
+Cleaning up virtual network...
+Virtual network cleaned up
+Cleaning up Windows binary executor...
+Cleaning up Meisei Virtual Silicon...
+Final Performance Statistics:
+   Average Speedup: 0.00x
+   Cache Hit Ratio: 0%
+   Total Executions: 0
+   Pool 0: 0 allocations
+   Pool 1: 0 allocations
+   Pool 2: 0 allocations
+   Pool 3: 0 allocations
+   Pool 4: 0 allocations
+   Pool 5: 0 allocations
+   Pool 6: 0 allocations
+   Pool 7: 0 allocations
+Meisei Virtual Silicon cleanup complete
+Zora VM shutdown complete.
