@@ -244,50 +244,46 @@ int main(int argc, char* argv[]) {
         goto cleanup;
     }
     
-    // Find the correct path to ZoraPerl directory
+    // Find ZoraPerl directory relative to executable location for portability
     char zora_perl_path[512];
-    char current_dir[512];
+    char executable_path[512];
+    char executable_dir[512];
     
-    GetCurrentDirectoryA(sizeof(current_dir), current_dir);
-    
-    // Debug: Uncomment the next line if you need to see the working directory
-    // printf("Current working directory: %s\n", current_dir);
-    
-    // Try multiple possible paths to find ZoraPerl
-    const char* possible_paths[] = {
-        "../ZoraPerl",           // from build directory
-        "../../ZoraPerl",        // if running from deeper build
-        "./ZoraPerl",            // if running from project root
-        "ZoraPerl"               // if ZoraPerl is in current dir
-    };
-    
-    int path_found = 0;
-    for (int i = 0; i < 4; i++) {
-        strcpy(zora_perl_path, possible_paths[i]);
-        
-        DWORD attrib = GetFileAttributesA(zora_perl_path);
-        if (attrib != INVALID_FILE_ATTRIBUTES && (attrib & FILE_ATTRIBUTE_DIRECTORY)) {
-            path_found = 1;
-            break;
-        }
+    // Get the full path to the current executable
+    DWORD get_module_result = GetModuleFileNameA(NULL, executable_path, sizeof(executable_path));
+    if (get_module_result == 0 || get_module_result == sizeof(executable_path)) {
+        fprintf(stderr, "ERROR: Failed to get executable path!\n");
+        goto cleanup;
     }
     
-    if (!path_found) {
-        fprintf(stderr, "WARNING: Could not find ZoraPerl directory in any expected location!\n");
-        fprintf(stderr, "Searched paths:\n");
-        for (int i = 0; i < 4; i++) {
-            fprintf(stderr, "  - %s\n", possible_paths[i]);
-        }
-        fprintf(stderr, "Creating ZoraPerl directory in current location...\n");
-        strcpy(zora_perl_path, "ZoraPerl");
+    // Extract directory from executable path
+    strcpy(executable_dir, executable_path);
+    char* last_backslash = strrchr(executable_dir, '\\');
+    if (last_backslash) {
+        *last_backslash = '\0';  // Remove filename, keep directory
+    } else {
+        strcpy(executable_dir, ".");  // Fallback to current directory
+    }
+    
+    // Construct ZoraPerl path next to executable
+    snprintf(zora_perl_path, sizeof(zora_perl_path), "%s\\ZoraPerl", executable_dir);
+    
+    // Debug: Uncomment the next line if you need to see the executable and ZoraPerl paths
+    // printf("Executable at: %s\n", executable_path);
+    // printf("ZoraPerl path: %s\n", zora_perl_path);
+    
+    // Check if ZoraPerl directory exists, create if not
+    DWORD attrib = GetFileAttributesA(zora_perl_path);
+    if (attrib == INVALID_FILE_ATTRIBUTES || !(attrib & FILE_ATTRIBUTE_DIRECTORY)) {
+        printf("Creating ZoraPerl directory at: %s\n", zora_perl_path);
         if (create_directory_recursive(zora_perl_path) != 0) {
             fprintf(stderr, "ERROR: Failed to create ZoraPerl directory!\n");
             goto cleanup;
         }
-        printf("Created ZoraPerl directory at: %s\n", zora_perl_path);
+        printf("Successfully created ZoraPerl directory at: %s\n", zora_perl_path);
     } else {
         // Debug: Uncomment the next line if you need to see the ZoraPerl path
-        // printf("Found ZoraPerl directory at: %s\n", zora_perl_path);
+        // printf("Found existing ZoraPerl directory at: %s\n", zora_perl_path);
     }
     
     // Ensure the entire ZoraPerl directory structure exists
