@@ -23,7 +23,6 @@
 #include "lua/lua_vm.h"
 #include "binary/binary_executor.h"
 #include "meisei/virtual_silicon.h"
-#include "desktop/desktop.h"
 
 #ifdef PYTHON_SCRIPTING
 #include "python/python_vm.h"
@@ -305,9 +304,6 @@ int main(int argc, char* argv[]) {
     // Autodiscover host root-style directories directly under /
     vfs_mount_root_autodiscover(zora_perl_path);
 
-    // Optionally place a starter desktop script in /usr/bin or /bin
-    // Later we will execute a Perl 'desktop.pl' script to start the GUI environment.
-
     // Initialize network virtualization
     printf("Initializing virtual network...\n");
     if (network_init() != 0) {
@@ -352,18 +348,6 @@ int main(int argc, char* argv[]) {
 
     printf("Zora VM initialized successfully. Starting MERL shell...\n");
     printf("========================================\n");
-
-    // Desktop bootstrap (before shell for now)
-    desktop_init();
-    // Attempt to load /bin/desktop.pl if Perl scripting available
-#ifdef PERL_SCRIPTING
-    if (vfs_find_node("/bin/desktop.pl")) {
-        printf("Launching desktop.pl...\n");
-        perl_vm_load_script("/bin/desktop.pl");
-    } else {
-        printf("desktop.pl not found in /bin; skipping desktop launch.\n");
-    }
-#endif
 
     // Start the MERL shell as the "OS" with crash protection
     int result = 0;

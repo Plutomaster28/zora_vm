@@ -22,6 +22,9 @@ typedef struct {
     int retro_mode;        // Enable retro terminal features
 } TerminalConfig;
 
+// Global terminal configuration (defined in terminal_style.c)
+extern TerminalConfig g_terminal_config;
+
 // Cursor styles
 #define CURSOR_BLOCK     0
 #define CURSOR_UNDERSCORE 1

@@ -74,7 +74,7 @@ Zora VM is a **standalone virtual machine environment** that provides:
 - **User System**: Multi-user support with authentication
 - **Command History**: Full command history with search
 - **Tab Completion**: Auto-completion for commands and paths
-- **Desktop Environment**: GTK-based GUI with CDE theming
+- **Advanced Terminal**: Campbell color scheme with retro styling options
 
 ### Security
 - **Sandbox Isolation**: All code execution is sandboxed

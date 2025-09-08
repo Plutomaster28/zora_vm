@@ -94,7 +94,7 @@ endif()
 # Include directories
 include_directories(include include/platform include/binary include/merl include/vfs 
                    include/syscall include/virtualization include/network include/lua 
-                   include/python include/perl include/meisei include/desktop include/sandbox
+                   include/python include/perl include/meisei include/sandbox
                    include/terminal
                    MERL ${LUA_INCLUDE_DIR})
 
@@ -130,7 +130,6 @@ set(SOURCES
     src/perl/perl_vm.c
     src/meisei/virtual_silicon.c
     src/meisei/script_accelerator.c
-    src/desktop/desktop.c
     src/terminal/terminal_style.c
     
     # MERL shell

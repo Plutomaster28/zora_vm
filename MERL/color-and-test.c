@@ -46,8 +46,8 @@ void color_and_test_command(int argc, char **argv) {
     printf("%ds\n", seconds);
     
     printf("\033[1;34mShell\033[0m:      MERL Shell\n");
-    printf("\033[1;35mResolution\033[0m: 1920x1080\n");
-    printf("\033[1;36mDE\033[0m:         GTK2/CDE Theme\n");
+    printf("\033[1;35mResolution\033[0m: Terminal-based\n");
+    printf("\033[1;36mInterface\033[0m:  Campbell Color Scheme\n");
     printf("\033[1;31mWM\033[0m:         Virtual Window Manager\n");
     printf("\033[1;32mTerminal\033[0m:   MERL Terminal\n");
     printf("\033[1;33mCPU\033[0m:        Virtual CPU (40 threads)\n");

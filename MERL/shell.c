@@ -15,7 +15,6 @@
 #include "vfs/vfs.h"
 #include "lua/lua_vm.h"
 #include "binary/binary_executor.h"
-#include "desktop/desktop.h"
 #include "vm.h"  // For crash guard control
 #include "terminal/terminal_style.h"  // Add terminal styling support
 
@@ -67,7 +66,6 @@ void set_command(int argc, char **argv);
 void unset_command(int argc, char **argv);
 void export_command(int argc, char **argv);
 void env_command(int argc, char **argv);
-void desktop_command(int argc, char **argv);
 void theme_command(int argc, char **argv);
 void themes_command(int argc, char **argv);
 void find_command(int argc, char **argv);
@@ -76,10 +74,33 @@ void tree_command(int argc, char **argv);
 void print_tree_recursive(const char* dir_path, int depth);
 void systeminfo_command(int argc, char **argv);
 
-// Helper function prototypes
-void expand_path(const char* input, char* output, size_t output_size);
-void add_to_history(const char* command);
-void resolve_script_path(const char* name, char* out, size_t out_sz);
+// Enhanced command parsing and execution
+void parse_and_execute_command_line(char *command_line);
+int execute_pipeline(char *pipeline_str);
+int execute_command_with_parsing(char *cmd_str);
+int execute_command_with_redirection(char *args[], int argc, char *input_file, char *output_file, int append_mode);
+void execute_simple_command(char *args[], int argc);
+
+// Enhanced argument parsing
+typedef struct {
+    char** args;
+    int argc;
+    char** flags;
+    int flag_count;
+    char* input_redirect;
+    char* output_redirect;
+    int append_mode;
+    int background;
+} ParsedCommand;
+
+ParsedCommand* parse_command_advanced(char* command_str);
+void free_parsed_command(ParsedCommand* cmd);
+int has_flag(ParsedCommand* cmd, const char* flag);
+char* get_flag_value(ParsedCommand* cmd, const char* flag);
+
+// Enhanced terminal output functions
+void print_command_syntax(const char* command_line);
+void highlight_command_parts(char* command_line);
 void calculate_directory_size(VNode* node, size_t* total_size, size_t* used_size);
 
 // Color support functions
@@ -115,6 +136,7 @@ static int env_var_count = 0;
 void set_env_var(const char* name, const char* value);
 const char* get_env_var(const char* name);
 void expand_variables(const char* input, char* output, size_t output_size);
+void expand_path(const char* input, char* output, size_t output_size);
 void init_default_env_vars(void);
 #define COLOR_BRIGHT_BLACK   "\033[90m"
 #define COLOR_BRIGHT_RED     "\033[91m"
@@ -1464,31 +1486,14 @@ void sandbox_status_command(int argc, char **argv) {
     printf("   • Real machine code execution with syscall interception\n");
 }
 
-void desktop_command(int argc, char **argv) {
-    if (argc < 2) {
-        printf("Usage: desktop <restart|status>\n");
-        return;
-    }
-    if (strcmp(argv[1], "restart") == 0) {
-        desktop_restart();
-        printf("Desktop restarted.\n");
-    } else if (strcmp(argv[1], "status") == 0) {
-        printf("Desktop theme: %s\n", desktop_current_theme());
-        desktop_list_themes();
-    } else {
-        printf("Unknown desktop subcommand.\n");
-    }
-}
-
 void theme_command(int argc, char **argv) {
-    if (argc < 2) { printf("Usage: theme <name>\n"); return; }
-    if (desktop_switch_theme(argv[1]) == 0) {
-        printf("Theme switched to %s\n", argv[1]);
-    }
+    printf("Theme switching disabled (desktop system removed)\n");
+    printf("Available terminal themes: Campbell (default)\n");
 }
 
 void themes_command(int argc, char **argv) {
-    (void)argc; (void)argv; desktop_list_themes();
+    (void)argc; (void)argv; 
+    printf("Available themes: Campbell (terminal)\n");
 }
 
 #ifdef PYTHON_SCRIPTING
@@ -1685,18 +1690,92 @@ void pwd_command(int argc, char **argv) {
     }
 }
 
+// Helper function to create ParsedCommand from already-parsed argv
+ParsedCommand* parse_command_advanced_from_args(int argc, char** argv) {
+    ParsedCommand* cmd = malloc(sizeof(ParsedCommand));
+    if (!cmd) return NULL;
+    
+    // Initialize structure
+    cmd->args = malloc(256 * sizeof(char*));
+    cmd->flags = malloc(64 * sizeof(char*));
+    cmd->argc = 0;
+    cmd->flag_count = 0;
+    cmd->input_redirect = NULL;
+    cmd->output_redirect = NULL;
+    cmd->append_mode = 0;
+    cmd->background = 0;
+    
+    // Separate args and flags
+    for (int i = 0; i < argc && cmd->argc < 255; i++) {
+        if (argv[i][0] == '-' && strlen(argv[i]) > 1 && cmd->flag_count < 63) {
+            cmd->flags[cmd->flag_count++] = strdup(argv[i]);
+        } else {
+            cmd->args[cmd->argc++] = strdup(argv[i]);
+        }
+    }
+    
+    cmd->args[cmd->argc] = NULL;
+    cmd->flags[cmd->flag_count] = NULL;
+    
+    return cmd;
+}
+
 void ls_command(int argc, char **argv) {
+    // Parse arguments with advanced parsing
+    ParsedCommand* cmd = parse_command_advanced_from_args(argc, argv);
+    
+    // Check for help flag
+    if (has_flag(cmd, "-h") || has_flag(cmd, "--help")) {
+        terminal_print_command("ls");
+        printf(" - list directory contents\n");
+        printf("Usage: ");
+        terminal_print_command("ls");
+        printf(" [");
+        terminal_print_argument("OPTIONS");
+        printf("] [");
+        terminal_print_path("DIRECTORY");
+        printf("]\n\n");
+        printf("Options:\n");
+        printf("  ");
+        terminal_print_argument("-l");
+        printf("         long format (detailed listing)\n");
+        printf("  ");
+        terminal_print_argument("-a");
+        printf("         show hidden files (starting with .)\n");
+        printf("  ");
+        terminal_print_argument("-h");
+        printf("         show file sizes in human readable format\n");
+        printf("  ");
+        terminal_print_argument("-t");
+        printf("         sort by modification time\n");
+        printf("  ");
+        terminal_print_argument("-r");
+        printf("         reverse sort order\n");
+        printf("  ");
+        terminal_print_argument("--help");
+        printf("    show this help message\n");
+        free_parsed_command(cmd);
+        return;
+    }
+    
+    // Extract flags
+    int long_format = has_flag(cmd, "-l");
+    int show_hidden = has_flag(cmd, "-a");
+    int human_readable = has_flag(cmd, "-h");
+    int sort_time = has_flag(cmd, "-t");
+    int reverse_order = has_flag(cmd, "-r");
+    
     char target_dir[512];
     
-    // Determine target directory
-    if (argc < 2) {
+    // Determine target directory from non-flag arguments
+    if (cmd->argc < 2) {
         // No argument - use current directory
         char* cwd = vfs_getcwd();
         strcpy(target_dir, cwd ? cwd : "/");
     } else {
-        // Expand the provided path
+        // Use first non-flag argument as directory
         char expanded_path[512];
-        expand_path(argv[1], expanded_path, sizeof(expanded_path));
+        expand_path(cmd->args[1], expanded_path, sizeof(expanded_path));
         
         // Build absolute path if relative
         if (expanded_path[0] != '/') {
@@ -1707,17 +1786,27 @@ void ls_command(int argc, char **argv) {
         }
     }
     
-    printf("Contents of %s:\n", target_dir);
+    if (!long_format) {
+        printf("Contents of ");
+        terminal_print_path(target_dir);
+        printf(":\n");
+    }
     
     // Get the target directory node
     VNode* dir_node = vfs_find_node(target_dir);
     if (!dir_node) {
-        printf("ls: %s: No such file or directory\n", target_dir);
+        terminal_print_error("ls: ");
+        terminal_print_path(target_dir);
+        terminal_print_error(": No such file or directory\n");
+        free_parsed_command(cmd);
         return;
     }
 
     if (!dir_node->is_directory) {
-        printf("ls: %s: Not a directory\n", target_dir);
+        terminal_print_error("ls: ");
+        terminal_print_path(target_dir);
+        terminal_print_error(": Not a directory\n");
+        free_parsed_command(cmd);
         return;
     }
 
@@ -1728,17 +1817,62 @@ void ls_command(int argc, char **argv) {
     VNode* child = dir_node->children;
     if (!child) {
         printf("(empty directory)\n");
+        free_parsed_command(cmd);
         return;
     }
     
+    // Enhanced listing with flags support
     while (child) {
-        if (child->is_directory) {
-            printf("%-20s <DIR>\n", child->name);
-        } else {
-            printf("%-20s %zu bytes\n", child->name, child->size);
+        // Skip hidden files unless -a flag is used
+        if (!show_hidden && child->name[0] == '.') {
+            child = child->next;
+            continue;
         }
+        
+        if (long_format) {
+            // Long format: permissions, size, name
+            printf("%s ", child->is_directory ? "drwxr-xr-x" : "-rw-r--r--");
+            printf("%8s ", "user");  // placeholder for user
+            printf("%8s ", "group"); // placeholder for group
+            
+            if (human_readable && child->size >= 1024) {
+                if (child->size >= 1024 * 1024) {
+                    printf("%6.1fM ", child->size / (1024.0 * 1024.0));
+                } else {
+                    printf("%6.1fK ", child->size / 1024.0);
+                }
+            } else {
+                printf("%8zu ", child->size);
+            }
+            
+            printf("Jan 01 12:00 "); // placeholder for time
+            
+            if (child->is_directory) {
+                terminal_print_path(child->name);
+                printf("/");
+            } else {
+                printf("%s", child->name);
+            }
+            printf("\n");
+        } else {
+            // Simple format with colors
+            if (child->is_directory) {
+                terminal_print_path(child->name);
+                printf("/");
+            } else {
+                printf("%s", child->name);
+            }
+            printf("  ");
+        }
+        
         child = child->next;
     }
+    
+    if (!long_format) {
+        printf("\n");
+    }
+    
+    free_parsed_command(cmd);
 }
 
 void cd_command(int argc, char **argv) {
@@ -2101,46 +2235,140 @@ void print_tree_recursive(const char* dir_path, int depth) {
 }
 
 void cat_command(int argc, char **argv) {
-    if (argc < 2) {
-        printf("Usage: cat <filename>\n");
+    // Parse arguments with advanced parsing
+    ParsedCommand* cmd = parse_command_advanced_from_args(argc, argv);
+    
+    // Check for help flag
+    if (has_flag(cmd, "-h") || has_flag(cmd, "--help")) {
+        terminal_print_command("cat");
+        printf(" - display file contents\n");
+        printf("Usage: ");
+        terminal_print_command("cat");
+        printf(" [");
+        terminal_print_argument("OPTIONS");
+        printf("] ");
+        terminal_print_path("FILE");
+        printf("...\n\n");
+        printf("Options:\n");
+        printf("  ");
+        terminal_print_argument("-n");
+        printf("         number all output lines\n");
+        printf("  ");
+        terminal_print_argument("-b");
+        printf("         number non-blank output lines\n");
+        printf("  ");
+        terminal_print_argument("-s");
+        printf("         suppress repeated empty lines\n");
+        printf("  ");
+        terminal_print_argument("-E");
+        printf("         display $ at end of each line\n");
+        printf("  ");
+        terminal_print_argument("--help");
+        printf("    show this help message\n");
+        free_parsed_command(cmd);
         return;
     }
     
-    char expanded_path[512];
-    expand_path(argv[1], expanded_path, sizeof(expanded_path));
-    
-    // Build absolute path if relative
-    char full_path[512];
-    if (expanded_path[0] != '/') {
-        char* cwd = vfs_getcwd();
-        snprintf(full_path, sizeof(full_path), "%s/%s", cwd, expanded_path);
-    } else {
-        strcpy(full_path, expanded_path);
-    }
-    
-    VNode* file_node = vfs_find_node(full_path);
-    if (!file_node) {
-        printf("cat: %s: No such file or directory\n", full_path);
+    if (cmd->argc < 2) {
+        terminal_print_error("Usage: ");
+        terminal_print_command("cat");
+        printf(" [OPTIONS] FILE...\n");
+        free_parsed_command(cmd);
         return;
     }
     
-    if (file_node->is_directory) {
-        printf("cat: %s: Is a directory\n", full_path);
-        return;
-    }
+    // Extract flags
+    int number_lines = has_flag(cmd, "-n");
+    int number_nonblank = has_flag(cmd, "-b");
+    int squeeze_blank = has_flag(cmd, "-s");
+    int show_ends = has_flag(cmd, "-E");
     
-    // Use VFS API to read file content (triggers on-demand loading)
-    void* data = NULL;
-    size_t size = 0;
-    if (vfs_read_file(full_path, &data, &size) == 0 && data && size > 0) {
-        // Print file contents
-        fwrite(data, 1, size, stdout);
-        if (((char*)data)[size - 1] != '\n') {
-            printf("\n");
+    // Process all file arguments
+    for (int file_idx = 1; file_idx < cmd->argc; file_idx++) {
+        char expanded_path[512];
+        expand_path(cmd->args[file_idx], expanded_path, sizeof(expanded_path));
+        
+        // Build absolute path if relative
+        char full_path[512];
+        if (expanded_path[0] != '/') {
+            char* cwd = vfs_getcwd();
+            snprintf(full_path, sizeof(full_path), "%s/%s", cwd, expanded_path);
+        } else {
+            strcpy(full_path, expanded_path);
         }
-    } else {
-        printf("(empty file)\n");
+        
+        VNode* file_node = vfs_find_node(full_path);
+        if (!file_node) {
+            terminal_print_error("cat: ");
+            terminal_print_path(full_path);
+            terminal_print_error(": No such file or directory\n");
+            continue;
+        }
+        
+        if (file_node->is_directory) {
+            terminal_print_error("cat: ");
+            terminal_print_path(full_path);
+            terminal_print_error(": Is a directory\n");
+            continue;
+        }
+        
+        // Use VFS API to read file content
+        void* data = NULL;
+        size_t size = 0;
+        if (vfs_read_file(full_path, &data, &size) == 0 && data && size > 0) {
+            char* content = (char*)data;
+            
+            if (number_lines || number_nonblank || squeeze_blank || show_ends) {
+                // Process line by line with flags
+                char* line_start = content;
+                int line_number = 1;
+                int prev_blank = 0;
+                
+                for (size_t i = 0; i <= size; i++) {
+                    if (i == size || content[i] == '\n') {
+                        // End of line or file
+                        int line_length = (content + i) - line_start;
+                        int is_blank = (line_length == 0);
+                        
+                        // Handle squeeze blank lines
+                        if (squeeze_blank && is_blank && prev_blank) {
+                            line_start = content + i + 1;
+                            continue;
+                        }
+                        
+                        // Print line number if requested
+                        if (number_lines || (number_nonblank && !is_blank)) {
+                            printf("%6d\t", line_number);
+                        }
+                        
+                        // Print the line content
+                        fwrite(line_start, 1, line_length, stdout);
+                        
+                        // Add end marker if requested
+                        if (show_ends && i < size) {
+                            printf("$");
+                        }
+                        
+                        if (i < size) printf("\n");
+                        
+                        line_number++;
+                        prev_blank = is_blank;
+                        line_start = content + i + 1;
+                    }
+                }
+            } else {
+                // Simple output without processing
+                fwrite(data, 1, size, stdout);
+                if (content[size - 1] != '\n') {
+                    printf("\n");
+                }
+            }
+        } else {
+            printf("(empty file)\n");
+        }
     }
+    
+    free_parsed_command(cmd);
 }
 
 void pull_command(int argc, char* argv[]) {
@@ -2470,9 +2698,8 @@ Command command_table[] = {
     {"run-windows", run_windows_command, "Execute Windows binary with sandboxing"},
     {"list-binaries", list_binaries_command, "List available binaries and their types"},
     {"sandbox-status", sandbox_status_command, "Show sandbox execution status"},
-    {"desktop", desktop_command, "Desktop control (restart/status)"},
-    {"theme", theme_command, "Switch desktop theme"},
-    {"themes", themes_command, "List available desktop themes"},
+    {"theme", theme_command, "Terminal theme control"},
+    {"themes", themes_command, "List available terminal themes"},
     {"find", find_command, "Search for files by name pattern"},
     {"tree", tree_command, "Display directory tree structure"},
     {"less", less_command, "View file contents page by page"},
@@ -2653,6 +2880,13 @@ void handle_command(char *command) {
 }
 
 void parse_and_execute_command_line(char *command_line) {
+    // Highlight the command line if syntax highlighting is enabled
+    if (g_terminal_config.syntax_highlight) {
+        printf("$ ");
+        highlight_command_parts(command_line);
+        printf("\n");
+    }
+    
     // Create a working copy of the command line
     char *cmd_copy = strdup(command_line);
     if (!cmd_copy) return;
@@ -2706,7 +2940,9 @@ void parse_and_execute_command_line(char *command_line) {
                 // Execute first command
                 int first_result;
                 if (is_background) {
-                    printf("[Background] Executing: %s\n", first_cmd);
+                    printf("[Background] ");
+                    terminal_print_operator("Executing");
+                    printf(": %s\n", first_cmd);
                     first_result = execute_pipeline(first_cmd);
                 } else {
                     first_result = execute_pipeline(first_cmd);
@@ -2717,14 +2953,18 @@ void parse_and_execute_command_line(char *command_line) {
                     // Trim whitespace from second command
                     while (*second_cmd == ' ' || *second_cmd == '\t') second_cmd++;
                     if (is_background) {
-                        printf("[Background] Executing: %s\n", second_cmd);
+                        printf("[Background] ");
+                        terminal_print_operator("Executing");
+                        printf(": %s\n", second_cmd);
                     }
                     execute_pipeline(second_cmd);
                 }
             } else {
                 // No conditional operators, process as pipeline
                 if (is_background) {
-                    printf("[Background] Executing: %s\n", cmd_part);
+                    printf("[Background] ");
+                    terminal_print_operator("Executing");
+                    printf(": %s\n", cmd_part);
                 }
                 execute_pipeline(cmd_part);
             }
@@ -3011,6 +3251,150 @@ void execute_simple_command_with_redirect(char *args[], int argc) {
     redirect_printf("Type 'help' to see available commands.\n");
 }
 
+// Enhanced command parsing implementation
+ParsedCommand* parse_command_advanced(char* command_str) {
+    ParsedCommand* cmd = malloc(sizeof(ParsedCommand));
+    if (!cmd) return NULL;
+    
+    // Initialize structure
+    cmd->args = malloc(256 * sizeof(char*));
+    cmd->flags = malloc(64 * sizeof(char*));
+    cmd->argc = 0;
+    cmd->flag_count = 0;
+    cmd->input_redirect = NULL;
+    cmd->output_redirect = NULL;
+    cmd->append_mode = 0;
+    cmd->background = 0;
+    
+    char* work_str = strdup(command_str);
+    char* token = strtok(work_str, " \t");
+    
+    while (token && cmd->argc < 255) {
+        // Check for redirection operators
+        if (strcmp(token, ">") == 0) {
+            token = strtok(NULL, " \t");
+            if (token) cmd->output_redirect = strdup(token);
+            continue;
+        } else if (strcmp(token, ">>") == 0) {
+            token = strtok(NULL, " \t");
+            if (token) {
+                cmd->output_redirect = strdup(token);
+                cmd->append_mode = 1;
+            }
+            continue;
+        } else if (strcmp(token, "<") == 0) {
+            token = strtok(NULL, " \t");
+            if (token) cmd->input_redirect = strdup(token);
+            continue;
+        } else if (strcmp(token, "&") == 0) {
+            cmd->background = 1;
+            continue;
+        }
+        
+        // Check for flags (starting with -)
+        if (token[0] == '-' && strlen(token) > 1 && cmd->flag_count < 63) {
+            cmd->flags[cmd->flag_count++] = strdup(token);
+        } else {
+            cmd->args[cmd->argc++] = strdup(token);
+        }
+        
+        token = strtok(NULL, " \t");
+    }
+    
+    cmd->args[cmd->argc] = NULL;
+    cmd->flags[cmd->flag_count] = NULL;
+    
+    free(work_str);
+    return cmd;
+}
+
+void free_parsed_command(ParsedCommand* cmd) {
+    if (!cmd) return;
+    
+    for (int i = 0; i < cmd->argc; i++) {
+        free(cmd->args[i]);
+    }
+    for (int i = 0; i < cmd->flag_count; i++) {
+        free(cmd->flags[i]);
+    }
+    
+    free(cmd->args);
+    free(cmd->flags);
+    free(cmd->input_redirect);
+    free(cmd->output_redirect);
+    free(cmd);
+}
+
+int has_flag(ParsedCommand* cmd, const char* flag) {
+    for (int i = 0; i < cmd->flag_count; i++) {
+        if (strcmp(cmd->flags[i], flag) == 0) return 1;
+        // Support combined flags like -la = -l -a
+        if (strlen(cmd->flags[i]) > 2 && cmd->flags[i][0] == '-' && 
+            strlen(flag) == 2 && flag[0] == '-') {
+            for (int j = 1; cmd->flags[i][j]; j++) {
+                if (cmd->flags[i][j] == flag[1]) return 1;
+            }
+        }
+    }
+    return 0;
+}
+
+char* get_flag_value(ParsedCommand* cmd, const char* flag) {
+    for (int i = 0; i < cmd->flag_count; i++) {
+        if (strncmp(cmd->flags[i], flag, strlen(flag)) == 0) {
+            if (strlen(cmd->flags[i]) > strlen(flag) && cmd->flags[i][strlen(flag)] == '=') {
+                return cmd->flags[i] + strlen(flag) + 1;
+            }
+        }
+    }
+    return NULL;
+}
+
+// Enhanced syntax highlighting for command lines
+void highlight_command_parts(char* command_line) {
+    if (!g_terminal_config.syntax_highlight) {
+        printf("%s", command_line);
+        return;
+    }
+    
+    char* work_str = strdup(command_line);
+    char* token = strtok(work_str, " \t");
+    int is_first = 1;
+    
+    while (token) {
+        if (!is_first) printf(" ");
+        
+        if (is_first) {
+            // First token is the command
+            terminal_print_command(token);
+            is_first = 0;
+        } else if (token[0] == '-') {
+            // Flags in bright magenta
+            printf(COLOR_BRIGHT_MAGENTA "%s" COLOR_RESET, token);
+        } else if (strchr(token, '/') || strchr(token, '\\') || strchr(token, '.')) {
+            // Paths and files
+            terminal_print_path(token);
+        } else if ((token[0] == '"' && token[strlen(token)-1] == '"') ||
+                   (token[0] == '\'' && token[strlen(token)-1] == '\'')) {
+            // Quoted strings
+            terminal_print_string(token);
+        } else if (strcmp(token, ">") == 0 || strcmp(token, ">>") == 0 || 
+                   strcmp(token, "<") == 0 || strcmp(token, "|") == 0 ||
+                   strcmp(token, "&&") == 0 || strcmp(token, "||") == 0 ||
+                   strcmp(token, "&") == 0) {
+            // Operators
+            terminal_print_operator(token);
+        } else {
+            // Regular arguments
+            terminal_print_argument(token);
+        }
+        
+        token = strtok(NULL, " \t");
+    }
+    
+    free(work_str);
+}
+
 void execute_simple_command(char *args[], int argc) {
     // Skip empty commands
     if (argc == 0) return;
@@ -3026,9 +3410,13 @@ void execute_simple_command(char *args[], int argc) {
         }
     }
 
-    // Command not found - just print error message and return
-    printf("Unknown command: '%s'\n", args[0]);
-    printf("Type 'help' to see available commands.\n");
+    // Command not found - show styled error message
+    terminal_print_error("Unknown command: '");
+    printf("%s", args[0]);
+    terminal_print_error("'\n");
+    printf("Type ");
+    terminal_print_command("help");
+    printf(" to see available commands.\n");
 }
 
 void man_command(int argc, char **argv) {

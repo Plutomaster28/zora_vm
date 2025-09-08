@@ -1,7 +1,6 @@
 #include "python_vm.h"
 #include "sandbox.h"
 #include "vfs/vfs.h"
-#include "desktop/desktop.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -135,85 +134,8 @@ static int execute_python_statement(const char* line) {
         return 0;
     }
     
-    // Handle desktop function calls
-    if (strncmp(start, "desktop_create_window(", 22) == 0) {
-        char* params = start + 22;
-        char* end_paren = strrchr(params, ')');
-        if (end_paren) *end_paren = '\0';
-        
-        // Parse title and dimensions
-        char title[256] = {0};
-        int width = 800, height = 600;
-        
-        if (sscanf(params, "\"%255[^\"]\", %d, %d", title, &width, &height) >= 1 ||
-            sscanf(params, "'%255[^']', %d, %d", title, &width, &height) >= 1) {
-            printf("DESKTOP: Creating window '%s' (%dx%d)\n", title, width, height);
-            // Call actual desktop function
-            int window_id = desktop_create_window(title, width, height);
-            printf("DESKTOP: Window created with ID %d\n", window_id);
-        }
-        free(trimmed);
-        return 0;
-    }
-    
-    if (strncmp(start, "desktop_add_label(", 18) == 0) {
-        char* params = start + 18;
-        char* end_paren = strrchr(params, ')');
-        if (end_paren) *end_paren = '\0';
-        
-        char text[256] = {0};
-        if (sscanf(params, "\"%255[^\"]\"", text) == 1 ||
-            sscanf(params, "'%255[^']'", text) == 1) {
-            printf("DESKTOP: Adding label '%s'\n", text);
-            // Call actual desktop function with default window ID 1
-            desktop_add_label(1, text);
-        }
-        free(trimmed);
-        return 0;
-    }
-    
-    if (strncmp(start, "desktop_add_button(", 19) == 0) {
-        char* params = start + 19;
-        char* end_paren = strrchr(params, ')');
-        if (end_paren) *end_paren = '\0';
-        
-        char text[256] = {0};
-        if (sscanf(params, "\"%255[^\"]\"", text) == 1 ||
-            sscanf(params, "'%255[^']'", text) == 1) {
-            printf("DESKTOP: Adding button '%s'\n", text);
-            // For now, treat buttons as labels until we have button support
-            desktop_add_label(1, text);
-        }
-        free(trimmed);
-        return 0;
-    }
-    
-    if (strncmp(start, "desktop_show_window(", 20) == 0) {
-        printf("DESKTOP: Showing window\n");
-        // Call actual desktop function
-        desktop_show_window(1);
-        free(trimmed);
-        return 0;
-    }
-    
-    if (strncmp(start, "desktop_apply_theme()", 21) == 0) {
-        printf("DESKTOP: Applying CDE theme\n");
-        // Call actual desktop function
-        desktop_apply_theme();
-        free(trimmed);
-        return 0;
-    }
-    
-    if (strncmp(start, "desktop_run_loop()", 18) == 0) {
-        printf("DESKTOP: Starting event loop\n");
-        // Call actual desktop function
-        desktop_run_loop();
-        free(trimmed);
-        return 0;
-    }
-    
     // Handle function calls
-    if (strchr(start, '(') && strchr(start, ')')) {
+    if (strchr(start, '(') && strchr(start, ')') && strstr(start, "print(")) {
         printf("Function call: %s\n", start);
         free(trimmed);
         return 0;

@@ -4,7 +4,8 @@
 #include <time.h>
 
 // Global terminal configuration
-static TerminalConfig g_terminal_config;
+// Global terminal configuration
+TerminalConfig g_terminal_config;
 static HANDLE g_console_handle;
 static CONSOLE_SCREEN_BUFFER_INFO g_original_buffer_info;
 static int g_initialized = 0;
