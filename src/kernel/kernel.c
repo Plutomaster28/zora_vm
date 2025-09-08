@@ -251,7 +251,11 @@ void kernel_panic(uint32_t error_code, const char* message) {
 }
 
 int kernel_main(void) {
-    uint32_t boot_flags = BOOT_FLAG_VERBOSE | BOOT_FLAG_DEBUG_MODE;
+    // Set boot flags based on compilation options
+    uint32_t boot_flags = 0;
+#if ZORA_VERBOSE_BOOT
+    boot_flags |= BOOT_FLAG_VERBOSE | BOOT_FLAG_DEBUG_MODE;
+#endif
     
     // Early initialization
     if (kernel_early_init(boot_flags) != 0) {
@@ -285,7 +289,11 @@ int kernel_start(void) {
 
 // Main kernel initialization function - setup only, no infinite loop
 int kernel_init(void) {
-    uint32_t boot_flags = BOOT_FLAG_VERBOSE | BOOT_FLAG_DEBUG_MODE;
+    // Set boot flags based on compilation options
+    uint32_t boot_flags = 0;
+#if ZORA_VERBOSE_BOOT
+    boot_flags |= BOOT_FLAG_VERBOSE | BOOT_FLAG_DEBUG_MODE;
+#endif
     
     // Early initialization
     if (kernel_early_init(boot_flags) != 0) {

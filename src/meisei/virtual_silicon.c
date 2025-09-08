@@ -63,8 +63,13 @@ static void* meisei_alloc_pool(size_t size) {
 
 static void meisei_free_pool(void* ptr, size_t size) {
     VirtualFree(ptr, 0, MEM_RELEASE);
-}int meisei_silicon_init(void) {
+}
+
+int meisei_silicon_init(void) {
+    
+#if ZORA_VERBOSE_BOOT
     printf("Initializing Meisei Virtual Silicon...\n");
+#endif
     
     if (g_silicon) {
         return 0; // Already initialized
@@ -113,7 +118,9 @@ static void meisei_free_pool(void* ptr, size_t size) {
     
     // Initialize worker thread count (CPU cores * 2)
     g_silicon->worker_threads = get_cpu_count() * 2;
+#if ZORA_VERBOSE_BOOT
     printf("Virtual Silicon using %d worker threads\n", g_silicon->worker_threads);
+#endif
     
     // Initialize virtual registers (like CPU registers but for script state)
     memset(g_silicon->virtual_registers, 0, sizeof(g_silicon->virtual_registers));
@@ -122,8 +129,10 @@ static void meisei_free_pool(void* ptr, size_t size) {
     g_silicon->initialized = true;
     g_silicon->enabled = true;
     
+#if ZORA_VERBOSE_BOOT
     printf("Meisei Virtual Silicon initialized successfully!\n");
     printf("Target performance boost: 700%+ minimum\n");
+#endif
     
     return 0;
 }

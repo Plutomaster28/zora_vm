@@ -315,7 +315,9 @@ int vfs_init(void) {
     vfs_create_file("/etc/passwd");
     vfs_create_file("/home/readme.txt");
     
+#if ZORA_VERBOSE_BOOT
     printf("Virtual filesystem initialized\n");
+#endif
     return 0;
 }
 

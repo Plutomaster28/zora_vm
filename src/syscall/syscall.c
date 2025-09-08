@@ -25,7 +25,9 @@ int syscall_init(void) {
         return 0;
     }
     
+#if ZORA_VERBOSE_BOOT
     printf("System call interception initialized\n");
+#endif
     syscall_initialized = 1;
     return 0;
 }

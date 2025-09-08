@@ -4,6 +4,25 @@ project(zora_vm C)
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_STANDARD_REQUIRED ON)
 
+# Build configuration options
+option(ZORA_VERBOSE_BOOT "Enable verbose boot messages and debug output" OFF)
+option(ZORA_RELEASE_MODE "Enable clean release mode startup (minimal messages)" ON)
+
+# Set preprocessor definitions based on build options
+if(ZORA_VERBOSE_BOOT)
+    add_definitions(-DZORA_VERBOSE_BOOT=1)
+    message(STATUS "Verbose boot mode enabled - full debug output")
+else()
+    add_definitions(-DZORA_VERBOSE_BOOT=0)
+endif()
+
+if(ZORA_RELEASE_MODE)
+    add_definitions(-DZORA_RELEASE_MODE=1)
+    message(STATUS "Release mode enabled - clean startup experience")
+else()
+    add_definitions(-DZORA_RELEASE_MODE=0)
+endif()
+
 # Windows-only build (including MSYS2/MinGW environments)
 if(NOT WIN32 AND NOT MSYS AND NOT MINGW)
     message(FATAL_ERROR "This project only supports Windows")

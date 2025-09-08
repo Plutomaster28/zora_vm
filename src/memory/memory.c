@@ -9,7 +9,9 @@ static Memory* vm_memory = NULL;
 Memory* memory_init(size_t size) {
     // Check if already initialized
     if (vm_memory != NULL) {
+#if ZORA_VERBOSE_BOOT
         printf("Memory already initialized\n");
+#endif
         return vm_memory;
     }
     
@@ -26,7 +28,9 @@ Memory* memory_init(size_t size) {
     vm_memory->initialized = 0;
     
     // Allocate the actual memory buffer
+#if ZORA_VERBOSE_BOOT
     printf("Allocating %zu bytes (%zu MB) for VM memory...\n", size, size / (1024 * 1024));
+#endif
     vm_memory->data = malloc(size);
     if (!vm_memory->data) {
         fprintf(stderr, "Failed to allocate %zu bytes for VM memory\n", size);
@@ -40,7 +44,9 @@ Memory* memory_init(size_t size) {
     vm_memory->allocated = size;
     vm_memory->initialized = 1;
     
+#if ZORA_VERBOSE_BOOT
     printf("Memory initialized successfully: %zu MB allocated\n", size / (1024 * 1024));
+#endif
     return vm_memory;
 }
 

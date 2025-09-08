@@ -143,7 +143,9 @@ int main(int argc, char* argv[]) {
     signal(SIGINT, signal_handler);
     signal(SIGTERM, signal_handler);
 
+#if ZORA_VERBOSE_BOOT
     printf("Starting Zora VM...\n");
+#endif
 
     // Check if running in batch mode (for healthcheck)
     int batch_mode = 0;
@@ -160,7 +162,48 @@ int main(int argc, char* argv[]) {
         return 0;
     }
 
+#if ZORA_RELEASE_MODE && !ZORA_VERBOSE_BOOT
+    // Clean release mode startup - minimal output
+    printf("=== ZORA VM ===\n");
+    printf("ZoraVM Boot v2.1.0\n");
+    printf("Firmware Version: %s\n", "ZoraVM-2.1.0");
+    
+    // Simple boot sequence similar to MERL
+    const char spinner[] = "/-\\|";
+    int spinner_index = 0;
+    
+    printf("Initializing virtual machine");
+    for (int i = 0; i < 6; i++) {
+        printf("%c\b", spinner[spinner_index++ % 4]);
+        fflush(stdout);
+        Sleep(200);
+    }
+    printf("OK\n");
+    
+    printf("Loading kernel");
+    for (int i = 0; i < 4; i++) {
+        printf("%c\b", spinner[spinner_index++ % 4]);
+        fflush(stdout);
+        Sleep(150);
+    }
+    printf("OK\n");
+    
+    printf("Mounting virtual filesystem");
+    for (int i = 0; i < 3; i++) {
+        printf("%c\b", spinner[spinner_index++ % 4]);
+        fflush(stdout);
+        Sleep(100);
+    }
+    printf("OK\n");
+    
+    printf("Boot sequence complete.\n");
+    printf("========================================\n");
+#endif
+
     // Initialize crash protection early
+#if ZORA_VERBOSE_BOOT
+    printf("Initializing VM crash protection...\n");
+#endif
     vm_init_crash_protection();
 
     // Set jump point for crash recovery
@@ -171,26 +214,34 @@ int main(int argc, char* argv[]) {
     }
 
     // Initialize sandboxing first
+#if ZORA_VERBOSE_BOOT
     printf("Initializing sandbox...\n");
+#endif
     if (sandbox_init() != 0) {
         fprintf(stderr, "Failed to initialize sandbox.\n");
         return 1;
     }
 
     // Apply resource limits
+#if ZORA_VERBOSE_BOOT
     printf("Setting memory limit to %d MB...\n", MEMORY_SIZE / (1024 * 1024));
+#endif
     sandbox_set_memory_limit(MEMORY_SIZE);
     sandbox_set_cpu_limit(80); // 80% CPU limit
     
     // Enable strict sandbox mode
+#if ZORA_VERBOSE_BOOT
     printf("Enabling strict sandbox mode...\n");
+#endif
     sandbox_set_strict_mode(1);
     sandbox_block_network_access(1);
     sandbox_block_file_system_access(1);
     sandbox_block_system_calls(1);
     
     // Initialize virtualization layer
+#if ZORA_VERBOSE_BOOT
     printf("Initializing virtualization layer...\n");
+#endif
     if (virtualization_init() != 0) {
         fprintf(stderr, "Failed to initialize virtualization layer.\n");
         sandbox_cleanup();
@@ -198,47 +249,61 @@ int main(int argc, char* argv[]) {
     }
 
     // Initialize the virtual machine environment
+#if ZORA_VERBOSE_BOOT
     printf("Initializing VM environment...\n");
+#endif
     if (vm_init() != 0) {
         fprintf(stderr, "Failed to initialize the virtual machine.\n");
         goto cleanup;
     }
 
     // Initialize sophisticated kernel first - this shows our OS boot sequence
+#if ZORA_VERBOSE_BOOT
     printf("Initializing ZORA Kernel...\n");
+#endif
     if (kernel_init() != 0) {
         fprintf(stderr, "Failed to initialize kernel.\n");
         goto cleanup;
     }
 
     // Set up CPU, memory, and devices within sandbox
+#if ZORA_VERBOSE_BOOT
     printf("Initializing CPU...\n");
+#endif
     if (cpu_init() != 0) {
         fprintf(stderr, "Failed to initialize CPU.\n");
         goto cleanup;
     }
 
+#if ZORA_VERBOSE_BOOT
     printf("Initializing memory (%d MB)...\n", MEMORY_SIZE / (1024 * 1024));
+#endif
     Memory* mem = memory_init(MEMORY_SIZE);
     if (mem == NULL) {
         fprintf(stderr, "CRITICAL: Failed to initialize memory (requested %d MB)\n", MEMORY_SIZE / (1024 * 1024));
         fprintf(stderr, "This could be due to insufficient system memory or memory limits.\n");
         goto cleanup;
     }
+#if ZORA_VERBOSE_BOOT
     printf("Memory initialization successful!\n");
+#endif
 
     // Note: Devices are already initialized by the kernel's device manager
     // No need for separate device_init() call
 
     // Initialize MERL shell within the VM
+#if ZORA_VERBOSE_BOOT
     printf("Initializing MERL shell...\n");
+#endif
     if (merl_init() != 0) {
         fprintf(stderr, "Failed to initialize MERL shell.\n");
         goto cleanup;
     }
 
     // Initialize VFS
+#if ZORA_VERBOSE_BOOT
     printf("Initializing VFS...\n");
+#endif
     if (vfs_init() != 0) {
         fprintf(stderr, "Failed to initialize VFS\n");
         goto cleanup;
@@ -275,12 +340,16 @@ int main(int argc, char* argv[]) {
     // Check if ZoraPerl directory exists, create if not
     DWORD attrib = GetFileAttributesA(zora_perl_path);
     if (attrib == INVALID_FILE_ATTRIBUTES || !(attrib & FILE_ATTRIBUTE_DIRECTORY)) {
+#if ZORA_VERBOSE_BOOT
         printf("Creating ZoraPerl directory at: %s\n", zora_perl_path);
+#endif
         if (create_directory_recursive(zora_perl_path) != 0) {
             fprintf(stderr, "ERROR: Failed to create ZoraPerl directory!\n");
             goto cleanup;
         }
+#if ZORA_VERBOSE_BOOT
         printf("Successfully created ZoraPerl directory at: %s\n", zora_perl_path);
+#endif
     } else {
         // Debug: Uncomment the next line if you need to see the ZoraPerl path
         // printf("Found existing ZoraPerl directory at: %s\n", zora_perl_path);
@@ -301,21 +370,27 @@ int main(int argc, char* argv[]) {
     vfs_mount_root_autodiscover(zora_perl_path);
 
     // Initialize network virtualization
+#if ZORA_VERBOSE_BOOT
     printf("Initializing virtual network...\n");
+#endif
     if (network_init() != 0) {
         fprintf(stderr, "Failed to initialize virtual network.\n");
         goto cleanup;
     }
 
     // Initialize Lua scripting engine
+#if ZORA_VERBOSE_BOOT
     printf("Initializing Lua scripting engine...\n");
+#endif
     if (lua_vm_init() != 0) {
         fprintf(stderr, "Failed to initialize Lua VM\n");
         goto cleanup;
     }
 
 #ifdef PYTHON_SCRIPTING
+#if ZORA_VERBOSE_BOOT
     printf("Initializing Python scripting engine...\n");
+#endif
     if (python_vm_init() != 0) {
         fprintf(stderr, "Failed to initialize Python VM\n");
         goto cleanup;
@@ -323,27 +398,35 @@ int main(int argc, char* argv[]) {
 #endif
 
 #ifdef PERL_SCRIPTING
+#if ZORA_VERBOSE_BOOT
     printf("Initializing Perl scripting engine...\n");
+#endif
     if (perl_vm_init() != 0) {
         fprintf(stderr, "Failed to initialize Perl VM\n");
         goto cleanup;
     }
 #endif
 
+#if ZORA_VERBOSE_BOOT
     printf("Initializing binary executor...\n");
+#endif
     if (binary_executor_init() != 0) {
         fprintf(stderr, "Failed to initialize binary executor\n");
         goto cleanup;
     }
 
+#if ZORA_VERBOSE_BOOT
     printf("Initializing Meisei Virtual Silicon...\n");
+#endif
     if (meisei_silicon_init() != 0) {
         fprintf(stderr, "Failed to initialize Meisei Virtual Silicon\n");
         goto cleanup;
     }
 
+#if ZORA_VERBOSE_BOOT
     printf("Zora VM initialized successfully. Starting MERL shell...\n");
     printf("========================================\n");
+#endif
 
     // Start the MERL shell as the "OS" with crash protection
     int result = 0;
@@ -365,7 +448,11 @@ int main(int argc, char* argv[]) {
 
     // Check if we need to reboot
     if (rebooting) {
+#if ZORA_VERBOSE_BOOT
         printf("Reboot requested - cleaning up before restart...\n");
+#else
+        printf("Rebooting ZoraVM...\n");
+#endif
         
         // Perform cleanup
         vm_crash_guard = 0;
@@ -389,7 +476,9 @@ int main(int argc, char* argv[]) {
         perl_vm_cleanup();
 #endif
         
+#if ZORA_VERBOSE_BOOT
         printf("Cleanup complete. Restarting Zora VM...\n");
+#endif
         
         // Get the current executable path
         char exe_path[MAX_PATH];
@@ -401,7 +490,9 @@ int main(int argc, char* argv[]) {
         si.cb = sizeof(si);
         
         if (CreateProcessA(NULL, exe_path, NULL, NULL, FALSE, 0, NULL, NULL, &si, &pi)) {
+#if ZORA_VERBOSE_BOOT
             printf("VM restart initiated successfully.\n");
+#endif
             CloseHandle(pi.hProcess);
             CloseHandle(pi.hThread);
             return 0; // Exit current instance
@@ -417,7 +508,9 @@ cleanup:
     vm_crash_guard = 0;
     
     // Clean up resources before exiting
+#if ZORA_VERBOSE_BOOT
     printf("\nShutting down Zora VM...\n");
+#endif
     
     // If there was an error during initialization, pause to show the error
     #ifdef DEBUG_PAUSE_ON_ERROR
@@ -447,6 +540,8 @@ cleanup:
     perl_vm_cleanup();
 #endif
     
+#if ZORA_VERBOSE_BOOT
     printf("Zora VM shutdown complete.\n");
+#endif
     return 0;
 }

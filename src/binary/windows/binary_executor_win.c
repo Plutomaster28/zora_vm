@@ -12,7 +12,9 @@
 static int windows_binary_executor_initialized = 0;
 
 int binary_executor_init_windows(void) {
+#if ZORA_VERBOSE_BOOT
     printf("Initializing Windows binary executor...\n");
+#endif
     windows_binary_executor_initialized = 1;
     return 0;
 }

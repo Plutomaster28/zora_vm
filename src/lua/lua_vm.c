@@ -289,7 +289,9 @@ int lua_vm_init(void) {
     lua_register(lua_vm.L, "vm_execute", lua_vm_safe_execute);  // Safe command execution
     
     lua_vm.initialized = 1;
+#if ZORA_VERBOSE_BOOT
     printf("Lua VM initialized successfully with security restrictions\n");
+#endif
     return 0;
 }
 

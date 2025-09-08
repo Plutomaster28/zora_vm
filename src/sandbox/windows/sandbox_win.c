@@ -33,7 +33,9 @@ int sandbox_init(void) {
     sandbox_state.cpu_limit = 0;
     sandbox_state.initialized = 1;
     
+#if ZORA_VERBOSE_BOOT
     printf("Windows sandbox environment initialized\n");
+#endif
     return 0;
 }
 

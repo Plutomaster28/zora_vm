@@ -17,7 +17,9 @@ int cpu_init(void) {
         cpu.registers[i] = 0;
     }
     
+#if ZORA_VERBOSE_BOOT
     printf("CPU initialized\n");
+#endif
     return 0;
 }
 

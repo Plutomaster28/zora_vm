@@ -37,7 +37,9 @@ int virtualization_init(void) {
     g_vm_context->initialized = 1;
     g_vm_context->vfs_context = vfs_get_instance();
     
+#if ZORA_VERBOSE_BOOT
     printf("Virtualization layer initialized\n");
+#endif
     return 0;
 }
 

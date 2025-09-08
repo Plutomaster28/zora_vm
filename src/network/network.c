@@ -51,6 +51,7 @@ int network_init(void) {
         return -1;
     }
     
+#if ZORA_VERBOSE_BOOT
     printf("Virtual Network initialized successfully\n");
     printf("VM Network Configuration:\n");
     printf("   IP Address:    %s\n", vnet->vm_ip);
@@ -59,6 +60,7 @@ int network_init(void) {
     printf("   DNS Server:    %s\n", vnet->dns_server);
     printf("   NAT:           %s\n", vnet->nat_enabled ? "ENABLED" : "DISABLED");
     printf("   Security:      ENABLED (Safe Mode)\n");
+#endif
     
     return 0;
 }
