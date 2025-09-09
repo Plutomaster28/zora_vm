@@ -3,12 +3,34 @@
 
 #include <stdio.h>
 #include <stddef.h>
+#include <time.h>
+
+// Unix-style permission constants
+#define VFS_S_IRUSR 0400    // Owner read permission
+#define VFS_S_IWUSR 0200    // Owner write permission
+#define VFS_S_IXUSR 0100    // Owner execute permission
+#define VFS_S_IRGRP 0040    // Group read permission
+#define VFS_S_IWGRP 0020    // Group write permission
+#define VFS_S_IXGRP 0010    // Group execute permission
+#define VFS_S_IROTH 0004    // Others read permission
+#define VFS_S_IWOTH 0002    // Others write permission
+#define VFS_S_IXOTH 0001    // Others execute permission
+
+// Common permission combinations
+#define VFS_S_IRWXU (VFS_S_IRUSR | VFS_S_IWUSR | VFS_S_IXUSR)  // 700
+#define VFS_S_IRWXG (VFS_S_IRGRP | VFS_S_IWGRP | VFS_S_IXGRP)  // 070
+#define VFS_S_IRWXO (VFS_S_IROTH | VFS_S_IWOTH | VFS_S_IXOTH)  // 007
+
+// Default permissions
+#define VFS_DEFAULT_FILE_PERMS  0644  // rw-r--r--
+#define VFS_DEFAULT_DIR_PERMS   0755  // rwxr-xr-x
+#define VFS_ROOT_ONLY_PERMS     0600  // rw-------
 
 // Forward declarations
 typedef struct VNode VNode;
 typedef struct VirtualFS VirtualFS;
 
-// VFS Node structure
+// VFS Node structure with Unix-style permissions
 struct VNode {
     char name[256];
     int is_directory;
@@ -19,6 +41,13 @@ struct VNode {
     VNode* parent;
     VNode* children;
     VNode* next;
+    
+    // Unix-style permissions and ownership
+    unsigned int mode;           // File permissions (rwx for owner/group/others)
+    char owner[50];             // Username of owner
+    char group[50];             // Group name
+    time_t created_time;        // Creation time
+    time_t modified_time;       // Last modification time
 };
 
 // Virtual filesystem structure
@@ -58,6 +87,19 @@ int vfs_mount_persistent(const char* vm_path, const char* host_path);
 
 // Utility functions
 int create_directory_recursive(const char* path);    // NEW: Declare this function
+
+// Permission and ownership functions
+int vfs_chmod(const char* path, unsigned int mode);
+int vfs_chown(const char* path, const char* owner, const char* group);
+int vfs_check_permission(const char* path, const char* user, int required_perms);
+int vfs_set_default_permissions(VNode* node, const char* owner, const char* group);
+void vfs_format_permissions(unsigned int mode, char* output);
+int vfs_parse_permissions(const char* perm_str);
+
+// User context for permission checking
+extern char vfs_current_user[50];
+extern char vfs_current_group[50];
+extern int vfs_is_root;
 
 // Virtual syscalls
 char* vm_getcwd(void);

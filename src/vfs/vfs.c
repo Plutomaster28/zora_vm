@@ -18,6 +18,11 @@ static VirtualFS* vm_fs = NULL;
 static char current_directory[256] = "/";
 static char host_root_directory[512] = {0};
 
+// Permission system global variables
+char vfs_current_user[50] = "guest";
+char vfs_current_group[50] = "users";
+int vfs_is_root = 0;
+
 // NEW: Write-through helper function declarations
 static char* vfs_get_host_path(VNode* node);
 static int vfs_ensure_host_directory(const char* host_path);
@@ -39,6 +44,10 @@ VNode* vfs_create_directory_node(const char* name) {
     node->children = NULL;
     node->next = NULL;
     
+    // Set default permissions and ownership
+    vfs_set_default_permissions(node, vfs_current_user, vfs_current_group);
+    node->mode = VFS_DEFAULT_DIR_PERMS;  // 755 - rwxr-xr-x
+    
     return node;
 }
 
@@ -57,6 +66,10 @@ VNode* vfs_create_file_node(const char* name) {
     node->parent = NULL;
     node->children = NULL;
     node->next = NULL;
+    
+    // Set default permissions and ownership
+    vfs_set_default_permissions(node, vfs_current_user, vfs_current_group);
+    node->mode = VFS_DEFAULT_FILE_PERMS;  // 644 - rw-r--r--
     
     return node;
 }
@@ -808,6 +821,12 @@ int vfs_write_file(const char* path, const void* data, size_t size) {
     if (!node || node->is_directory) {
         return -1;
     }
+    
+    // Check write permission
+    if (!vfs_check_permission(path, vfs_current_user, VFS_S_IWUSR >> 6)) {
+        printf("VFS: Permission denied writing to '%s'\n", path);
+        return -1;
+    }
 
     // Update VFS data
     if (node->data) {
@@ -823,6 +842,9 @@ int vfs_write_file(const char* path, const void* data, size_t size) {
         node->data = NULL;
         node->size = 0;
     }
+    
+    // Update modification time
+    node->modified_time = time(NULL);
 
     // NEW: Write-through to host filesystem
     if (strlen(host_root_directory) > 0) {
@@ -836,6 +858,12 @@ int vfs_write_file(const char* path, const void* data, size_t size) {
 int vfs_read_file(const char* path, void** data, size_t* size) {
     VNode* node = vfs_find_node(path);
     if (!node || node->is_directory) {
+        return -1;
+    }
+    
+    // Check read permission
+    if (!vfs_check_permission(path, vfs_current_user, VFS_S_IRUSR >> 6)) {
+        printf("VFS: Permission denied reading '%s'\n", path);
         return -1;
     }
     
@@ -930,4 +958,147 @@ int vfs_mount_root_autodiscover(const char* host_root) {
     FindClose(hFind);
     printf("Autodiscovery complete.\n");
     return 0;
+}
+
+// ===== PERMISSION SYSTEM IMPLEMENTATION =====
+
+// Set default permissions and ownership for a node
+int vfs_set_default_permissions(VNode* node, const char* owner, const char* group) {
+    if (!node) return -1;
+    
+    // Set owner and group
+    strncpy(node->owner, owner ? owner : "guest", sizeof(node->owner) - 1);
+    node->owner[sizeof(node->owner) - 1] = '\0';
+    strncpy(node->group, group ? group : "users", sizeof(node->group) - 1);
+    node->group[sizeof(node->group) - 1] = '\0';
+    
+    // Set timestamps
+    time_t now = time(NULL);
+    node->created_time = now;
+    node->modified_time = now;
+    
+    return 0;
+}
+
+// Change file permissions (chmod)
+int vfs_chmod(const char* path, unsigned int mode) {
+    VNode* node = vfs_find_node(path);
+    if (!node) return -1;
+    
+    // Check if current user can modify permissions
+    if (!vfs_is_root && strcmp(node->owner, vfs_current_user) != 0) {
+        return -1; // Permission denied
+    }
+    
+    node->mode = mode;
+    node->modified_time = time(NULL);
+    return 0;
+}
+
+// Change file ownership (chown) 
+int vfs_chown(const char* path, const char* owner, const char* group) {
+    VNode* node = vfs_find_node(path);
+    if (!node) return -1;
+    
+    // Only root can change ownership
+    if (!vfs_is_root) {
+        return -1; // Permission denied
+    }
+    
+    if (owner) {
+        strncpy(node->owner, owner, sizeof(node->owner) - 1);
+        node->owner[sizeof(node->owner) - 1] = '\0';
+    }
+    
+    if (group) {
+        strncpy(node->group, group, sizeof(node->group) - 1);
+        node->group[sizeof(node->group) - 1] = '\0';
+    }
+    
+    node->modified_time = time(NULL);
+    return 0;
+}
+
+// Check if user has required permissions for a file
+int vfs_check_permission(const char* path, const char* user, int required_perms) {
+    VNode* node = vfs_find_node(path);
+    if (!node) return 0; // File not found
+    
+    // Root has all permissions
+    if (vfs_is_root) return 1;
+    
+    unsigned int mode = node->mode;
+    
+    // Check owner permissions
+    if (strcmp(node->owner, user) == 0) {
+        return (mode & (required_perms << 6)) ? 1 : 0;
+    }
+    
+    // Check group permissions (simplified - assume user is in group if group matches)
+    if (strcmp(node->group, vfs_current_group) == 0) {
+        return (mode & (required_perms << 3)) ? 1 : 0;
+    }
+    
+    // Check others permissions
+    return (mode & required_perms) ? 1 : 0;
+}
+
+// Format permissions as rwx string (like ls -l)
+void vfs_format_permissions(unsigned int mode, char* output) {
+    if (!output) return;
+    
+    // Owner permissions
+    output[0] = (mode & VFS_S_IRUSR) ? 'r' : '-';
+    output[1] = (mode & VFS_S_IWUSR) ? 'w' : '-';
+    output[2] = (mode & VFS_S_IXUSR) ? 'x' : '-';
+    
+    // Group permissions  
+    output[3] = (mode & VFS_S_IRGRP) ? 'r' : '-';
+    output[4] = (mode & VFS_S_IWGRP) ? 'w' : '-';
+    output[5] = (mode & VFS_S_IXGRP) ? 'x' : '-';
+    
+    // Others permissions
+    output[6] = (mode & VFS_S_IROTH) ? 'r' : '-';
+    output[7] = (mode & VFS_S_IWOTH) ? 'w' : '-';
+    output[8] = (mode & VFS_S_IXOTH) ? 'x' : '-';
+    
+    output[9] = '\0';
+}
+
+// Parse permission string (like "755" or "rwxr-xr-x")
+int vfs_parse_permissions(const char* perm_str) {
+    if (!perm_str) return VFS_DEFAULT_FILE_PERMS;
+    
+    // Handle octal format (e.g., "755")
+    if (strlen(perm_str) == 3 && perm_str[0] >= '0' && perm_str[0] <= '7') {
+        int owner = perm_str[0] - '0';
+        int group = perm_str[1] - '0';
+        int others = perm_str[2] - '0';
+        
+        return (owner << 6) | (group << 3) | others;
+    }
+    
+    // Handle symbolic format (e.g., "rwxr-xr-x")
+    if (strlen(perm_str) == 9) {
+        int mode = 0;
+        
+        // Owner
+        if (perm_str[0] == 'r') mode |= VFS_S_IRUSR;
+        if (perm_str[1] == 'w') mode |= VFS_S_IWUSR;
+        if (perm_str[2] == 'x') mode |= VFS_S_IXUSR;
+        
+        // Group
+        if (perm_str[3] == 'r') mode |= VFS_S_IRGRP;
+        if (perm_str[4] == 'w') mode |= VFS_S_IWGRP;
+        if (perm_str[5] == 'x') mode |= VFS_S_IXGRP;
+        
+        // Others
+        if (perm_str[6] == 'r') mode |= VFS_S_IROTH;
+        if (perm_str[7] == 'w') mode |= VFS_S_IWOTH;
+        if (perm_str[8] == 'x') mode |= VFS_S_IXOTH;
+        
+        return mode;
+    }
+    
+    return VFS_DEFAULT_FILE_PERMS;
 }

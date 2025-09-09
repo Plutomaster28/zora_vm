@@ -11,6 +11,11 @@ void useradd_command(int argc, char **argv);
 void login_command(int argc, char **argv);
 void logout_command(int argc, char **argv);
 void passwd_command(int argc, char **argv);
+void su_command(int argc, char **argv);
+
+// Security functions
+int secure_password_input(char* password, int max_len, const char* prompt);
+void simple_hash(const char* input, char* output);
 
 // Helper function prototypes for persistence
 void load_users();

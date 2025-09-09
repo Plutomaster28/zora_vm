@@ -543,35 +543,6 @@ void grep_command(int argc, char **argv) {
     }
 }
 
-// File permissions commands
-void chmod_command(int argc, char **argv) {
-    if (argc < 3) {
-        printf("Usage: chmod <mode> <filename>\n");
-        printf("Example: chmod 755 myfile\n");
-        return;
-    }
-    
-    char* mode = argv[1];
-    char* filename = argv[2];
-    
-    printf("chmod: Changed permissions of '%s' to '%s' (simulated)\n", filename, mode);
-    printf("Note: File permissions are simulated in the VM environment\n");
-}
-
-void chown_command(int argc, char **argv) {
-    if (argc < 3) {
-        printf("Usage: chown <owner[:group]> <filename>\n");
-        printf("Example: chown user:group myfile\n");
-        return;
-    }
-    
-    char* owner = argv[1];
-    char* filename = argv[2];
-    
-    printf("chown: Changed ownership of '%s' to '%s' (simulated)\n", filename, owner);
-    printf("Note: File ownership is simulated in the VM environment\n");
-}
-
 // Process management commands
 static int background_jobs[10] = {0};
 static int job_count = 0;
@@ -1886,10 +1857,15 @@ void ls_command(int argc, char **argv) {
         }
         
         if (long_format) {
-            // Long format: permissions, size, name
-            printf("%s ", child->is_directory ? "drwxr-xr-x" : "-rw-r--r--");
-            printf("%8s ", "user");  // placeholder for user
-            printf("%8s ", "group"); // placeholder for group
+            // Long format: permissions, owner, group, size, time, name
+            char perm_str[10];
+            extern void vfs_format_permissions(unsigned int mode, char* output);
+            vfs_format_permissions(child->mode, perm_str);
+            
+            // Print file type and permissions
+            printf("%c%s ", child->is_directory ? 'd' : '-', perm_str);
+            printf("%8s ", child->owner);
+            printf("%8s ", child->group);
             
             if (human_readable && child->size >= 1024) {
                 if (child->size >= 1024 * 1024) {
@@ -1901,7 +1877,11 @@ void ls_command(int argc, char **argv) {
                 printf("%8zu ", child->size);
             }
             
-            printf("Jan 01 12:00 "); // placeholder for time
+            // Format modification time
+            char time_str[16];
+            struct tm* tm_info = localtime(&child->modified_time);
+            strftime(time_str, sizeof(time_str), "%b %d %H:%M", tm_info);
+            printf("%s ", time_str);
             
             if (child->is_directory) {
                 terminal_print_path(child->name);
@@ -2661,6 +2641,153 @@ void route_wrapper(int argc, char **argv) {
     route_command(argv[1], argc - 1, argv + 1);
 }
 
+// ===== PERMISSION COMMANDS =====
+
+// Helper function to check if current user is guest (with restrictions)
+int is_guest_user() {
+    extern char current_user[50];
+    return (strcmp(current_user, "guest") == 0);
+}
+
+void chmod_command(int argc, char **argv) {
+    if (is_guest_user()) {
+        printf("chmod: Permission denied - guests cannot change file permissions\n");
+        return;
+    }
+    
+    if (argc < 3) {
+        printf("Usage: chmod <mode> <file>\n");
+        printf("Examples:\n");
+        printf("  chmod 755 file.txt\n");
+        printf("  chmod rwxr-xr-x file.txt\n");
+        return;
+    }
+    
+    char expanded_path[512];
+    expand_path(argv[2], expanded_path, sizeof(expanded_path));
+    
+    // Build absolute path if relative
+    char full_path[512];
+    if (expanded_path[0] != '/') {
+        char* cwd = vfs_getcwd();
+        snprintf(full_path, sizeof(full_path), "%s/%s", cwd, expanded_path);
+    } else {
+        strcpy(full_path, expanded_path);
+    }
+    
+    // Parse permission mode
+    extern int vfs_parse_permissions(const char* perm_str);
+    int mode = vfs_parse_permissions(argv[1]);
+    
+    // Apply chmod
+    extern int vfs_chmod(const char* path, unsigned int mode);
+    if (vfs_chmod(full_path, mode) == 0) {
+        printf("Changed permissions of '%s'\n", argv[2]);
+    } else {
+        printf("chmod: cannot change permissions of '%s': Permission denied\n", argv[2]);
+    }
+}
+
+void chown_command(int argc, char **argv) {
+    if (is_guest_user()) {
+        printf("chown: Permission denied - guests cannot change file ownership\n");
+        return;
+    }
+    
+    if (argc < 3) {
+        printf("Usage: chown <owner>[:<group>] <file>\n");
+        printf("Examples:\n");
+        printf("  chown root file.txt\n");
+        printf("  chown user:users file.txt\n");
+        return;
+    }
+    
+    char expanded_path[512];
+    expand_path(argv[2], expanded_path, sizeof(expanded_path));
+    
+    // Build absolute path if relative
+    char full_path[512];
+    if (expanded_path[0] != '/') {
+        char* cwd = vfs_getcwd();
+        snprintf(full_path, sizeof(full_path), "%s/%s", cwd, expanded_path);
+    } else {
+        strcpy(full_path, expanded_path);
+    }
+    
+    // Parse owner:group format
+    char owner[64] = {0};
+    char group[64] = {0};
+    char* colon = strchr(argv[1], ':');
+    
+    if (colon) {
+        *colon = '\0';
+        strncpy(owner, argv[1], sizeof(owner) - 1);
+        strncpy(group, colon + 1, sizeof(group) - 1);
+        *colon = ':'; // restore original string
+    } else {
+        strncpy(owner, argv[1], sizeof(owner) - 1);
+    }
+    
+    // Apply chown
+    extern int vfs_chown(const char* path, const char* owner, const char* group);
+    if (vfs_chown(full_path, owner[0] ? owner : NULL, group[0] ? group : NULL) == 0) {
+        printf("Changed ownership of '%s'\n", argv[2]);
+    } else {
+        printf("chown: cannot change ownership of '%s': Permission denied\n", argv[2]);
+    }
+}
+
+void stat_command(int argc, char **argv) {
+    if (argc < 2) {
+        printf("Usage: stat <file>\n");
+        return;
+    }
+    
+    char expanded_path[512];
+    expand_path(argv[1], expanded_path, sizeof(expanded_path));
+    
+    // Build absolute path if relative
+    char full_path[512];
+    if (expanded_path[0] != '/') {
+        char* cwd = vfs_getcwd();
+        snprintf(full_path, sizeof(full_path), "%s/%s", cwd, expanded_path);
+    } else {
+        strcpy(full_path, expanded_path);
+    }
+    
+    extern VNode* vfs_find_node(const char* path);
+    VNode* node = vfs_find_node(full_path);
+    if (!node) {
+        printf("stat: cannot stat '%s': No such file or directory\n", argv[1]);
+        return;
+    }
+    
+    printf("  File: %s\n", node->name);
+    printf("  Size: %zu\n", node->size);
+    printf("  Type: %s\n", node->is_directory ? "directory" : "regular file");
+    
+    // Format permissions
+    char perm_str[10];
+    extern void vfs_format_permissions(unsigned int mode, char* output);
+    vfs_format_permissions(node->mode, perm_str);
+    printf("Access: (%04o/%s)\n", node->mode & 0777, perm_str);
+    
+    printf("Owner: %s\n", node->owner);
+    printf("Group: %s\n", node->group);
+    
+    // Format timestamps
+    char time_str[64];
+    struct tm* tm_info = localtime(&node->created_time);
+    strftime(time_str, sizeof(time_str), "%Y-%m-%d %H:%M:%S", tm_info);
+    printf("Created: %s\n", time_str);
+    
+    tm_info = localtime(&node->modified_time);
+    strftime(time_str, sizeof(time_str), "%Y-%m-%d %H:%M:%S", tm_info);
+    printf("Modified: %s\n", time_str);
+}
+
+// ===== END PERMISSION COMMANDS =====
+
 // VM command implementations
 void vm_status_command(int argc, char **argv) {
     printf("=== Zora VM Status ===\n");
@@ -2718,10 +2845,14 @@ Command command_table[] = {
     {"flipper", flipper_command, "Switches to sub-shells."},
     {"pull", pull_command, "Takes a directory from the MERL goodies repository."},
     {"whoami", whoami_command, "Displays the current logged-in user."},
-    {"useradd", useradd_command, "Adds a new user (placeholder)."},
-    {"login", login_command, "Logs in as a specified user."},
+    {"useradd", useradd_command, "Adds a new user with secure password input."},
+    {"login", login_command, "Logs in with secure password input (Unix-style)."},
     {"logout", logout_command, "Logs out the current user."},
-    {"passwd", passwd_command, "Changes the password for the current user (placeholder)."},
+    {"passwd", passwd_command, "Changes password with secure input and verification."},
+    {"su", su_command, "Switch user (su [username], defaults to root)."},
+    {"chmod", chmod_command, "Change file permissions (chmod <mode> <file>)."},
+    {"chown", chown_command, "Change file ownership (chown <owner>[:<group>] <file>)."},
+    {"stat", stat_command, "Display detailed file information."},
     {"route", route_wrapper, "Routes commands to the appropriate handlers."},
     {"fork", fork_wrapper, "Creates a new process."},
     {"kill", kill_wrapper, "Terminates a process by ID."},
@@ -3645,7 +3776,8 @@ void help_command(int argc, char **argv) {
     printf("  %-12s - Change file permissions          %-12s - Change file owner\n", "chmod", "chown");
     printf("  %-12s - Show current user                %-12s - User login\n", "whoami", "login");
     printf("  %-12s - User logout                      %-12s - Add new user\n", "logout", "useradd");
-    printf("  %-12s - Change password                  \n", "passwd");
+    printf("  %-12s - Change password                  %-12s - Switch user\n", "passwd", "su");
+    printf("  %-12s - Show file details                \n", "stat");
     printf("\n");
     
     printf(" ENVIRONMENT & VARIABLES:\n");
