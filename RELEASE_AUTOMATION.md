@@ -2,11 +2,11 @@
 
 ## Fixed GitHub Actions Workflow
 
-✅ **Removed Docker Build**: Eliminated the broken Docker workflow (`docker.yml`)
-✅ **Windows-Only Focus**: Streamlined to focus on Windows native binary releases
-✅ **Correct Build Options**: Updated to use actual CMake options from our CMakeLists.txt
-✅ **Sakemono Tag Support**: Configured to trigger releases on "Sakemono*" tags
-✅ **Enhanced Packaging**: Includes both launcher scripts in release packages
+**Removed Docker Build**: Eliminated the broken Docker workflow (`docker.yml`)
+**Windows-Only Focus**: Streamlined to focus on Windows native binary releases
+**Correct Build Options**: Updated to use actual CMake options from our CMakeLists.txt
+**Sakemono Tag Support**: Configured to trigger releases on "Sakemono*" tags
+**Enhanced Packaging**: Includes both launcher scripts in release packages
 
 ## Release Workflow Features
 

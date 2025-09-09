@@ -37,30 +37,44 @@ jobs:
       run: |
         mkdir -p build
         cd build
+        echo "Configuring with CMake..."
         cmake .. \
           -G Ninja \
           -DCMAKE_BUILD_TYPE=Release \
           -DCMAKE_C_COMPILER=gcc \
           -DZORA_RELEASE_MODE=ON \
           -DZORA_VERBOSE_BOOT=OFF
+        echo "CMake configuration completed"
+        echo "Generated files:"
+        ls -la
         
     - name: Build Windows binary
       shell: msys2 {0}
       run: |
         cd build
         ninja -v
+        echo "Build completed, checking output:"
+        ls -la zora_vm.exe
+        echo "File info:"
+        file zora_vm.exe
         
     - name: Test Windows binary
       shell: msys2 {0}
       run: |
         cd build
-        ./zora_vm.exe || echo "Binary created successfully"
+        echo "Testing binary execution:"
+        ./zora_vm.exe || echo "Binary created successfully (exit code: $?)"
+        echo "Final file check:"
         file zora_vm.exe
+        ls -la zora_vm.exe
         
     - name: Package Windows release
       shell: msys2 {0}
       run: |
         cd build
+        echo "Current directory: $(pwd)"
+        echo "Contents: $(ls -la)"
+        
         mkdir -p zora-vm-windows
         cp zora_vm.exe zora-vm-windows/
         cp ../README.md zora-vm-windows/ || echo "README not found"
@@ -71,15 +85,18 @@ jobs:
         cp ../Launch_ZoraVM_WT.bat zora-vm-windows/ || echo "WT launcher not found"
         
         # Create a simple batch launcher for compatibility
-        cat > zora-vm-windows/zora-vm.bat << 'EOF'
-        @echo off
-        echo Starting ZORA VM...
-        "%~dp0zora_vm.exe" %*
-        pause
-        EOF
+        echo '@echo off' > zora-vm-windows/zora-vm.bat
+        echo 'echo Starting ZORA VM...' >> zora-vm-windows/zora-vm.bat
+        echo '"%~dp0zora_vm.exe" %*' >> zora-vm-windows/zora-vm.bat
+        echo 'pause' >> zora-vm-windows/zora-vm.bat
+        
+        echo "Package contents:"
+        ls -la zora-vm-windows/
         
         # Package as ZIP
         7z a zora-vm-windows-x64.zip zora-vm-windows/
+        echo "ZIP created:"
+        ls -la zora-vm-windows-x64.zip
         
     - name: Upload Windows binary artifact
       uses: actions/upload-artifact@v4
