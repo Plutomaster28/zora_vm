@@ -238,3 +238,20 @@ int perl_vm_load_script(const char* vm_path) {
     
     return -1;
 }
+
+// Load and execute Perl script with command-line arguments
+int perl_vm_load_script_with_args(const char* vm_path, int argc, char** argv) {
+    if (!perl_vm.initialized) {
+        printf("Perl VM not initialized\n");
+        return -1;
+    }
+    
+    // Simulate @ARGV setup (simplified)
+    printf("Perl VM: Setting up arguments for %s\n", vm_path);
+    for (int i = 1; i < argc; i++) {  // Skip script name in argv[0]
+        printf("  $ARGV[%d] = %s\n", i-1, argv[i]);
+    }
+    
+    // Load and execute the script
+    return perl_vm_load_script(vm_path);
+}

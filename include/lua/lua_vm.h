@@ -19,6 +19,7 @@ void lua_vm_cleanup(void);
 int lua_vm_execute_file(const char* filename);
 int lua_vm_execute_string(const char* code);
 int lua_vm_load_script(const char* vm_path);
+int lua_vm_load_script_with_args(const char* vm_path, const char* args_str);
 
 // Lua API functions exposed to scripts
 int lua_vm_print(lua_State* L);

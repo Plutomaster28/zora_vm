@@ -281,3 +281,20 @@ int python_vm_load_script(const char* vm_path) {
     printf("Python VM: No data available for script: %s\n", vm_path);
     return -1;
 }
+
+// Load and execute Python script with command-line arguments
+int python_vm_load_script_with_args(const char* vm_path, int argc, char** argv) {
+    if (!python_vm.initialized) {
+        printf("Python VM not initialized\n");
+        return -1;
+    }
+    
+    // Simulate sys.argv setup (simplified)
+    printf("Python VM: Setting up arguments for %s\n", vm_path);
+    for (int i = 0; i < argc; i++) {
+        printf("  argv[%d] = %s\n", i, argv[i]);
+    }
+    
+    // Load and execute the script
+    return python_vm_load_script(vm_path);
+}

@@ -369,6 +369,39 @@ int lua_vm_load_script(const char* vm_path) {
     return -1;
 }
 
+// Load and execute Lua script with command-line arguments
+int lua_vm_load_script_with_args(const char* vm_path, const char* args_str) {
+    if (!lua_vm.initialized) {
+        return -1;
+    }
+    
+    // Set up arg table in Lua global scope
+    lua_newtable(lua_vm.L);
+    
+    // Parse args_str and populate arg table
+    if (args_str && strlen(args_str) > 0) {
+        char* args_copy = strdup(args_str);
+        char* token = strtok(args_copy, " \t");
+        int arg_index = 1;
+        
+        while (token) {
+            lua_pushinteger(lua_vm.L, arg_index);
+            lua_pushstring(lua_vm.L, token);
+            lua_settable(lua_vm.L, -3);
+            arg_index++;
+            token = strtok(NULL, " \t");
+        }
+        
+        free(args_copy);
+    }
+    
+    // Set arg table as global 'arg'
+    lua_setglobal(lua_vm.L, "arg");
+    
+    // Load and execute the script
+    return lua_vm_load_script(vm_path);
+}
+
 // Get Lua state
 lua_State* lua_vm_get_state(void) {
     return lua_vm.L;

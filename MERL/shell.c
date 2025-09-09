@@ -40,6 +40,7 @@ void handle_command(char *command);
 void parse_and_execute_command_line(char *command_line);
 int execute_command_with_parsing(char *cmd_str);
 int execute_command_with_redirection(char *args[], int argc, char *input_file, char *output_file, int append_mode);
+int try_execute_script_command(const char* command, int argc, char** argv);
 void execute_simple_command(char *args[], int argc);
 void execute_simple_command_with_redirect(char *args[], int argc);
 int execute_pipeline(char *pipeline_str);
@@ -84,6 +85,7 @@ void find_command(int argc, char **argv);
 void find_files_recursive(const char* dir_path, const char* pattern);
 void tree_command(int argc, char **argv);
 void print_tree_recursive(const char* dir_path, int depth);
+void scripts_command(int argc, char **argv);
 void systeminfo_command(int argc, char **argv);
 void sort_command(int argc, char **argv);
 void uniq_command(int argc, char **argv);
@@ -3065,6 +3067,7 @@ Command command_table[] = {
     {"du", du_command, "Display disk usage of files and directories"},
     {"uname", uname_command, "Print system information"},
     {"systeminfo", systeminfo_command, "Display detailed system information"},
+    {"scripts", scripts_command, "List available script-based commands"},
     {"history", history_command, "Display command history"},
     {"scp", scp_command, "Secure copy for transferring files over SSH"},
     {"tar", tar_command, "Archive files and directories"},
@@ -3814,6 +3817,114 @@ void highlight_command_parts(char* command_line) {
     free(work_str);
 }
 
+// Enhanced script command resolution
+int try_execute_script_command(const char* command, int argc, char** argv) {
+    char script_path[512];
+    
+    // Check for Lua script (.lua)
+    snprintf(script_path, sizeof(script_path), "/bin/%s.lua", command);
+    if (vfs_find_node(script_path)) {
+        printf("Executing Lua script: %s\n", script_path);
+        
+        // Build argument string for Lua script
+        char args_str[1024] = "";
+        for (int i = 1; i < argc; i++) {
+            if (i > 1) strcat(args_str, " ");
+            strcat(args_str, argv[i]);
+        }
+        
+        #ifdef LUA_SCRIPTING
+        lua_vm_load_script_with_args(script_path, args_str);
+        #else
+        printf("Lua scripting not enabled in this build\n");
+        #endif
+        return 1; // Script found
+    }
+    
+    // Check for Python script (.py)
+    snprintf(script_path, sizeof(script_path), "/bin/%s.py", command);
+    if (vfs_find_node(script_path)) {
+        printf("Executing Python script: %s\n", script_path);
+        
+        #ifdef PYTHON_SCRIPTING
+        python_vm_load_script_with_args(script_path, argc, argv);
+        #else
+        printf("Python scripting not enabled in this build\n");
+        #endif
+        return 1; // Script found
+    }
+    
+    // Check for Perl script (.pl)
+    snprintf(script_path, sizeof(script_path), "/bin/%s.pl", command);
+    if (vfs_find_node(script_path)) {
+        printf("Executing Perl script: %s\n", script_path);
+        
+        #ifdef PERL_SCRIPTING
+        perl_vm_load_script_with_args(script_path, argc, argv);
+        #else
+        printf("Perl scripting not enabled in this build\n");
+        #endif
+        return 1; // Script found
+    }
+    
+    // Check for executable script without extension (try in order: .lua, .py, .pl)
+    snprintf(script_path, sizeof(script_path), "/bin/%s", command);
+    VNode* script_node = vfs_find_node(script_path);
+    if (script_node && !script_node->is_directory) {
+        // Read first line to determine script type by shebang
+        void* data;
+        size_t size;
+        if (vfs_read_file(script_path, &data, &size) == 0 && data && size > 2) {
+            char* content = (char*)data;
+            if (strncmp(content, "#!", 2) == 0) {
+                // Parse shebang line
+                char* line_end = strchr(content, '\n');
+                if (line_end) {
+                    *line_end = '\0';
+                    
+                    if (strstr(content, "lua")) {
+                        printf("Executing Lua script: %s\n", script_path);
+                        #ifdef LUA_SCRIPTING
+                        char args_str[1024] = "";
+                        for (int i = 1; i < argc; i++) {
+                            if (i > 1) strcat(args_str, " ");
+                            strcat(args_str, argv[i]);
+                        }
+                        lua_vm_load_script_with_args(script_path, args_str);
+                        #endif
+                        return 1;
+                    } else if (strstr(content, "python")) {
+                        printf("Executing Python script: %s\n", script_path);
+                        #ifdef PYTHON_SCRIPTING
+                        python_vm_load_script_with_args(script_path, argc, argv);
+                        #endif
+                        return 1;
+                    } else if (strstr(content, "perl")) {
+                        printf("Executing Perl script: %s\n", script_path);
+                        #ifdef PERL_SCRIPTING
+                        perl_vm_load_script_with_args(script_path, argc, argv);
+                        #endif
+                        return 1;
+                    }
+                }
+            }
+            // If no shebang or unrecognized, default to trying as Lua
+            printf("Executing script as Lua: %s\n", script_path);
+            #ifdef LUA_SCRIPTING
+            char args_str[1024] = "";
+            for (int i = 1; i < argc; i++) {
+                if (i > 1) strcat(args_str, " ");
+                strcat(args_str, argv[i]);
+            }
+            lua_vm_load_script_with_args(script_path, args_str);
+            #endif
+            return 1;
+        }
+    }
+    
+    return 0; // No script found
+}
+
 void execute_simple_command(char *args[], int argc) {
     // Skip empty commands
     if (argc == 0) return;
@@ -3827,6 +3938,11 @@ void execute_simple_command(char *args[], int argc) {
             }
             return;
         }
+    }
+
+    // Command not found in built-ins - check for scripts in /bin/
+    if (try_execute_script_command(args[0], argc, args)) {
+        return; // Script was found and executed
     }
 
     // Command not found - show styled error message
@@ -4724,72 +4840,95 @@ void env_command(int argc, char **argv) {
     }
 }
 
+void scripts_command(int argc, char **argv) {
+    (void)argc; (void)argv;
+    
+    printf("Available script-based commands in /bin/:\n\n");
+    
+    VNode* bin_dir = vfs_find_node("/bin");
+    if (!bin_dir || !bin_dir->is_directory) {
+        printf("No /bin directory found\n");
+        return;
+    }
+    
+    vfs_refresh_directory(bin_dir);
+    VNode* child = bin_dir->children;
+    
+    printf("Lua scripts (.lua):\n");
+    while (child) {
+        if (!child->is_directory && strstr(child->name, ".lua")) {
+            char command_name[256];
+            strcpy(command_name, child->name);
+            char* ext = strstr(command_name, ".lua");
+            if (ext) *ext = '\0';
+            
+            printf("  ");
+            terminal_print_command(command_name);
+            printf(" - %s\n", child->name);
+        }
+        child = child->next;
+    }
+    
+    printf("\nPython scripts (.py):\n");
+    child = bin_dir->children;
+    while (child) {
+        if (!child->is_directory && strstr(child->name, ".py")) {
+            char command_name[256];
+            strcpy(command_name, child->name);
+            char* ext = strstr(command_name, ".py");
+            if (ext) *ext = '\0';
+            
+            printf("  ");
+            terminal_print_command(command_name);
+            printf(" - %s\n", child->name);
+        }
+        child = child->next;
+    }
+    
+    printf("\nPerl scripts (.pl):\n");
+    child = bin_dir->children;
+    while (child) {
+        if (!child->is_directory && strstr(child->name, ".pl")) {
+            char command_name[256];
+            strcpy(command_name, child->name);
+            char* ext = strstr(command_name, ".pl");
+            if (ext) *ext = '\0';
+            
+            printf("  ");
+            terminal_print_command(command_name);
+            printf(" - %s\n", child->name);
+        }
+        child = child->next;
+    }
+    
+    printf("\nExecutable scripts (no extension):\n");
+    child = bin_dir->children;
+    while (child) {
+        if (!child->is_directory && !strstr(child->name, ".lua") && 
+            !strstr(child->name, ".py") && !strstr(child->name, ".pl")) {
+            printf("  ");
+            terminal_print_command(child->name);
+            printf(" - executable script\n");
+        }
+        child = child->next;
+    }
+    
+    printf("\nUse any of these names as commands. Arguments will be passed to the script.\n");
+}
+
 void systeminfo_command(int argc, char **argv) {
-    printf("=== ZoraVM System Information ===\n\n");
+    (void)argc; (void)argv;
     
-    // Host OS Information
-    OSVERSIONINFO osvi;
-    osvi.dwOSVersionInfoSize = sizeof(OSVERSIONINFO);
-    if (GetVersionEx(&osvi)) {
-        printf("Host OS Name:          Microsoft Windows %d.%d\n", 
-               osvi.dwMajorVersion, osvi.dwMinorVersion);
-        printf("Host OS Version:       %d.%d Build %d\n", 
-               osvi.dwMajorVersion, osvi.dwMinorVersion, osvi.dwBuildNumber);
-    }
-    
-    // Computer Name
-    char computer_name[MAX_COMPUTERNAME_LENGTH + 1];
-    DWORD name_len = sizeof(computer_name);
-    if (GetComputerName(computer_name, &name_len)) {
-        printf("Host Computer Name:    %s\n", computer_name);
-    }
-    
-    // Memory Information
-    MEMORYSTATUSEX memInfo;
-    memInfo.dwLength = sizeof(MEMORYSTATUSEX);
-    if (GlobalMemoryStatusEx(&memInfo)) {
-        printf("Host Physical Memory:  %llu MB\n", memInfo.ullTotalPhys / (1024 * 1024));
-        printf("Host Available Memory: %llu MB\n", memInfo.ullAvailPhys / (1024 * 1024));
-        printf("Host Memory Load:      %lu%%\n", memInfo.dwMemoryLoad);
-    }
-    
-    // Processor Information
-    SYSTEM_INFO sysInfo;
-    GetSystemInfo(&sysInfo);
-    printf("Host Processors:       %lu CPUs\n", sysInfo.dwNumberOfProcessors);
-    printf("Host Processor Arch:   ");
-    switch (sysInfo.wProcessorArchitecture) {
-        case PROCESSOR_ARCHITECTURE_AMD64:
-            printf("x64 (AMD or Intel)\n");
-            break;
-        case PROCESSOR_ARCHITECTURE_INTEL:
-            printf("Intel x86\n");
-            break;
-        case PROCESSOR_ARCHITECTURE_ARM:
-            printf("ARM\n");
-            break;
-        case PROCESSOR_ARCHITECTURE_ARM64:
-            printf("ARM64\n");
-            break;
-        default:
-            printf("Unknown\n");
-            break;
-    }
-    
-    printf("\n=== ZoraVM Configuration ===\n");
-    printf("VM OS Name:            Zora Virtual Machine OS\n");
-    printf("VM Kernel Version:     2.1.0\n");
-    printf("VM Memory Limit:       64 MB\n");
-    printf("VM CPU Limit:          80%%\n");
-    printf("VM Shell:              MERL Shell\n");
-    printf("VM Network:            Virtual NAT (10.0.2.0/24)\n");
-    printf("VM Filesystem:         Virtual FS with host mapping\n");
-    printf("VM Security:           Sandbox enabled\n");
-    
-    // Build Information
-    printf("\nBuild Date:            %s %s\n", __DATE__, __TIME__);
-    printf("Build Platform:        Windows (MinGW)\n");
-    printf("Virtual Silicon:       Meisei Engine\n");
+    printf("=== ZORA VM SYSTEM INFORMATION ===\n\n");
+    printf("System Type: Virtual Machine\n");
+    printf("Architecture: x86_64 Virtual\n");
+    printf("Shell: MERL (Multi-Environment Runtime Layer)\n");
+    printf("VFS: Virtual File System Active\n");
+    printf("Network: Virtual Network Stack\n");
+    printf("Memory: Virtual Memory Management\n");
+    printf("Scripting: Lua, Python, Perl VMs\n");
+    printf("Terminal: Enhanced with Campbell Colors\n");
+    printf("Security: Sandboxed Execution Environment\n");
 }
 
 // Additional Unix command implementations
