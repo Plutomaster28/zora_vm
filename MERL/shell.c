@@ -5,6 +5,16 @@
 #include <ctype.h>
 #include <stdarg.h>
 #include <locale.h>
+#ifdef _WIN32
+    #include <winsock2.h>
+    #include <windows.h>
+    #include <io.h>
+    #include <fcntl.h>
+    #include <conio.h>  // For _kbhit() and _getch()
+#else
+    #include <sys/select.h>
+    #include <unistd.h>
+#endif
 #include "platform/platform.h"  // FIXED: Use correct path
 #include "shell.h"
 #include "user.h"
@@ -1748,6 +1758,43 @@ void start_shell() {
         if (semicolon_commands >= 10) {
             printf("Warning: Too many semicolon-separated commands (limit: 10)\n");
         }
+        
+        // Clear any leftover input buffer after command execution
+        fflush(stdout);
+        fflush(stderr);
+        
+        // Check for and clear any spurious input (Windows-compatible)
+#ifdef _WIN32
+        // On Windows, use _kbhit() to check for pending input
+        if (_kbhit()) {
+            // Drain pending input
+            char drain_buffer[256];
+            int drained = 0;
+            while (_kbhit() && drained < sizeof(drain_buffer) - 1) {
+                drain_buffer[drained++] = _getch();
+            }
+            if (drained > 0) {
+                printf("DEBUG: Drained %d bytes of spurious input after command\n", drained);
+            }
+        }
+#else
+        // Unix/Linux version with select()
+        fd_set read_fds;
+        struct timeval timeout = {0, 0}; // Non-blocking
+        FD_ZERO(&read_fds);
+        FD_SET(STDIN_FILENO, &read_fds);
+        
+        if (select(STDIN_FILENO + 1, &read_fds, NULL, NULL, &timeout) > 0) {
+            if (FD_ISSET(STDIN_FILENO, &read_fds)) {
+                // There's input waiting, drain it
+                char drain_buffer[256];
+                ssize_t bytes_read = read(STDIN_FILENO, drain_buffer, sizeof(drain_buffer) - 1);
+                if (bytes_read > 0) {
+                    printf("DEBUG: Drained %ld bytes of spurious input after command\n", bytes_read);
+                }
+            }
+        }
+#endif
         
         next_input:
             continue;
