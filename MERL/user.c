@@ -20,7 +20,7 @@ typedef struct {
 } User;
 
 static User user_list[MAX_USERS];
-static int user_count = 0;
+int user_count = 0;
 
 // Global variables for user management (accessible from other modules)
 char current_user[50] = "guest"; // Default user
@@ -89,9 +89,13 @@ void whoami_command(int argc, char **argv) {
 }
 
 void useradd_command(int argc, char **argv) {
-    // Check if current user is guest (guests can't create users)
-    if (strcmp(current_user, "guest") == 0) {
-        printf("useradd: Permission denied - guests cannot create users\n");
+    // Check if current user has permission to create users (root or setup mode)
+    int is_root = (strcmp(current_user, "root") == 0);
+    int is_setup_mode = (user_count == 0); // No users exist yet
+    
+    if (!is_root && !is_setup_mode) {
+        printf("useradd: Permission denied - only root can create users\n");
+        printf("Use 'su root' to switch to root, or if no root exists, run 'setup-root'\n");
         return;
     }
     
@@ -333,42 +337,7 @@ void su_command(int argc, char **argv) {
         return;
     }
     
-    // For root access, always require authentication
-    if (strcmp(target_user, "root") == 0) {
-        // Check if switching from guest (root has no stored password)
-        if (strcmp(current_user, "guest") == 0) {
-            char password[PASSWORD_LEN];
-            if (secure_password_input(password, PASSWORD_LEN, "Password: ") < 1) {
-                printf("Authentication failed.\n");
-                return;
-            }
-            
-            // Simple root password check (could be "root" or "admin")
-            if (strcmp(password, "root") != 0 && strcmp(password, "admin") != 0) {
-                printf("Authentication failed.\n");
-                return;
-            }
-        }
-        
-        strncpy(current_user, "root", sizeof(current_user) - 1);
-        current_user[sizeof(current_user) - 1] = '\0';
-        is_logged_in = 1;
-        
-        // Update VFS globals for root
-        extern char vfs_current_user[64];
-        extern char vfs_current_group[64];
-        extern int vfs_is_root;
-        strncpy(vfs_current_user, "root", sizeof(vfs_current_user) - 1);
-        vfs_current_user[sizeof(vfs_current_user) - 1] = '\0';
-        strncpy(vfs_current_group, "root", sizeof(vfs_current_group) - 1);
-        vfs_current_group[sizeof(vfs_current_group) - 1] = '\0';
-        vfs_is_root = 1;
-        
-        printf("Switched to root user\n");
-        return;
-    }
-    
-    // For other users, check if they exist and authenticate
+    // For root and other users, check if they exist and authenticate
     char password[PASSWORD_LEN];
     char password_hash[HASH_LEN];
     
@@ -386,22 +355,100 @@ void su_command(int argc, char **argv) {
                 current_user[sizeof(current_user) - 1] = '\0';
                 is_logged_in = 1;
                 
-                // Update VFS globals for regular user
+                // Update VFS globals
                 extern char vfs_current_user[64];
                 extern char vfs_current_group[64];
                 extern int vfs_is_root;
                 strncpy(vfs_current_user, target_user, sizeof(vfs_current_user) - 1);
                 vfs_current_user[sizeof(vfs_current_user) - 1] = '\0';
-                strncpy(vfs_current_group, "users", sizeof(vfs_current_group) - 1);
-                vfs_current_group[sizeof(vfs_current_group) - 1] = '\0';
-                vfs_is_root = 0;
                 
-                printf("Switched to user '%s'\n", current_user);
+                if (strcmp(target_user, "root") == 0) {
+                    strncpy(vfs_current_group, "root", sizeof(vfs_current_group) - 1);
+                    vfs_current_group[sizeof(vfs_current_group) - 1] = '\0';
+                    vfs_is_root = 1;
+                    printf("Switched to root user\n");
+                } else {
+                    strncpy(vfs_current_group, "users", sizeof(vfs_current_group) - 1);
+                    vfs_current_group[sizeof(vfs_current_group) - 1] = '\0';
+                    vfs_is_root = 0;
+                    printf("Switched to user '%s'\n", current_user);
+                }
                 return;
             }
         }
     }
     printf("Authentication failed.\n");
+}
+
+void users_command(int argc, char **argv) {
+    printf("Users on the system:\n");
+    if (user_count == 0) {
+        printf("  No users found. Use 'setup-root' to create the root user.\n");
+        return;
+    }
+    
+    for (int i = 0; i < user_count; i++) {
+        printf("  %s", user_list[i].username);
+        if (strcmp(user_list[i].username, current_user) == 0) {
+            printf(" (current)");
+        }
+        if (strcmp(user_list[i].username, "root") == 0) {
+            printf(" (administrator)");
+        }
+        printf("\n");
+    }
+    printf("Total users: %d\n", user_count);
+}
+
+void setup_root_command(int argc, char **argv) {
+    // Check if root already exists
+    for (int i = 0; i < user_count; i++) {
+        if (strcmp(user_list[i].username, "root") == 0) {
+            printf("Root user already exists. Use 'passwd' as root to change the password.\n");
+            return;
+        }
+    }
+    
+    printf("=== Root User Setup ===\n");
+    printf("Setting up the root (administrator) user for the first time.\n");
+    printf("The root user has full system privileges.\n\n");
+    
+    if (user_count >= MAX_USERS) {
+        printf("User limit reached.\n");
+        return;
+    }
+    
+    char password[PASSWORD_LEN];
+    char confirm_password[PASSWORD_LEN];
+    char password_hash[HASH_LEN];
+    
+    // Get root password with confirmation
+    if (secure_password_input(password, PASSWORD_LEN, "Set root password: ") < 1) {
+        printf("Password cannot be empty.\n");
+        return;
+    }
+    
+    if (secure_password_input(confirm_password, PASSWORD_LEN, "Confirm root password: ") < 1) {
+        printf("Password confirmation failed.\n");
+        return;
+    }
+    
+    if (strcmp(password, confirm_password) != 0) {
+        printf("Passwords do not match.\n");
+        return;
+    }
+    
+    // Create root user
+    simple_hash(password, password_hash);
+    strncpy(user_list[user_count].username, "root", USERNAME_LEN - 1);
+    user_list[user_count].username[USERNAME_LEN - 1] = '\0';
+    strncpy(user_list[user_count].password_hash, password_hash, HASH_LEN - 1);
+    user_list[user_count].password_hash[HASH_LEN - 1] = '\0';
+    user_count++;
+    save_users();
+    
+    printf("Root user created successfully!\n");
+    printf("You can now use 'su root' to switch to root user.\n");
 }
 
 void load_users() {

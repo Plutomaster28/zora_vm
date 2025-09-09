@@ -1603,6 +1603,15 @@ void start_shell() {
     // Initialize user system
     load_users();
     
+    // Check if any users exist, offer setup if none
+    extern int user_count;
+    if (user_count == 0) {
+        printf("\n*** FIRST TIME SETUP ***\n");
+        printf("No users found on the system.\n");
+        printf("You can create users with 'useradd <username>' or setup root with 'setup-root'.\n");
+        printf("Recommendation: Run 'setup-root' first to create an administrator account.\n\n");
+    }
+    
     // Set default hostname
     strncpy(hostname, "zora-vm", sizeof(hostname) - 1);
     hostname[sizeof(hostname) - 1] = '\0';
@@ -2850,6 +2859,8 @@ Command command_table[] = {
     {"logout", logout_command, "Logs out the current user."},
     {"passwd", passwd_command, "Changes password with secure input and verification."},
     {"su", su_command, "Switch user (su [username], defaults to root)."},
+    {"users", users_command, "List all users on the system."},
+    {"setup-root", setup_root_command, "Setup root user (first-time only)."},
     {"chmod", chmod_command, "Change file permissions (chmod <mode> <file>)."},
     {"chown", chown_command, "Change file ownership (chown <owner>[:<group>] <file>)."},
     {"stat", stat_command, "Display detailed file information."},
@@ -3777,7 +3788,8 @@ void help_command(int argc, char **argv) {
     printf("  %-12s - Show current user                %-12s - User login\n", "whoami", "login");
     printf("  %-12s - User logout                      %-12s - Add new user\n", "logout", "useradd");
     printf("  %-12s - Change password                  %-12s - Switch user\n", "passwd", "su");
-    printf("  %-12s - Show file details                \n", "stat");
+    printf("  %-12s - Show file details                %-12s - List all users\n", "stat", "users");
+    printf("  %-12s - Setup root user (first time)    \n", "setup-root");
     printf("\n");
     
     printf(" ENVIRONMENT & VARIABLES:\n");
