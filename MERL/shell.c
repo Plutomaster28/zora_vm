@@ -3160,8 +3160,7 @@ Command command_table[] = {
     {"ps", ps_wrapper, "Lists all active processes."},
     {"read", read_wrapper, "Reads a file."},
     {"write", write_wrapper, "Writes to a file."},
-    {"color-and-test", color_and_test_command, "Displays colors and system info."},
-    {"neofetch", color_and_test_command, "Display system information with logo (alias for color-and-test)."},
+    {"neofetch", color_and_test_command, "Display system information with logo and colors"},
     {"vmstat", vm_status_command, "Shows virtual machine status."},
     {"reboot", vm_reboot_command, "Reboots the virtual machine."},
     {"shutdown", vm_shutdown_command, "Shuts down the virtual machine."},
@@ -4160,6 +4159,7 @@ void help_command(int argc, char **argv) {
     printf("  %-12s - Show current date/time           %-12s - Show disk usage\n", "date", "df");
     printf("  %-12s - Directory disk usage             %-12s - System information\n", "du", "uname");
     printf("  %-12s - Detailed system info             %-12s - Show version\n", "systeminfo", "version");
+    printf("  %-12s - System info with logo/colors    \n", "neofetch");
     printf("\n");
     
     printf(" ADVANCED SYSTEM MONITORING:\n");

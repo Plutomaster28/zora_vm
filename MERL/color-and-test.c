@@ -77,7 +77,7 @@ void color_and_test_command(int argc, char **argv) {
     
     // Zora VM branding
     printf("\033[1;36m╭─────────────────────────────────────╮\033[0m\n");
-    printf("\033[1;36m│\033[0m  \033[1;35m⚡ Powered by Zora Virtual Machine\033[0m  \033[1;36m│\033[0m\n");
+    printf("\033[1;36m│\033[0m  \033[1;35m Powered by Zora Virtual Machine\033[0m  \033[1;36m│\033[0m\n");
     printf("\033[1;36m│\033[0m     \033[1;33mAdvanced VM with VFS & Sandboxing\033[0m   \033[1;36m│\033[0m\n");
     printf("\033[1;36m╰─────────────────────────────────────╯\033[0m\n");
 }
