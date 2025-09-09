@@ -30,6 +30,9 @@ int merl_cmd_meminfo(void);
 int merl_cmd_devices(void);
 int merl_cmd_reboot(void);
 
+// UTF-8 fix functions
+void ghost_pipe_utf8_fix(void);
+
 extern merl_vm_context_t* g_merl_vm_ctx;
 
 #endif // MERL_H

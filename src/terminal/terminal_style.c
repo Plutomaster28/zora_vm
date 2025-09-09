@@ -1,4 +1,5 @@
 #include "terminal/terminal_style.h"
+#include "merl.h"
 #include <string.h>
 #include <stdlib.h>
 #include <time.h>
@@ -33,6 +34,9 @@ static const COLORREF campbell_colors[16] = {
 void terminal_init_styling(void) {
     if (g_initialized) return;
     
+    // Log the initialization timing
+    printf("[TERMINAL] Initializing terminal styling at %ld seconds since startup\n", time(NULL));
+    
     g_console_handle = GetStdHandle(STD_OUTPUT_HANDLE);
     if (g_console_handle == INVALID_HANDLE_VALUE) {
         printf("Warning: Could not get console handle for styling\n");
@@ -41,6 +45,13 @@ void terminal_init_styling(void) {
     
     // Get original console info
     GetConsoleScreenBufferInfo(g_console_handle, &g_original_buffer_info);
+    
+    // Check current state before we change anything
+    UINT current_cp = GetConsoleOutputCP();
+    DWORD current_mode = 0;
+    GetConsoleMode(g_console_handle, &current_mode);
+    
+    printf("[TERMINAL] Before styling init: CP=%u, Mode=0x%08X\n", current_cp, current_mode);
     
     // Initialize default configuration
     strcpy(g_terminal_config.font_name, "MS Mincho");
@@ -59,8 +70,31 @@ void terminal_init_styling(void) {
     // Set retro block cursor
     terminal_set_cursor_style(CURSOR_BLOCK, 1);
     
+    // Check state after changes
+    UINT final_cp = GetConsoleOutputCP();
+    DWORD final_mode = 0;
+    GetConsoleMode(g_console_handle, &final_mode);
+    
+    printf("[TERMINAL] After styling init: CP=%u, Mode=0x%08X\n", final_cp, final_mode);
+    
+    // CRITICAL: Force UTF-8 refresh after terminal styling operations
+    // Terminal styling can break UTF-8 rendering, so we refresh console mode
+    printf("[TERMINAL] Refreshing console for UTF-8 after styling...\n");
+    DWORD currentMode;
+    if (GetConsoleMode(g_console_handle, &currentMode)) {
+        // Toggle virtual terminal processing to refresh UTF-8 rendering
+        SetConsoleMode(g_console_handle, currentMode & ~ENABLE_VIRTUAL_TERMINAL_PROCESSING);
+        SetConsoleMode(g_console_handle, currentMode | ENABLE_VIRTUAL_TERMINAL_PROCESSING);
+        printf("[TERMINAL] UTF-8 console refresh complete\n");
+    }
+    
     g_initialized = 1;
     printf("Terminal styling initialized with Campbell colors and MS Mincho font\n");
+    
+    // Perform ghost pipe operation to fix UTF-8
+    printf("[TERMINAL] Applying ghost pipe UTF-8 fix...\n");
+    ghost_pipe_utf8_fix();
+    printf("[TERMINAL] Ghost pipe UTF-8 fix complete\n");
 }
 
 void terminal_apply_campbell_colors(void) {

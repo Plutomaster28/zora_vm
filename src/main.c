@@ -4,6 +4,7 @@
 #include <string.h>
 #include <setjmp.h>  // Add this include
 #include <locale.h>
+#include <time.h>
 
 // Windows-specific includes for directory handling
 #include <windows.h>
@@ -121,29 +122,72 @@ int vm_is_running(void) {
 }
 
 int main(int argc, char* argv[]) {
+    // Record startup time for UTF-8 debugging
+    time_t startup_time = time(NULL);
+    printf("[MAIN] ZoraVM starting at timestamp %ld\n", startup_time);
+    
     // Set locale and console encoding for proper Unicode/box-drawing character support
     setlocale(LC_ALL, "");
     
     // Windows-specific console encoding fixes
     #ifdef _WIN32
+    printf("[MAIN] Setting up UTF-8 console encoding...\n");
+    
     // Set console to UTF-8 for proper box-drawing characters
-    SetConsoleOutputCP(CP_UTF8);
-    SetConsoleCP(CP_UTF8);
+    if (SetConsoleOutputCP(CP_UTF8)) {
+        printf("[MAIN] Console output set to UTF-8 (CP_UTF8)\n");
+    } else {
+        printf("[MAIN] WARNING: Failed to set console output to UTF-8\n");
+    }
+    
+    if (SetConsoleCP(CP_UTF8)) {
+        printf("[MAIN] Console input set to UTF-8 (CP_UTF8)\n");
+    } else {
+        printf("[MAIN] WARNING: Failed to set console input to UTF-8\n");
+    }
     
     // Enable Unicode/UTF-8 output on Windows console
     HANDLE hOut = GetStdHandle(STD_OUTPUT_HANDLE);
     if (hOut != INVALID_HANDLE_VALUE) {
         DWORD dwMode = 0;
         GetConsoleMode(hOut, &dwMode);
+        printf("[MAIN] Current console mode: 0x%08X\n", dwMode);
         dwMode |= ENABLE_VIRTUAL_TERMINAL_PROCESSING;
-        SetConsoleMode(hOut, dwMode);
+        if (SetConsoleMode(hOut, dwMode)) {
+            printf("[MAIN] Virtual terminal processing enabled\n");
+        } else {
+            printf("[MAIN] WARNING: Failed to enable virtual terminal processing\n");
+        }
     }
+    
+    // Force console mode reset to fix UTF-8 rendering issues
+    // This mimics what happens during pipe operations that fix the UTF-8
+    printf("[MAIN] Forcing console refresh to fix UTF-8 rendering...\n");
+    fflush(stdout);
+    
+    // Instead of freopen, just force a console mode refresh
+    HANDLE hStdout = GetStdHandle(STD_OUTPUT_HANDLE);
+    if (hStdout != INVALID_HANDLE_VALUE) {
+        DWORD currentMode;
+        if (GetConsoleMode(hStdout, &currentMode)) {
+            // Force console refresh by toggling a mode bit
+            SetConsoleMode(hStdout, currentMode & ~ENABLE_VIRTUAL_TERMINAL_PROCESSING);
+            SetConsoleMode(hStdout, currentMode | ENABLE_VIRTUAL_TERMINAL_PROCESSING);
+            printf("[MAIN] Console refreshed successfully - UTF-8 should now work\n");
+        }
+    }
+    fflush(stdout);
+    
+    // Quick UTF-8 test immediately after setup
+    printf("[MAIN] UTF-8 test immediately after setup: ╔═══╗\n");
     
     // Detect terminal capabilities early
     int is_modern_terminal = detect_windows_terminal();
     if (!is_modern_terminal) {
         printf("NOTE: Running in legacy Console Host. For best experience, use Windows Terminal.\n");
         printf("Run 'terminal-test' command in ZoraVM to check terminal capabilities.\n");
+    } else {
+        printf("[MAIN] Detected Windows Terminal - UTF-8 should work properly\n");
     }
     #endif
     

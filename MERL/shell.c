@@ -4,6 +4,7 @@
 #include <time.h>
 #include <ctype.h>
 #include <stdarg.h>
+#include <locale.h>
 #include "platform/platform.h"  // FIXED: Use correct path
 #include "shell.h"
 #include "user.h"
@@ -86,6 +87,7 @@ void find_files_recursive(const char* dir_path, const char* pattern);
 void tree_command(int argc, char **argv);
 void print_tree_recursive(const char* dir_path, int depth);
 void scripts_command(int argc, char **argv);
+void version_command(int argc, char **argv);
 void systeminfo_command(int argc, char **argv);
 void sort_command(int argc, char **argv);
 void uniq_command(int argc, char **argv);
@@ -95,6 +97,17 @@ void which_command(int argc, char **argv);
 void ln_command(int argc, char **argv);
 void diff_command(int argc, char **argv);
 void exit_command(int argc, char **argv);
+void version_command(int argc, char **argv);
+void set_command(int argc, char **argv);
+void unset_command(int argc, char **argv);
+void export_command(int argc, char **argv);
+void font_debug_command(int argc, char **argv);
+void console_refresh_command(int argc, char **argv);
+void ghost_pipe_utf8_fix(void);
+void utf8_detailed_test_command(int argc, char **argv);
+void utf8_monitor_command(int argc, char **argv);
+void utf8_fix_command(int argc, char **argv);
+void utf8_test_command(int argc, char **argv);
 
 // Enhanced command parsing and execution
 void parse_and_execute_command_line(char *command_line);
@@ -1643,6 +1656,15 @@ void start_shell() {
     printf("VM Commands: vmstat, reboot, shutdown\n\n");
 
     while (1) {
+        static int command_count = 0;
+        command_count++;
+        
+        // Safety check to prevent runaway loops during development
+        if (command_count > 10000) {
+            printf("Warning: Command count limit reached. Resetting counter.\n");
+            command_count = 0;
+        }
+        
         // Render the colored shell prompt
         print_colored_prompt();
         
@@ -1660,8 +1682,42 @@ void start_shell() {
             break;
         }
 
-        // Dispatch the command
-        handle_command(input);
+        // Skip empty input
+        if (strlen(input) == 0) {
+            continue;
+        }
+
+        // Handle multiple commands separated by semicolons with safety checks
+        char input_copy[512];
+        strncpy(input_copy, input, sizeof(input_copy) - 1);
+        input_copy[sizeof(input_copy) - 1] = '\0';
+        
+        char* saveptr = NULL;
+        char* command_token = strtok_r(input_copy, ";", &saveptr);
+        int semicolon_commands = 0;
+        
+        while (command_token != NULL && semicolon_commands < 10) {  // Limit semicolon commands
+            semicolon_commands++;
+            
+            // Trim whitespace from command
+            while (*command_token == ' ') command_token++;
+            char* end = command_token + strlen(command_token) - 1;
+            while (end > command_token && *end == ' ') {
+                *end = '\0';
+                end--;
+            }
+            
+            if (strlen(command_token) > 0) {
+                // Dispatch the command
+                handle_command(command_token);
+            }
+            
+            command_token = strtok_r(NULL, ";", &saveptr);
+        }
+        
+        if (semicolon_commands >= 10) {
+            printf("Warning: Too many semicolon-separated commands (limit: 10)\n");
+        }
     }
 }
 
@@ -1678,10 +1734,22 @@ void sysinfo_command(int argc, char **argv) {
 void expand_path(const char* input, char* output, size_t output_size) {
     if (!input || !output) return;
     
+    // Prevent infinite recursion
+    static int recursion_depth = 0;
+    if (recursion_depth > 10) {
+        printf("Error: Path expansion recursion limit reached\n");
+        strncpy(output, input, output_size - 1);
+        output[output_size - 1] = '\0';
+        return;
+    }
+    
+    recursion_depth++;
+    
     // Handle special cases
     if (strcmp(input, "~") == 0) {
         strncpy(output, "/home", output_size - 1);
         output[output_size - 1] = '\0';
+        recursion_depth--;
         return;
     }
     
@@ -1692,14 +1760,19 @@ void expand_path(const char* input, char* output, size_t output_size) {
             char* last_slash = strrchr(current, '/');
             if (last_slash && last_slash != current) {
                 size_t parent_len = last_slash - current;
-                strncpy(output, current, parent_len);
-                output[parent_len] = '\0';
+                if (parent_len < output_size) {
+                    strncpy(output, current, parent_len);
+                    output[parent_len] = '\0';
+                } else {
+                    strcpy(output, "/");
+                }
             } else {
                 strcpy(output, "/");
             }
         } else {
             strcpy(output, "/");
         }
+        recursion_depth--;
         return;
     }
     
@@ -1707,26 +1780,47 @@ void expand_path(const char* input, char* output, size_t output_size) {
         char* current = vfs_getcwd();
         strncpy(output, current ? current : "/", output_size - 1);
         output[output_size - 1] = '\0';
+        recursion_depth--;
         return;
     }
     
-    // Handle relative paths starting with ".."
+    // Handle relative paths starting with ".." - avoid recursive call
     if (strncmp(input, "../", 3) == 0) {
-        char parent_path[256];
-        expand_path("..", parent_path, sizeof(parent_path));
-        snprintf(output, output_size, "%s/%s", parent_path, input + 3);
+        char* current = vfs_getcwd();
+        if (current && strcmp(current, "/") != 0) {
+            // Find parent directory manually
+            char* last_slash = strrchr(current, '/');
+            if (last_slash && last_slash != current) {
+                size_t parent_len = last_slash - current;
+                char parent_path[256];
+                if (parent_len < sizeof(parent_path)) {
+                    strncpy(parent_path, current, parent_len);
+                    parent_path[parent_len] = '\0';
+                    snprintf(output, output_size, "%s/%s", parent_path, input + 3);
+                } else {
+                    snprintf(output, output_size, "/%s", input + 3);
+                }
+            } else {
+                snprintf(output, output_size, "/%s", input + 3);
+            }
+        } else {
+            snprintf(output, output_size, "/%s", input + 3);
+        }
+        recursion_depth--;
         return;
     }
     
     // Handle paths starting with "~/"
     if (strncmp(input, "~/", 2) == 0) {
         snprintf(output, output_size, "/home/%s", input + 2);
+        recursion_depth--;
         return;
     }
     
     // For absolute paths or regular relative paths, copy as-is
     strncpy(output, input, output_size - 1);
     output[output_size - 1] = '\0';
+    recursion_depth--;
 }
 
 void pwd_command(int argc, char **argv) {
@@ -3117,6 +3211,21 @@ Command command_table[] = {
     {"ln", ln_command, "Create links between files"},
     {"diff", diff_command, "Compare files line by line"},
     {"exit", exit_command, "Exit the shell and VM"},
+    {"version", version_command, "Display ZoraVM version information"},
+    
+    // Environment variable commands
+    {"set", set_command, "Set environment variables"},
+    {"unset", unset_command, "Remove environment variables"},
+    {"export", export_command, "Export environment variables"},
+    {"env", env_command, "Display environment variables"},
+    
+    // Diagnostic commands
+    {"font-debug", font_debug_command, "Debug console font and UTF-8 compatibility"},
+    {"console-refresh", console_refresh_command, "Force console refresh to fix UTF-8 rendering"},
+    {"utf8-detailed", utf8_detailed_test_command, "Detailed UTF-8 character rendering test"},
+    {"utf8-monitor", utf8_monitor_command, "Monitor UTF-8 encoding status over time"},
+    {"utf8-fix", utf8_fix_command, "Attempt to fix UTF-8 encoding issues"},
+    {"utf8-test", utf8_test_command, "Test and diagnose UTF-8 encoding support"},
 
     {NULL, NULL, NULL}
 };
@@ -3817,28 +3926,42 @@ void highlight_command_parts(char* command_line) {
     free(work_str);
 }
 
-// Enhanced script command resolution
+// Enhanced script command resolution with better error handling
 int try_execute_script_command(const char* command, int argc, char** argv) {
     char script_path[512];
+    
+    // Prevent infinite recursion by checking if we're already in script execution
+    static int script_execution_depth = 0;
+    if (script_execution_depth > 5) {
+        printf("Error: Script execution depth limit reached (possible infinite recursion)\n");
+        return 0;
+    }
+    
+    script_execution_depth++;
     
     // Check for Lua script (.lua)
     snprintf(script_path, sizeof(script_path), "/bin/%s.lua", command);
     if (vfs_find_node(script_path)) {
         printf("Executing Lua script: %s\n", script_path);
         
+        #ifdef LUA_SCRIPTING
         // Build argument string for Lua script
         char args_str[1024] = "";
-        for (int i = 1; i < argc; i++) {
+        for (int i = 1; i < argc && i < 10; i++) {  // Limit arguments to prevent overflow
             if (i > 1) strcat(args_str, " ");
-            strcat(args_str, argv[i]);
+            if (strlen(args_str) + strlen(argv[i]) < sizeof(args_str) - 10) {
+                strcat(args_str, argv[i]);
+            }
         }
         
-        #ifdef LUA_SCRIPTING
-        lua_vm_load_script_with_args(script_path, args_str);
+        int result = lua_vm_load_script_with_args(script_path, args_str);
+        script_execution_depth--;
+        return (result == 0) ? 1 : 0;
         #else
         printf("Lua scripting not enabled in this build\n");
+        script_execution_depth--;
+        return 1;
         #endif
-        return 1; // Script found
     }
     
     // Check for Python script (.py)
@@ -3847,11 +3970,14 @@ int try_execute_script_command(const char* command, int argc, char** argv) {
         printf("Executing Python script: %s\n", script_path);
         
         #ifdef PYTHON_SCRIPTING
-        python_vm_load_script_with_args(script_path, argc, argv);
+        int result = python_vm_load_script_with_args(script_path, argc, argv);
+        script_execution_depth--;
+        return (result == 0) ? 1 : 0;
         #else
         printf("Python scripting not enabled in this build\n");
+        script_execution_depth--;
+        return 1;
         #endif
-        return 1; // Script found
     }
     
     // Check for Perl script (.pl)
@@ -3860,68 +3986,17 @@ int try_execute_script_command(const char* command, int argc, char** argv) {
         printf("Executing Perl script: %s\n", script_path);
         
         #ifdef PERL_SCRIPTING
-        perl_vm_load_script_with_args(script_path, argc, argv);
+        int result = perl_vm_load_script_with_args(script_path, argc, argv);
+        script_execution_depth--;
+        return (result == 0) ? 1 : 0;
         #else
         printf("Perl scripting not enabled in this build\n");
+        script_execution_depth--;
+        return 1;
         #endif
-        return 1; // Script found
     }
     
-    // Check for executable script without extension (try in order: .lua, .py, .pl)
-    snprintf(script_path, sizeof(script_path), "/bin/%s", command);
-    VNode* script_node = vfs_find_node(script_path);
-    if (script_node && !script_node->is_directory) {
-        // Read first line to determine script type by shebang
-        void* data;
-        size_t size;
-        if (vfs_read_file(script_path, &data, &size) == 0 && data && size > 2) {
-            char* content = (char*)data;
-            if (strncmp(content, "#!", 2) == 0) {
-                // Parse shebang line
-                char* line_end = strchr(content, '\n');
-                if (line_end) {
-                    *line_end = '\0';
-                    
-                    if (strstr(content, "lua")) {
-                        printf("Executing Lua script: %s\n", script_path);
-                        #ifdef LUA_SCRIPTING
-                        char args_str[1024] = "";
-                        for (int i = 1; i < argc; i++) {
-                            if (i > 1) strcat(args_str, " ");
-                            strcat(args_str, argv[i]);
-                        }
-                        lua_vm_load_script_with_args(script_path, args_str);
-                        #endif
-                        return 1;
-                    } else if (strstr(content, "python")) {
-                        printf("Executing Python script: %s\n", script_path);
-                        #ifdef PYTHON_SCRIPTING
-                        python_vm_load_script_with_args(script_path, argc, argv);
-                        #endif
-                        return 1;
-                    } else if (strstr(content, "perl")) {
-                        printf("Executing Perl script: %s\n", script_path);
-                        #ifdef PERL_SCRIPTING
-                        perl_vm_load_script_with_args(script_path, argc, argv);
-                        #endif
-                        return 1;
-                    }
-                }
-            }
-            // If no shebang or unrecognized, default to trying as Lua
-            printf("Executing script as Lua: %s\n", script_path);
-            #ifdef LUA_SCRIPTING
-            char args_str[1024] = "";
-            for (int i = 1; i < argc; i++) {
-                if (i > 1) strcat(args_str, " ");
-                strcat(args_str, argv[i]);
-            }
-            lua_vm_load_script_with_args(script_path, args_str);
-            #endif
-            return 1;
-        }
-    }
-    
+    script_execution_depth--;
     return 0; // No script found
 }
 
@@ -4039,6 +4114,15 @@ void help_command(int argc, char **argv) {
     printf("  %-12s - Background process               %-12s - Foreground process\n", "bg", "fg");
     printf("  %-12s - Show current date/time           %-12s - Show disk usage\n", "date", "df");
     printf("  %-12s - Directory disk usage             %-12s - System information\n", "du", "uname");
+    printf("  %-12s - Detailed system info             %-12s - Show version\n", "systeminfo", "version");
+    printf("\n");
+    
+    printf(" ADVANCED SYSTEM MONITORING:\n");
+    printf("  %-12s - Real-time process monitor        %-12s - Operating system info\n", "top", "osinfo");
+    printf("  %-12s - Mounted filesystems              %-12s - Network interface info\n", "mounts", "netinfo");
+    printf("  %-12s - Process management (add/kill)    %-12s - Kernel message buffer\n", "proc", "dmesg");
+    printf("  %-12s - System services status           %-12s - Terminal capabilities\n", "services", "terminal-test");
+    printf("  %-12s - Launch Windows Terminal          \n", "launch-wt");
     printf("\n");
     
     printf(" NETWORK COMMANDS:\n");
@@ -4068,6 +4152,7 @@ void help_command(int argc, char **argv) {
     printf("  %-12s - Set environment variable         %-12s - Remove environment var\n", "set", "unset");
     printf("  %-12s - Export environment variable      %-12s - Show all variables\n", "export", "env");
     printf("  %-12s - Command history                  %-12s - Locate command\n", "history", "which");
+    printf("  %-12s - Display ZoraVM version           \n", "version");
     printf("\n");
     
     printf(" TERMINAL CUSTOMIZATION:\n");
@@ -4075,6 +4160,9 @@ void help_command(int argc, char **argv) {
     printf("  %-12s - Set cursor style                 %-12s - Manage color schemes\n", "cursor", "colors");
     printf("  %-12s - Toggle retro mode                %-12s - Syntax highlighting\n", "retro", "syntax");
     printf("  %-12s - Theme control                    %-12s - List available themes\n", "theme", "themes");
+    printf("  %-12s - Test terminal capabilities       %-12s - Launch Windows Terminal\n", "terminal-test", "launch-wt");
+    printf("  %-12s - Monitor UTF-8 over time          %-12s - Fix UTF-8 encoding\n", "utf8-monitor", "utf8-fix");
+    printf("  %-12s - Test UTF-8 support               \n", "utf8-test");
     printf("\n");
     
     printf(" VM SPECIFIC COMMANDS:\n");
@@ -4082,13 +4170,23 @@ void help_command(int argc, char **argv) {
     printf("  %-12s - Shutdown VM                      %-12s - Test VFS functionality\n", "shutdown", "testvfs");
     printf("  %-12s - Debug VFS structure              %-12s - Execute binary files\n", "debugvfs", "exec");
     printf("  %-12s - Sandbox status                   %-12s - Security testing\n", "sandbox-status", "test-sandbox");
-    printf("  %-12s - Exit shell and VM\n", "exit");
+    printf("  %-12s - Persistent storage list          %-12s - Save to persistent\n", "pls", "save");
+    printf("  %-12s - Load from persistent             %-12s - Mount host directory\n", "load", "mount");
+    printf("  %-12s - Sync persistent storage          %-12s - Exit shell and VM\n", "sync", "exit");
     printf("\n");
     
     printf(" SCRIPTING & PROGRAMMING:\n");
     printf("  %-12s - Execute Lua scripts              %-12s - Run Lua code directly\n", "lua", "luacode");
+    #ifdef PYTHON_SCRIPTING
+    printf("  %-12s - Execute Python scripts           %-12s - Run Python code directly\n", "python", "pycode");
+    #endif
+    #ifdef PERL_SCRIPTING
+    printf("  %-12s - Execute Perl scripts             %-12s - Run Perl code directly\n", "perl", "plcode");
+    #endif
     printf("  %-12s - Package management               %-12s - Sub-shell switcher\n", "tetra", "flipper");
-    printf("  %-12s - Repository management            \n", "pull");
+    printf("  %-12s - Repository management            %-12s - List script commands\n", "pull", "scripts");
+    printf("  %-12s - Binary execution                 %-12s - Windows binary exec\n", "exec", "run-windows");
+    printf("  %-12s - List available binaries          \n", "list-binaries");
     printf("\n");
     
     printf(" SHELL OPERATORS:\n");
@@ -4110,6 +4208,14 @@ void help_command(int argc, char **argv) {
     printf("  cat file.txt | wc -l         - Count lines in file\n");
     printf("  echo 'Hello' > output.txt    - Write text to file\n");
     printf("  command1 && command2         - Run command2 only if command1 succeeds\n");
+    printf("  set PATH=/usr/bin:/bin       - Set environment variable\n");
+    printf("  export USER=admin            - Export environment variable\n");
+    printf("  lua myscript.lua arg1 arg2   - Execute Lua script with arguments\n");
+    printf("  python analytics.py data.csv - Execute Python script with file\n");
+    printf("  top | head -20               - Show top 20 processes\n");
+    printf("  find . -name '*.txt' | wc -l - Count text files recursively\n");
+    printf("  version && osinfo            - Show version then system info\n");
+    printf("  utf8-fix && utf8-test        - Fix then test UTF-8 encoding\n");
     printf("\n");
     
     printf(" QUICK HELP:\n");
@@ -4800,6 +4906,34 @@ void setenv_command(int argc, char **argv) {
     printf("Set %s=%s\n", argv[1], argv[2]);
 }
 
+void set_command(int argc, char **argv) {
+    if (argc == 1) {
+        // List all environment variables (same as env)
+        env_command(argc, argv);
+    } else if (argc == 2) {
+        // Check if it's VARIABLE=VALUE format
+        char *eq_pos = strchr(argv[1], '=');
+        if (eq_pos) {
+            *eq_pos = '\0';
+            set_env_var(argv[1], eq_pos + 1);
+            printf("Set %s=%s\n", argv[1], eq_pos + 1);
+        } else {
+            // Show specific variable value
+            const char* value = get_env_var(argv[1]);
+            if (value && strlen(value) > 0) {
+                printf("%s=%s\n", argv[1], value);
+            } else {
+                printf("%s: not set\n", argv[1]);
+            }
+        }
+    } else if (argc == 3) {
+        set_env_var(argv[1], argv[2]);
+        printf("Set %s=%s\n", argv[1], argv[2]);
+    } else {
+        printf("Usage: set [VARIABLE=VALUE] or set VARIABLE VALUE or set VARIABLE\n");
+    }
+}
+
 void unset_command(int argc, char **argv) {
     if (argc != 2) {
         printf("Usage: unset VARIABLE\n");
@@ -4838,6 +4972,444 @@ void env_command(int argc, char **argv) {
             printf("%s=%s\n", env_vars[i].name, env_vars[i].value);
         }
     }
+}
+
+void font_debug_command(int argc, char **argv) {
+    printf("=== Console Font Debug Information ===\n");
+    
+    HANDLE hConsole = GetStdHandle(STD_OUTPUT_HANDLE);
+    if (hConsole == INVALID_HANDLE_VALUE) {
+        printf("Error: Cannot get console handle\n");
+        return;
+    }
+    
+    // Get current font info
+    CONSOLE_FONT_INFO fontInfo;
+    if (GetCurrentConsoleFont(hConsole, FALSE, &fontInfo)) {
+        printf("Current Font Index: %d\n", fontInfo.nFont);
+        printf("Font Size: Width=%d, Height=%d\n", 
+               fontInfo.dwFontSize.X, fontInfo.dwFontSize.Y);
+    } else {
+        printf("Failed to get current font info\n");
+    }
+    
+    // Try to get extended font info (Windows Vista+)
+    CONSOLE_FONT_INFOEX fontInfoEx;
+    fontInfoEx.cbSize = sizeof(CONSOLE_FONT_INFOEX);
+    
+    typedef BOOL (WINAPI *GetCurrentConsoleFontExFunc)(HANDLE, BOOL, PCONSOLE_FONT_INFOEX);
+    HMODULE kernel32 = GetModuleHandle("kernel32.dll");
+    GetCurrentConsoleFontExFunc GetCurrentConsoleFontExPtr = 
+        (GetCurrentConsoleFontExFunc)GetProcAddress(kernel32, "GetCurrentConsoleFontEx");
+    
+    if (GetCurrentConsoleFontExPtr && GetCurrentConsoleFontExPtr(hConsole, FALSE, &fontInfoEx)) {
+        printf("Extended Font Info:\n");
+        printf("  Font Index: %d\n", fontInfoEx.nFont);
+        printf("  Font Size: Width=%d, Height=%d\n", 
+               fontInfoEx.dwFontSize.X, fontInfoEx.dwFontSize.Y);
+        printf("  Font Weight: %d\n", fontInfoEx.FontWeight);
+        printf("  Font Family: %d\n", fontInfoEx.FontFamily);
+        wprintf(L"  Font Name: %s\n", fontInfoEx.FaceName);
+        
+        // Check if it's a UTF-8 compatible font
+        if (wcsstr(fontInfoEx.FaceName, L"Mincho") || 
+            wcsstr(fontInfoEx.FaceName, L"Consolas") ||
+            wcsstr(fontInfoEx.FaceName, L"Cascadia") ||
+            wcsstr(fontInfoEx.FaceName, L"DejaVu")) {
+            printf("  UTF-8 Compatibility: GOOD (Unicode-capable font)\n");
+        } else if (wcsstr(fontInfoEx.FaceName, L"Courier") ||
+                   wcsstr(fontInfoEx.FaceName, L"Terminal")) {
+            printf("  UTF-8 Compatibility: LIMITED (Legacy font)\n");
+        } else {
+            printf("  UTF-8 Compatibility: UNKNOWN\n");
+        }
+    } else {
+        printf("Extended font info not available (older Windows version)\n");
+    }
+    
+    // Test UTF-8 rendering with current font
+    printf("\nUTF-8 Rendering Test with Current Font:\n");
+    printf("Simple ASCII: ABC123\n");
+    printf("UTF-8 Box Drawing: ╔═══╗ ║ ░▒▓ ║ ╚═══╝\n");
+    printf("UTF-8 Symbols: ★ ☆ ♠ ♥ ♦ ♣ ☀ ☁ ⚡ ⛅\n");
+    printf("UTF-8 Math: ∑ ∏ √ ∞ ≤ ≥ ≠ ≈ ± ÷\n");
+    
+    // Suggest font changes if needed
+    printf("\nFont Recommendations for UTF-8:\n");
+    printf("1. MS Mincho (Japanese, excellent UTF-8 support)\n");
+    printf("2. Consolas (Microsoft, good UTF-8 support)\n");
+    printf("3. Cascadia Code/Mono (Microsoft Terminal font)\n");
+    printf("4. DejaVu Sans Mono (Open source, excellent Unicode)\n");
+    printf("5. Source Code Pro (Adobe, good programming font)\n");
+    
+    // Try to set MS Mincho if available (demonstration only)
+    if (argc > 1 && strcmp(argv[1], "--try-mincho") == 0) {
+        printf("\nAttempting to set MS Mincho font...\n");
+        if (GetCurrentConsoleFontExPtr) {
+            CONSOLE_FONT_INFOEX newFontInfo = fontInfoEx;
+            wcscpy(newFontInfo.FaceName, L"MS Mincho");
+            newFontInfo.dwFontSize.X = 0;  // Let Windows choose width
+            newFontInfo.dwFontSize.Y = 14; // 14pt height
+            
+            typedef BOOL (WINAPI *SetCurrentConsoleFontExFunc)(HANDLE, BOOL, PCONSOLE_FONT_INFOEX);
+            SetCurrentConsoleFontExFunc SetCurrentConsoleFontExPtr = 
+                (SetCurrentConsoleFontExFunc)GetProcAddress(kernel32, "SetCurrentConsoleFontEx");
+            
+            if (SetCurrentConsoleFontExPtr && SetCurrentConsoleFontExPtr(hConsole, FALSE, &newFontInfo)) {
+                printf("Successfully set MS Mincho font!\n");
+                printf("UTF-8 test after font change: ╔═══╗\n");
+            } else {
+                printf("Failed to set MS Mincho font (may require admin privileges)\n");
+            }
+        }
+    }
+    
+    printf("\n=== End Font Debug ===\n");
+}
+
+void utf8_detailed_test_command(int argc, char **argv) {
+    printf("\n=== Detailed UTF-8 Character Rendering Test ===\n");
+    
+    // Test individual UTF-8 characters with their raw byte representations
+    struct {
+        const char* name;
+        const char* utf8_char;
+        const char* bytes;
+    } test_chars[] = {
+        {"Box Top-Left", "╔", "E2 95 94"},
+        {"Box Horizontal", "═", "E2 95 90"}, 
+        {"Box Top-Right", "╗", "E2 95 97"},
+        {"Box Vertical", "║", "E2 95 91"},
+        {"Box Bottom-Left", "╚", "E2 95 9A"},
+        {"Box Bottom-Right", "╝", "E2 95 9D"},
+        {"Checkmark", "✓", "E2 9C 93"},
+        {"Cross", "✗", "E2 9C 97"},
+        {"Arrow Right", "→", "E2 86 92"},
+        {"Star", "★", "E2 98 85"},
+        {NULL, NULL, NULL}
+    };
+    
+    printf("Character-by-character UTF-8 rendering test:\n");
+    printf("(If UTF-8 is working, you should see proper symbols, not garbled text)\n\n");
+    
+    for (int i = 0; test_chars[i].name; i++) {
+        printf("%-20s: '%s' (bytes: %s)\n", 
+               test_chars[i].name, test_chars[i].utf8_char, test_chars[i].bytes);
+    }
+    
+    printf("\nFull box drawing test:\n");
+    printf("╔═══════════════════════════════════════╗\n");
+    printf("║ UTF-8 Box Drawing Rendering Test     ║\n");
+    printf("║ If this looks right, UTF-8 is OK!    ║\n");
+    printf("╚═══════════════════════════════════════╝\n");
+    
+    // Test different font contexts
+    printf("\nConsole font information:\n");
+    CONSOLE_FONT_INFO fontInfo;
+    if (GetCurrentConsoleFont(GetStdHandle(STD_OUTPUT_HANDLE), FALSE, &fontInfo)) {
+        printf("Font Index: %d\n", fontInfo.nFont);
+        printf("Font Size: %dx%d\n", fontInfo.dwFontSize.X, fontInfo.dwFontSize.Y);
+    } else {
+        printf("Could not retrieve font information\n");
+    }
+    
+    // Test console screen buffer info
+    CONSOLE_SCREEN_BUFFER_INFO csbi;
+    if (GetConsoleScreenBufferInfo(GetStdHandle(STD_OUTPUT_HANDLE), &csbi)) {
+        printf("Buffer Size: %dx%d\n", csbi.dwSize.X, csbi.dwSize.Y);
+        printf("Window Size: %dx%d\n", 
+               csbi.srWindow.Right - csbi.srWindow.Left + 1,
+               csbi.srWindow.Bottom - csbi.srWindow.Top + 1);
+        printf("Cursor Position: %d,%d\n", csbi.dwCursorPosition.X, csbi.dwCursorPosition.Y);
+    }
+    
+    // Force a buffer flush and re-test
+    printf("\nForcing buffer flush and re-testing UTF-8...\n");
+    fflush(stdout);
+    Sleep(100);
+    
+    printf("Post-flush test: ╔═╗ ║ ╚═╝\n");
+    
+    // Check if there are any console events that might affect rendering
+    HANDLE hConsoleInput = GetStdHandle(STD_INPUT_HANDLE);
+    DWORD numEvents = 0;
+    if (GetNumberOfConsoleInputEvents(hConsoleInput, &numEvents)) {
+        printf("Console input events pending: %lu\n", numEvents);
+    }
+    
+    printf("\n=== End Detailed UTF-8 Test ===\n");
+}
+
+void utf8_monitor_command(int argc, char **argv) {
+    printf("=== UTF-8 Encoding Monitor ===\n");
+    printf("This will monitor UTF-8 status over time to track when it starts working.\n");
+    printf("Press Ctrl+C to stop monitoring.\n\n");
+    
+    time_t start_time = time(NULL);
+    int monitoring = 1;
+    int test_count = 0;
+    int utf8_working = 0;
+    time_t first_working_time = 0;
+    
+    while (monitoring && test_count < 60) { // Monitor for up to 1 hour
+        test_count++;
+        time_t current_time = time(NULL);
+        int elapsed = (int)(current_time - start_time);
+        
+        // Check UTF-8 status
+        UINT output_cp = GetConsoleOutputCP();
+        HANDLE hOut = GetStdHandle(STD_OUTPUT_HANDLE);
+        DWORD outMode = 0;
+        int vt_enabled = 0;
+        
+        if (hOut != INVALID_HANDLE_VALUE && GetConsoleMode(hOut, &outMode)) {
+            vt_enabled = (outMode & ENABLE_VIRTUAL_TERMINAL_PROCESSING) ? 1 : 0;
+        }
+        
+        printf("[%02d:%02d] Test #%d: CP=%u, VT=%s, Test: ", 
+               elapsed / 60, elapsed % 60, test_count, output_cp, 
+               vt_enabled ? "ON" : "OFF");
+        
+        // Test UTF-8 with box character
+        printf("╔═╗");
+        
+        // Check if this looks right (we can't actually detect visually, but we can track settings)
+        int current_utf8_status = (output_cp == CP_UTF8 && vt_enabled);
+        
+        if (current_utf8_status && !utf8_working) {
+            utf8_working = 1;
+            first_working_time = current_time;
+            printf(" ✓ UTF-8 STARTED WORKING!");
+            printf("\n>>> UTF-8 became functional after %d minutes %d seconds <<<\n", 
+                   elapsed / 60, elapsed % 60);
+        } else if (!current_utf8_status && utf8_working) {
+            utf8_working = 0;
+            printf(" ✗ UTF-8 STOPPED WORKING!");
+        } else if (current_utf8_status) {
+            printf(" ✓ Working");
+        } else {
+            printf(" ✗ Not working");
+        }
+        
+        printf("\n");
+        
+        // Try to fix UTF-8 every 30 seconds if it's not working
+        if (!current_utf8_status && (test_count % 6 == 0)) {
+            printf("    Attempting UTF-8 fix...\n");
+            SetConsoleOutputCP(CP_UTF8);
+            SetConsoleCP(CP_UTF8);
+            if (hOut != INVALID_HANDLE_VALUE) {
+                DWORD dwMode = 0;
+                GetConsoleMode(hOut, &dwMode);
+                dwMode |= ENABLE_VIRTUAL_TERMINAL_PROCESSING;
+                SetConsoleMode(hOut, dwMode);
+            }
+        }
+        
+        Sleep(5000); // Check every 5 seconds
+        
+        // Check for Ctrl+C (simplified)
+        if (GetAsyncKeyState(VK_CONTROL) & 0x8000 && GetAsyncKeyState('C') & 0x8000) {
+            printf("\nMonitoring stopped by user.\n");
+            break;
+        }
+    }
+    
+    printf("\n=== UTF-8 Monitor Summary ===\n");
+    printf("Total monitoring time: %d seconds\n", (int)(time(NULL) - start_time));
+    printf("Tests performed: %d\n", test_count);
+    if (first_working_time > 0) {
+        int delay = (int)(first_working_time - start_time);
+        printf("UTF-8 started working after: %d minutes %d seconds\n", 
+               delay / 60, delay % 60);
+    } else {
+        printf("UTF-8 never started working during monitoring period\n");
+    }
+    
+    printf("\nPossible causes of delayed UTF-8 activation:\n");
+    printf("1. Background Windows processes affecting console\n");
+    printf("2. Delayed terminal feature detection\n");
+    printf("3. Console Host vs Windows Terminal switching\n");
+    printf("4. Font loading delays\n");
+    printf("5. Code page conflicts with other applications\n");
+}
+
+void utf8_fix_command(int argc, char **argv) {
+    printf("Attempting to fix UTF-8 encoding...\n");
+    
+    // Force UTF-8 console code pages
+    if (SetConsoleOutputCP(CP_UTF8)) {
+        printf("✓ Console output set to UTF-8 (CP_UTF8)\n");
+    } else {
+        printf("✗ Failed to set console output to UTF-8\n");
+    }
+    
+    if (SetConsoleCP(CP_UTF8)) {
+        printf("✓ Console input set to UTF-8 (CP_UTF8)\n");
+    } else {
+        printf("✗ Failed to set console input to UTF-8\n");
+    }
+    
+    // Enable virtual terminal processing
+    HANDLE hOut = GetStdHandle(STD_OUTPUT_HANDLE);
+    if (hOut != INVALID_HANDLE_VALUE) {
+        DWORD dwMode = 0;
+        if (GetConsoleMode(hOut, &dwMode)) {
+            dwMode |= ENABLE_VIRTUAL_TERMINAL_PROCESSING;
+            if (SetConsoleMode(hOut, dwMode)) {
+                printf("✓ Virtual terminal processing enabled\n");
+            } else {
+                printf("✗ Failed to enable virtual terminal processing\n");
+            }
+        }
+    }
+    
+    // Set locale
+    if (setlocale(LC_ALL, "") != NULL) {
+        printf("✓ Locale set for Unicode support\n");
+    } else {
+        printf("✗ Failed to set locale\n");
+    }
+    
+    // CRITICAL: Force console refresh like pipe operations do
+    printf("Forcing console refresh (like pipe operations)...\n");
+    fflush(stdout);
+    
+    // Safer method: toggle console modes instead of freopen
+    HANDLE hStdout = GetStdHandle(STD_OUTPUT_HANDLE);
+    if (hStdout != INVALID_HANDLE_VALUE) {
+        DWORD currentMode;
+        if (GetConsoleMode(hStdout, &currentMode)) {
+            SetConsoleMode(hStdout, currentMode & ~ENABLE_VIRTUAL_TERMINAL_PROCESSING);
+            Sleep(10);
+            SetConsoleMode(hStdout, currentMode | ENABLE_VIRTUAL_TERMINAL_PROCESSING);
+            printf("✓ Console refreshed successfully - this should fix UTF-8 rendering!\n");
+        } else {
+            printf("✗ Console mode refresh failed\n");
+        }
+    }
+    fflush(stdout);
+    
+    printf("\nTesting UTF-8 after fix:\n");
+    printf("Box chars: ╔═══╗ ║UTF║ ╚═══╝\n");
+    printf("Arrows: ← ↑ → ↓ ⚡ ★\n");
+    
+    if (argc > 1 && strcmp(argv[1], "--verbose") == 0) {
+        utf8_test_command(0, NULL);
+    }
+    
+    printf("\nIf you still see garbled characters, try:\n");
+    printf("1. Use Windows Terminal instead of Console Host\n");
+    printf("2. Change terminal font to MS Mincho or Consolas\n");
+    printf("3. Run 'utf8-test' for detailed diagnostics\n");
+}
+
+void utf8_test_command(int argc, char **argv) {
+    printf("\n=== UTF-8 and Terminal Encoding Diagnostic ===\n");
+    
+    // Check console code pages
+    UINT input_cp = GetConsoleCP();
+    UINT output_cp = GetConsoleOutputCP();
+    
+    printf("Console Input Code Page: %u %s\n", input_cp, 
+           input_cp == CP_UTF8 ? "(UTF-8)" : input_cp == 437 ? "(US-ASCII)" : "(Other)");
+    printf("Console Output Code Page: %u %s\n", output_cp,
+           output_cp == CP_UTF8 ? "(UTF-8)" : output_cp == 437 ? "(US-ASCII)" : "(Other)");
+    
+    // Check console mode
+    HANDLE hOut = GetStdHandle(STD_OUTPUT_HANDLE);
+    HANDLE hIn = GetStdHandle(STD_INPUT_HANDLE);
+    
+    if (hOut != INVALID_HANDLE_VALUE) {
+        DWORD outMode = 0;
+        if (GetConsoleMode(hOut, &outMode)) {
+            printf("Output Console Mode: 0x%08X\n", outMode);
+            printf("  ENABLE_VIRTUAL_TERMINAL_PROCESSING: %s\n", 
+                   (outMode & ENABLE_VIRTUAL_TERMINAL_PROCESSING) ? "ENABLED" : "DISABLED");
+            printf("  ENABLE_PROCESSED_OUTPUT: %s\n",
+                   (outMode & ENABLE_PROCESSED_OUTPUT) ? "ENABLED" : "DISABLED");
+            printf("  ENABLE_WRAP_AT_EOL_OUTPUT: %s\n",
+                   (outMode & ENABLE_WRAP_AT_EOL_OUTPUT) ? "ENABLED" : "DISABLED");
+        }
+    }
+    
+    if (hIn != INVALID_HANDLE_VALUE) {
+        DWORD inMode = 0;
+        if (GetConsoleMode(hIn, &inMode)) {
+            printf("Input Console Mode: 0x%08X\n", inMode);
+        }
+    }
+    
+    // Check environment variables that might affect terminal behavior
+    char* term_vars[] = {"WT_SESSION", "TERM_PROGRAM", "CONEMU_ANSI_COLORS_DISABLED", 
+                         "ANSICON", "TERM", "COLORTERM", NULL};
+    
+    printf("\nTerminal Environment Variables:\n");
+    for (int i = 0; term_vars[i]; i++) {
+        char* value = getenv(term_vars[i]);
+        printf("  %s = %s\n", term_vars[i], value ? value : "(not set)");
+    }
+    
+    // Detect terminal type
+    int is_wt = detect_windows_terminal();
+    printf("\nTerminal Detection: %s\n", is_wt ? "Windows Terminal" : "Console Host");
+    
+    // Test Unicode box drawing characters
+    printf("\nUTF-8 Box Drawing Test:\n");
+    printf("Should see proper boxes if UTF-8 is working:\n");
+    
+    // Force re-setup UTF-8 encoding
+    printf("Re-applying UTF-8 setup...\n");
+    SetConsoleOutputCP(CP_UTF8);
+    SetConsoleCP(CP_UTF8);
+    
+    if (hOut != INVALID_HANDLE_VALUE) {
+        DWORD dwMode = 0;
+        GetConsoleMode(hOut, &dwMode);
+        dwMode |= ENABLE_VIRTUAL_TERMINAL_PROCESSING;
+        SetConsoleMode(hOut, dwMode);
+        printf("Virtual terminal processing re-enabled\n");
+    }
+    
+    // Test various Unicode characters
+    printf("\nUnicode Test Characters:\n");
+    printf("Box Drawing: ╔═══╗ ║   ║ ╚═══╝\n");
+    printf("Arrows: ← ↑ → ↓ ↔ ↕\n");
+    printf("Technical: ⌘ ⌥ ⇧ ⌃ ⎋ ⏎\n");
+    printf("Geometric: ◆ ◇ ● ○ ■ □ ▲ △\n");
+    printf("Math: ∑ ∏ √ ∞ ≤ ≥ ≠ ≈\n");
+    printf("Currency: € £ ¥ ¢ ₹ ₽\n");
+    
+    // Test with different fonts (informational)
+    printf("\nFont Recommendations for UTF-8:\n");
+    printf("• MS Mincho (current preference)\n");
+    printf("• Consolas\n");
+    printf("• Cascadia Code/Mono\n");
+    printf("• DejaVu Sans Mono\n");
+    printf("• Source Code Pro\n");
+    
+    printf("\nIf you see proper Unicode characters above, UTF-8 is working!\n");
+    printf("If you see question marks or boxes, UTF-8 support is limited.\n");
+    
+    // Additional diagnostic info
+    printf("\nSystem Information:\n");
+    OSVERSIONINFOEXA osvi;
+    ZeroMemory(&osvi, sizeof(OSVERSIONINFOEXA));
+    osvi.dwOSVersionInfoSize = sizeof(OSVERSIONINFOEXA);
+    
+    if (GetVersionExA((OSVERSIONINFOA*)&osvi)) {
+        printf("Windows Version: %d.%d Build %d\n", 
+               osvi.dwMajorVersion, osvi.dwMinorVersion, osvi.dwBuildNumber);
+        
+        // Windows 10+ has better UTF-8 support
+        if (osvi.dwMajorVersion >= 10) {
+            printf("UTF-8 Support: Should be fully supported on Windows 10+\n");
+        } else {
+            printf("UTF-8 Support: Limited on older Windows versions\n");
+        }
+    }
+    
+    printf("\n=== End UTF-8 Diagnostic ===\n");
 }
 
 void scripts_command(int argc, char **argv) {
@@ -4914,6 +5486,17 @@ void scripts_command(int argc, char **argv) {
     }
     
     printf("\nUse any of these names as commands. Arguments will be passed to the script.\n");
+}
+
+void version_command(int argc, char **argv) {
+    (void)argc; (void)argv;
+    
+    printf("Zora VM Version 2.1.0\n");
+    printf("Multi-Environment Runtime Layer (MERL) Shell\n");
+    printf("Build Date: %s %s\n", __DATE__, __TIME__);
+    printf("Platform: Windows (MinGW)\n");
+    printf("Features: VFS, Lua, Python, Perl VMs, Sandboxing\n");
+    printf("Terminal: Campbell Color Scheme with Enhanced Styling\n");
 }
 
 void systeminfo_command(int argc, char **argv) {
@@ -5497,4 +6080,76 @@ void exit_command(int argc, char **argv) {
     
     // Exit the VM
     exit(exit_code);
+}
+
+void console_refresh_command(int argc, char **argv) {
+    printf("Console Refresh - Fixing UTF-8 Rendering Issues\n");
+    printf("===============================================\n");
+    
+    printf("Before refresh test: ╔═══╗ ║UTF║ ╚═══╝\n");
+    printf("If you see garbled characters above, this should fix it...\n\n");
+    
+    printf("Performing console refresh (mimicking pipe operation)...\n");
+    fflush(stdout);
+    
+    // Safer console refresh method - toggle console modes instead of freopen
+    HANDLE hStdout = GetStdHandle(STD_OUTPUT_HANDLE);
+    if (hStdout != INVALID_HANDLE_VALUE) {
+        DWORD currentMode;
+        if (GetConsoleMode(hStdout, &currentMode)) {
+            // Force console refresh by toggling virtual terminal processing
+            SetConsoleMode(hStdout, currentMode & ~ENABLE_VIRTUAL_TERMINAL_PROCESSING);
+            Sleep(10); // Brief pause
+            SetConsoleMode(hStdout, currentMode | ENABLE_VIRTUAL_TERMINAL_PROCESSING);
+            printf("✓ Console refreshed successfully!\n");
+        } else {
+            printf("✗ Console refresh failed\n");
+            return;
+        }
+    } else {
+        printf("✗ Could not get console handle\n");
+        return;
+    }
+    fflush(stdout);
+    
+    printf("\nAfter refresh test: ╔═══╗ ║UTF║ ╚═══╝\n");
+    printf("Box drawing: ┌─┬─┐ │ ├ │ └─┴─┘\n");
+    printf("Arrows: ← ↑ → ↓ ⚡ ★ ♦ ♠ ♥ ♣\n");
+    printf("Emoji: 🚀 💻 ⭐ 🎯 🔧 📁\n");
+    
+    if (argc > 1 && strcmp(argv[1], "--test") == 0) {
+        printf("\nRunning comprehensive UTF-8 test after refresh...\n");
+        utf8_test_command(0, NULL);
+    }
+    
+    printf("\nConsole refresh complete. UTF-8 should now work properly!\n");
+    printf("If this fixes the issue, it confirms that console mode reset is the solution.\n");
+}
+
+void ghost_pipe_utf8_fix(void) {
+    // Perform a "ghost pipe" operation - mimic what pipe operations do to fix UTF-8
+    // This does the minimal stdout redirection that fixes UTF-8 without breaking anything
+    
+    // Create a temp filename like the pipe system does
+    char temp_filename[256];
+    snprintf(temp_filename, sizeof(temp_filename), "temp_utf8_fix_%d.tmp", (int)time(NULL));
+    
+    // Step 1: Redirect stdout to temp file (this is the key operation)
+    FILE* original_stdout = stdout;
+    FILE* temp_file = freopen(temp_filename, "w", stdout);
+    
+    if (temp_file) {
+        // Write something minimal to the temp file
+        printf("UTF8_FIX_GHOST_OPERATION\n");
+        fflush(stdout);
+        
+        // Step 2: Restore stdout (this fixes UTF-8!)
+        freopen("CON", "w", stdout);
+        
+        // Clean up the temp file
+        remove(temp_filename);
+    }
+    
+    // Ensure stdout is working properly
+    fflush(stdout);
 }

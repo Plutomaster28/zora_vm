@@ -21,16 +21,16 @@ static CRITICAL_SECTION g_kernel_lock;
 // Boot splash and initialization
 static void kernel_display_boot_splash(void) {
     printf("\n");
-    printf("████████████████████████████████████████████████████████████████\n");
-    printf("█                        ZORA KERNEL v%d.%d.%d                        █\n", 
+    printf("================================================================\n");
+    printf("=                        ZORA KERNEL v%d.%d.%d                        =\n", 
            ZORA_KERNEL_VERSION_MAJOR, ZORA_KERNEL_VERSION_MINOR, ZORA_KERNEL_VERSION_PATCH);
-    printf("█              Advanced Virtual Machine Operating System          █\n");
-    printf("█                    Built on %s at %s                    █\n", 
+    printf("=              Advanced Virtual Machine Operating System          =\n");
+    printf("=                    Built on %s at %s                    =\n", 
            ZORA_KERNEL_BUILD_DATE, ZORA_KERNEL_BUILD_TIME);
-    printf("█                                                                █\n");
-    printf("█  Features: Multi-user • Unix Permissions • Scripting • VFS    █\n");
-    printf("█  Network: Virtual TCP/IP • Sandbox Security • Process Control █\n");
-    printf("████████████████████████████████████████████████████████████████\n");
+    printf("=                                                                =\n");
+    printf("=  Features: Multi-user • Unix Permissions • Scripting • VFS    =\n");
+    printf("=  Network: Virtual TCP/IP • Sandbox Security • Process Control =\n");
+    printf("================================================================\n");
     printf("\n");
     
     if (g_boot_flags & BOOT_FLAG_SAFE_MODE) {
