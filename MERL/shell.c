@@ -103,6 +103,7 @@ void unset_command(int argc, char **argv);
 void export_command(int argc, char **argv);
 void font_debug_command(int argc, char **argv);
 void console_refresh_command(int argc, char **argv);
+void console_test_command(int argc, char **argv);
 void ghost_pipe_utf8_fix(void);
 void utf8_detailed_test_command(int argc, char **argv);
 void utf8_monitor_command(int argc, char **argv);
@@ -251,23 +252,25 @@ void reset_color() {
 }
 
 void print_colored_prompt() {
-    // Windows console color codes - using simpler, more robust approach
+    // Simpler, more robust approach to avoid encoding issues
+    // Make sure console mode is set properly for ANSI
     HANDLE hConsole = GetStdHandle(STD_OUTPUT_HANDLE);
-    
-    // Enable ANSI escape sequences on Windows 10+ - but don't fail if it doesn't work
     DWORD dwMode = 0;
+    
     if (GetConsoleMode(hConsole, &dwMode)) {
         dwMode |= ENABLE_VIRTUAL_TERMINAL_PROCESSING;
         SetConsoleMode(hConsole, dwMode);
     }
-
-    // Print colored prompt: user@hostname:path>
-    printf(KALI_USER_COLOR "%s" COLOR_RESET, current_user);
-    printf(KALI_AT_COLOR "@" COLOR_RESET);
-    printf(KALI_HOST_COLOR "%s" COLOR_RESET, hostname);
-    printf(COLOR_WHITE ":" COLOR_RESET);
-    printf(KALI_PATH_COLOR "%s" COLOR_RESET, current_path);
-    printf(KALI_PROMPT_COLOR "> " COLOR_RESET);
+    
+    // Use simple ANSI colors - avoid complex sequences
+    printf("\033[92m%s\033[0m", current_user);  // Bright green user
+    printf("\033[37m@\033[0m");                 // White @
+    printf("\033[94m%s\033[0m", hostname);      // Bright blue hostname  
+    printf("\033[37m:\033[0m");                 // White :
+    printf("\033[96m%s\033[0m", current_path);  // Bright cyan path
+    printf("\033[92m> \033[0m");                // Bright green prompt
+    
+    fflush(stdout);  // Ensure prompt is displayed immediately
 }
 
 // Missing file system commands
@@ -2287,7 +2290,9 @@ void rename_command(int argc, char **argv) {
 }
 
 void clear_screen(void) {
-    system("cls");
+    // Use ANSI escape sequences for cross-platform compatibility
+    printf("\033[2J\033[H");
+    fflush(stdout);
 }
 
 void clear_command(int argc, char **argv) {
@@ -3222,6 +3227,7 @@ Command command_table[] = {
     // Diagnostic commands
     {"font-debug", font_debug_command, "Debug console font and UTF-8 compatibility"},
     {"console-refresh", console_refresh_command, "Force console refresh to fix UTF-8 rendering"},
+    {"console-test", console_test_command, "Test console capabilities and diagnose issues"},
     {"utf8-detailed", utf8_detailed_test_command, "Detailed UTF-8 character rendering test"},
     {"utf8-monitor", utf8_monitor_command, "Monitor UTF-8 encoding status over time"},
     {"utf8-fix", utf8_fix_command, "Attempt to fix UTF-8 encoding issues"},
@@ -6152,4 +6158,64 @@ void ghost_pipe_utf8_fix(void) {
     
     // Ensure stdout is working properly
     fflush(stdout);
+}
+
+void console_test_command(int argc, char **argv) {
+    printf("Console Diagnostics and Testing\n");
+    printf("===============================\n");
+    
+    // Test console handle
+    HANDLE hConsole = GetStdHandle(STD_OUTPUT_HANDLE);
+    printf("Console Handle: %s\n", (hConsole != INVALID_HANDLE_VALUE) ? "Valid" : "Invalid");
+    
+    // Test console mode
+    DWORD dwMode = 0;
+    if (GetConsoleMode(hConsole, &dwMode)) {
+        printf("Console Mode: 0x%08X\n", dwMode);
+        printf("  Virtual Terminal Processing: %s\n", 
+               (dwMode & ENABLE_VIRTUAL_TERMINAL_PROCESSING) ? "Enabled" : "Disabled");
+        printf("  Line Input: %s\n", 
+               (dwMode & ENABLE_LINE_INPUT) ? "Enabled" : "Disabled");
+        printf("  Echo Input: %s\n", 
+               (dwMode & ENABLE_ECHO_INPUT) ? "Enabled" : "Disabled");
+    } else {
+        printf("Failed to get console mode\n");
+    }
+    
+    // Test code pages
+    printf("Input Code Page: %u\n", GetConsoleCP());
+    printf("Output Code Page: %u\n", GetConsoleOutputCP());
+    printf("Expected UTF-8: %u\n", CP_UTF8);
+    
+    // Test ANSI colors
+    printf("\nANSI Color Test:\n");
+    printf("\033[31mRed\033[0m ");
+    printf("\033[32mGreen\033[0m ");
+    printf("\033[33mYellow\033[0m ");
+    printf("\033[34mBlue\033[0m ");
+    printf("\033[35mMagenta\033[0m ");
+    printf("\033[36mCyan\033[0m ");
+    printf("\033[37mWhite\033[0m\n");
+    
+    // Test UTF-8 characters
+    printf("\nUTF-8 Character Test:\n");
+    printf("Box drawing: ╔═══╗ ║ ║ ╚═══╝\n");
+    printf("Arrows: ← ↑ → ↓\n");
+    printf("Symbols: ★ ⚡ ♦ ♠ ♥ ♣\n");
+    
+    // Test prompt rendering
+    printf("\nPrompt Test (current prompt will appear below):\n");
+    print_colored_prompt();
+    printf("\n");
+    
+    // Memory and buffer info
+    printf("\nBuffer Status:\n");
+    printf("Current User: '%s'\n", current_user);
+    printf("Hostname: '%s'\n", hostname);
+    printf("Current Path: '%s'\n", current_path);
+    
+    if (argc > 1 && strcmp(argv[1], "--fix") == 0) {
+        printf("\nApplying console fixes...\n");
+        console_refresh_command(0, NULL);
+    }
 }
