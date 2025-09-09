@@ -34,7 +34,6 @@ typedef struct VirtualFS VirtualFS;
 struct VNode {
     char name[256];
     int is_directory;
-    int is_persistent;
     size_t size;
     void* data;
     char* host_path;
@@ -117,7 +116,7 @@ int vm_ps(void);
 
 // Add these missing function declarations:
 int vfs_create_directory(const char* path);
-void vfs_sync_all_persistent(void);
+void vfs_sync_all(void);
 int vm_system(const char* command);  // Add this for shell.c
 
 // Root host mapping (treat a host directory tree as "/")

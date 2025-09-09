@@ -111,7 +111,7 @@ int vm_init(void) {
 void vm_cleanup(void) {
     if (vm_initialized) {
         printf("Syncing persistent storage before shutdown...\n");
-        vfs_sync_all_persistent();
+        vfs_sync_all();
         printf("VM environment cleaned up\n");
         vm_initialized = 0;
     }

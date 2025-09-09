@@ -36,7 +36,6 @@ VNode* vfs_create_directory_node(const char* name) {
     strncpy(node->name, name, sizeof(node->name) - 1);
     node->name[sizeof(node->name) - 1] = '\0';
     node->is_directory = 1;
-    node->is_persistent = 0;  // Will be removed eventually
     node->size = 0;
     node->data = NULL;
     node->host_path = NULL;
@@ -59,7 +58,6 @@ VNode* vfs_create_file_node(const char* name) {
     strncpy(node->name, name, sizeof(node->name) - 1);
     node->name[sizeof(node->name) - 1] = '\0';
     node->is_directory = 0;
-    node->is_persistent = 0;  // Will be removed eventually
     node->size = 0;
     node->data = NULL;
     node->host_path = NULL;
@@ -136,7 +134,8 @@ int vfs_load_file_content(VNode* node) {
     ((char*)node->data)[size] = '\0';
     node->size = size;
     
-    printf("VFS: Loaded file content: %s (%zu bytes)\n", node->name, node->size);
+    // Debug message disabled to reduce clutter
+    // printf("VFS: Loaded file content: %s (%zu bytes)\n", node->name, node->size);
     return 0;
 }
 
@@ -305,7 +304,6 @@ int vfs_init(void) {
     
     strcpy(vm_fs->root->name, "/");
     vm_fs->root->is_directory = 1;
-    vm_fs->root->is_persistent = 0;
     vm_fs->root->size = 0;
     vm_fs->root->data = NULL;
     vm_fs->root->host_path = NULL;
@@ -315,7 +313,8 @@ int vfs_init(void) {
     
     vm_fs->current_dir = vm_fs->root;
     
-    // Create basic directory structure
+    // Create basic directory structure only - no memory-only files
+    // Real files will be loaded from host filesystem on-demand
     vfs_mkdir("/bin");
     vfs_mkdir("/home");
     vfs_mkdir("/tmp");
@@ -323,10 +322,8 @@ int vfs_init(void) {
     vfs_mkdir("/usr");
     vfs_mkdir("/var");
     
-    // Create some basic files
-    vfs_create_file("/etc/hosts");
-    vfs_create_file("/etc/passwd");
-    vfs_create_file("/home/readme.txt");
+    // DON'T create memory-only files - they interfere with real files!
+    // Files will be loaded from host filesystem automatically
     
 #if ZORA_VERBOSE_BOOT
     printf("Virtual filesystem initialized\n");
@@ -877,9 +874,9 @@ int vfs_read_file(const char* path, void** data, size_t* size) {
     return 0;
 }
 
-void vfs_sync_all_persistent(void) {
-    printf("Syncing all persistent storage...\n");
-    // Implementation for syncing persistent files
+void vfs_sync_all(void) {
+    printf("Syncing all VFS data to host filesystem...\n");
+    // Implementation for syncing all VFS files to host
     // For now, just print a message
     printf("Sync completed\n");
 }
@@ -943,7 +940,6 @@ int vfs_mount_root_autodiscover(const char* host_root) {
             VNode* file_node = vfs_create_file_node(find_data.cFileName);
             if (file_node) {
                 file_node->host_path = strdup(host_path);
-                file_node->is_persistent = 1;
                 
                 // Add to root directory
                 VNode* root = vfs_find_node("/");

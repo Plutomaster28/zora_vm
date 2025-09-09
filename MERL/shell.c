@@ -104,6 +104,7 @@ void export_command(int argc, char **argv);
 void font_debug_command(int argc, char **argv);
 void console_refresh_command(int argc, char **argv);
 void console_test_command(int argc, char **argv);
+void clear_buffer_command(int argc, char **argv);
 void ghost_pipe_utf8_fix(void);
 void utf8_detailed_test_command(int argc, char **argv);
 void utf8_monitor_command(int argc, char **argv);
@@ -1676,8 +1677,34 @@ void start_shell() {
             break;
         }
 
+        // Debug: Check for suspicious input before processing
+        int has_non_printable = 0;
+        for (int i = 0; input[i] != '\0' && i < sizeof(input); i++) {
+            unsigned char c = (unsigned char)input[i];
+            if (c < 32 && c != '\n' && c != '\t' && c != '\r') {
+                printf("DEBUG: Non-printable character detected at position %d: 0x%02X\n", i, c);
+                has_non_printable = 1;
+            }
+        }
+        
+        if (has_non_printable) {
+            printf("WARNING: Input contains non-printable characters, clearing buffer\n");
+            // Clear any remaining input
+            int ch;
+            while ((ch = getchar()) != '\n' && ch != EOF);
+            continue;
+        }
+
         // Remove trailing newline character
         input[strcspn(input, "\n")] = '\0';
+        
+        // Validate input for corrupted data
+        for (int i = 0; input[i] != '\0'; i++) {
+            if ((unsigned char)input[i] < 32 && input[i] != '\t') {
+                printf("Warning: Invalid characters detected in input, skipping command\n");
+                goto next_input;
+            }
+        }
 
         // Exit condition
         if (strcmp(input, "exit") == 0) {
@@ -1721,6 +1748,9 @@ void start_shell() {
         if (semicolon_commands >= 10) {
             printf("Warning: Too many semicolon-separated commands (limit: 10)\n");
         }
+        
+        next_input:
+            continue;
     }
 }
 
@@ -2497,8 +2527,10 @@ void cat_command(int argc, char **argv) {
                             printf("%6d\t", line_number);
                         }
                         
-                        // Print the line content
-                        fwrite(line_start, 1, line_length, stdout);
+                        // Print the line content safely
+                        for (int j = 0; j < line_length; j++) {
+                            putchar(line_start[j]);
+                        }
                         
                         // Add end marker if requested
                         if (show_ends && i < size) {
@@ -2513,12 +2545,18 @@ void cat_command(int argc, char **argv) {
                     }
                 }
             } else {
-                // Simple output without processing
-                fwrite(data, 1, size, stdout);
-                if (content[size - 1] != '\n') {
+                // Simple output without processing - use safer character-by-character output
+                for (size_t i = 0; i < size; i++) {
+                    putchar(content[i]);
+                }
+                if (size > 0 && content[size - 1] != '\n') {
                     printf("\n");
                 }
             }
+            
+            // Ensure all output is flushed and console is clean
+            fflush(stdout);
+            fflush(stderr);
         } else {
             printf("(empty file)\n");
         }
@@ -3228,6 +3266,7 @@ Command command_table[] = {
     {"font-debug", font_debug_command, "Debug console font and UTF-8 compatibility"},
     {"console-refresh", console_refresh_command, "Force console refresh to fix UTF-8 rendering"},
     {"console-test", console_test_command, "Test console capabilities and diagnose issues"},
+    {"clear-buffer", clear_buffer_command, "Clear input buffer to fix corruption issues"},
     {"utf8-detailed", utf8_detailed_test_command, "Detailed UTF-8 character rendering test"},
     {"utf8-monitor", utf8_monitor_command, "Monitor UTF-8 encoding status over time"},
     {"utf8-fix", utf8_fix_command, "Attempt to fix UTF-8 encoding issues"},
@@ -4281,7 +4320,7 @@ void sync_command(int argc, char* argv[]) {
     printf("Syncing all persistent storage...\n");
     
     // Sync all persistent nodes
-    vfs_sync_all_persistent();
+    vfs_sync_all();
     
     printf("Sync complete\n");
 }
@@ -6218,4 +6257,27 @@ void console_test_command(int argc, char **argv) {
         printf("\nApplying console fixes...\n");
         console_refresh_command(0, NULL);
     }
+}
+
+void clear_buffer_command(int argc, char **argv) {
+    printf("Clearing input buffer...\n");
+    
+    // Clear stdin buffer
+    int ch;
+    while ((ch = getchar()) != '\n' && ch != EOF) {
+        printf("Removed character: 0x%02X ('%c')\n", ch, isprint(ch) ? ch : '?');
+    }
+    
+    // Clear any Windows console input buffer
+    HANDLE hStdin = GetStdHandle(STD_INPUT_HANDLE);
+    if (hStdin != INVALID_HANDLE_VALUE) {
+        FlushConsoleInputBuffer(hStdin);
+        printf("Windows console input buffer flushed\n");
+    }
+    
+    // Force console refresh
+    fflush(stdout);
+    fflush(stderr);
+    
+    printf("Input buffer cleared. Try typing a command now.\n");
 }
