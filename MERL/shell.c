@@ -17,6 +17,7 @@
 #include "binary/binary_executor.h"
 #include "vm.h"  // For crash guard control
 #include "terminal/terminal_style.h"  // Add terminal styling support
+// #include "shell_script.h"  // Enhanced shell scripting - temporarily disabled
 
 // Windows-specific includes
 #include <windows.h>
@@ -35,11 +36,11 @@
 // Function prototypes
 void handle_command(char *command);
 void parse_and_execute_command_line(char *command_line);
-int execute_pipeline(char *pipeline_str);
 int execute_command_with_parsing(char *cmd_str);
 int execute_command_with_redirection(char *args[], int argc, char *input_file, char *output_file, int append_mode);
 void execute_simple_command(char *args[], int argc);
 void execute_simple_command_with_redirect(char *args[], int argc);
+int execute_pipeline(char *pipeline_str);
 void redirect_printf(const char* format, ...);
 void man_command(int argc, char **argv);
 void help_command(int argc, char **argv);
@@ -85,7 +86,6 @@ void exit_command(int argc, char **argv);
 
 // Enhanced command parsing and execution
 void parse_and_execute_command_line(char *command_line);
-int execute_pipeline(char *pipeline_str);
 int execute_command_with_parsing(char *cmd_str);
 int execute_command_with_redirection(char *args[], int argc, char *input_file, char *output_file, int append_mode);
 void execute_simple_command(char *args[], int argc);
@@ -2905,8 +2905,6 @@ Command command_table[] = {
     {"head", head_command, "Display the beginning of a file"},
     {"tail", tail_command, "Display the end of a file"},
     {"grep", grep_command, "Search for patterns within files"},
-    {"chmod", chmod_command, "Change file permissions"},
-    {"chown", chown_command, "Change file owner and group"},
     {"htop", htop_command, "Display sorted information about processes in real-time"},
     {"jobs", jobs_command, "List background jobs"},
     {"bg", bg_command, "Send a stopped process to the background"},
@@ -2924,10 +2922,6 @@ Command command_table[] = {
     {"zip", zip_command, "Create zip archives"},
     {"unzip", unzip_command, "Extract zip archives"},
     {"hostname", hostname_command, "Display or set the system hostname"},
-    {"set", set_command, "Set environment variable"},
-    {"unset", unset_command, "Unset environment variable"},
-    {"export", export_command, "Export environment variable"},
-    {"env", env_command, "Display environment variables"},
     
     // Terminal styling commands
     {"style", style_command, "Configure terminal styling (init/reset/save/load)"},
@@ -4519,9 +4513,9 @@ void test_sandbox_command(int argc, char **argv) {
 #define CLEAR_COMMAND "cls"
 
 // Environment variable commands implementation
-void set_command(int argc, char **argv) {
+void setenv_command(int argc, char **argv) {
     if (argc != 3) {
-        printf("Usage: set VARIABLE VALUE\n");
+        printf("Usage: setenv VARIABLE VALUE\n");
         return;
     }
     set_env_var(argv[1], argv[2]);

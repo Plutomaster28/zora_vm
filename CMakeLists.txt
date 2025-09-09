@@ -156,6 +156,7 @@ set(SOURCES
     MERL/crash.c
     MERL/kernel.c
     MERL/shell.c
+    # MERL/shell_script.c  # Temporarily disabled
     MERL/tetra.c
     MERL/user.c
     MERL/utils.c
