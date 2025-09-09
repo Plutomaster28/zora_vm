@@ -23,6 +23,7 @@
 #include "lua/lua_vm.h"
 #include "binary/binary_executor.h"
 #include "meisei/virtual_silicon.h"
+#include "terminal/terminal_detector.h"
 
 #ifdef PYTHON_SCRIPTING
 #include "python/python_vm.h"
@@ -136,6 +137,13 @@ int main(int argc, char* argv[]) {
         GetConsoleMode(hOut, &dwMode);
         dwMode |= ENABLE_VIRTUAL_TERMINAL_PROCESSING;
         SetConsoleMode(hOut, dwMode);
+    }
+    
+    // Detect terminal capabilities early
+    int is_modern_terminal = detect_windows_terminal();
+    if (!is_modern_terminal) {
+        printf("NOTE: Running in legacy Console Host. For best experience, use Windows Terminal.\n");
+        printf("Run 'terminal-test' command in ZoraVM to check terminal capabilities.\n");
     }
     #endif
     

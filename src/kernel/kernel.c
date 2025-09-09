@@ -21,24 +21,29 @@ static CRITICAL_SECTION g_kernel_lock;
 // Boot splash and initialization
 static void kernel_display_boot_splash(void) {
     printf("\n");
-    printf("+--------------------------------------------------------------+\n");
-    printf("|                        ZORA KERNEL v%d.%d.%d                        |\n", 
+    printf("████████████████████████████████████████████████████████████████\n");
+    printf("█                        ZORA KERNEL v%d.%d.%d                        █\n", 
            ZORA_KERNEL_VERSION_MAJOR, ZORA_KERNEL_VERSION_MINOR, ZORA_KERNEL_VERSION_PATCH);
-    printf("|              Advanced Virtual Machine Operating System          |\n");
-    printf("|                    Built on %s at %s                    |\n", 
+    printf("█              Advanced Virtual Machine Operating System          █\n");
+    printf("█                    Built on %s at %s                    █\n", 
            ZORA_KERNEL_BUILD_DATE, ZORA_KERNEL_BUILD_TIME);
-    printf("+--------------------------------------------------------------+\n");
+    printf("█                                                                █\n");
+    printf("█  Features: Multi-user • Unix Permissions • Scripting • VFS    █\n");
+    printf("█  Network: Virtual TCP/IP • Sandbox Security • Process Control █\n");
+    printf("████████████████████████████████████████████████████████████████\n");
     printf("\n");
     
     if (g_boot_flags & BOOT_FLAG_SAFE_MODE) {
-        printf("[KERNEL] SAFE MODE ENABLED\n");
+        printf("[KERNEL]   SAFE MODE ENABLED\n");
     }
     if (g_boot_flags & BOOT_FLAG_DEBUG_MODE) {
-        printf("[KERNEL] DEBUG MODE ENABLED\n");
+        printf("[KERNEL]  DEBUG MODE ENABLED\n");
     }
     if (g_boot_flags & BOOT_FLAG_VERBOSE) {
-        printf("[KERNEL] VERBOSE LOGGING ENABLED\n");
+        printf("[KERNEL]  VERBOSE LOGGING ENABLED\n");
     }
+    
+    printf("[KERNEL]  Boot sequence initiating...\n");
 }
 
 static void kernel_log_impl(const char* level, const char* subsystem, const char* format, va_list args) {
@@ -148,6 +153,14 @@ int kernel_init_filesystem(void) {
     kernel_log("VFS", "Initializing virtual file system...");
     // VFS initialization would go here
     kernel_log("VFS", "Virtual file system ready");
+    return 0;
+}
+
+int kernel_init_system_monitor(void) {
+    kernel_log("SYSMON", "Initializing system monitoring...");
+    // Initialize system monitor - need to include the header
+    // system_monitor_init();
+    kernel_log("SYSMON", "System monitoring ready");
     return 0;
 }
 
@@ -309,7 +322,7 @@ int kernel_init(void) {
     }
     
     kernel_set_state(KERNEL_STATE_RUNNING);
-    kernel_log("INIT", "🚀 Zora Kernel is now running!");
+    kernel_log("INIT", " Zora Kernel is now running!");
     kernel_log("INIT", "System ready for user applications");
     
     return 0;

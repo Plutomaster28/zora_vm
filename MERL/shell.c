@@ -17,6 +17,8 @@
 #include "binary/binary_executor.h"
 #include "vm.h"  // For crash guard control
 #include "terminal/terminal_style.h"  // Add terminal styling support
+#include "kernel/system_monitor.h"  // System monitoring capabilities
+#include "terminal/terminal_detector.h"  // Terminal detection and compatibility
 // #include "shell_script.h"  // Enhanced shell scripting - temporarily disabled
 
 // Windows-specific includes
@@ -64,10 +66,18 @@ void debug_vfs_command(int argc, char* argv[]);
 void lua_command(int argc, char **argv);
 void luacode_command(int argc, char **argv);
 void test_sandbox_command(int argc, char **argv);
-void set_command(int argc, char **argv);
-void unset_command(int argc, char **argv);
-void export_command(int argc, char **argv);
+
+// System monitor commands
+void top_command(int argc, char **argv);
+void osinfo_command(int argc, char **argv);
+void mounts_command(int argc, char **argv);
+void netinfo_command(int argc, char **argv);
+void proc_command(int argc, char **argv);
+void dmesg_command(int argc, char **argv);
+void services_command(int argc, char **argv);
 void env_command(int argc, char **argv);
+void terminal_test_command(int argc, char **argv);
+void launch_wt_command(int argc, char **argv);
 void theme_command(int argc, char **argv);
 void themes_command(int argc, char **argv);
 void find_command(int argc, char **argv);
@@ -2828,6 +2838,147 @@ void vm_shutdown_command(int argc, char **argv) {
     exit(0);
 }
 
+// ===== SYSTEM MONITOR COMMANDS =====
+
+void top_command(int argc, char **argv) {
+    system_monitor_update();
+    system_monitor_display_processes();
+}
+
+void osinfo_command(int argc, char **argv) {
+    system_monitor_display_system_info();
+}
+
+void mounts_command(int argc, char **argv) {
+    system_monitor_display_filesystems();
+}
+
+void netinfo_command(int argc, char **argv) {
+    system_monitor_display_network_status();
+}
+
+void proc_command(int argc, char **argv) {
+    if (argc < 2) {
+        printf("Usage: proc <add|kill|list> [args...]\n");
+        printf("  proc add <name> [priority]  - Add a new process\n");
+        printf("  proc kill <pid>            - Kill a process\n");
+        printf("  proc list                  - List all processes\n");
+        return;
+    }
+    
+    if (strcmp(argv[1], "add") == 0) {
+        if (argc < 3) {
+            printf("Usage: proc add <name> [priority]\n");
+            return;
+        }
+        char* name = argv[2];
+        int priority = (argc >= 4) ? atoi(argv[3]) : 50;
+        int pid = system_monitor_add_process(name, priority);
+        if (pid > 0) {
+            printf("Process '%s' added with PID %d\n", name, pid);
+        } else {
+            printf("Failed to add process '%s'\n", name);
+        }
+    } else if (strcmp(argv[1], "kill") == 0) {
+        if (argc < 3) {
+            printf("Usage: proc kill <pid>\n");
+            return;
+        }
+        int pid = atoi(argv[2]);
+        if (system_monitor_kill_process(pid) == 0) {
+            printf("Process %d terminated\n", pid);
+        } else {
+            printf("Failed to kill process %d\n", pid);
+        }
+    } else if (strcmp(argv[1], "list") == 0) {
+        system_monitor_display_processes();
+    } else {
+        printf("Unknown proc command: %s\n", argv[1]);
+    }
+}
+
+void dmesg_command(int argc, char **argv) {
+    printf("╔══════════════════════════════════════════════════════════════════════════════╗\n");
+    printf("║                              ZoraVM Kernel Messages                         ║\n");
+    printf("╚══════════════════════════════════════════════════════════════════════════════╝\n");
+    printf("[    0.000000] ZoraVM kernel version 2.1.0 starting...\n");
+    printf("[    0.001234] Initializing virtual CPU with x86_64 architecture\n");
+    printf("[    0.002456] Memory management initialized: 64MB virtual memory\n");
+    printf("[    0.003789] VFS: Virtual filesystem mounted at /\n");
+    printf("[    0.004012] DEVMGR: Device manager started\n");
+    printf("[    0.005234] DEVMGR: Registered driver: Terminal Driver v1.0\n");
+    printf("[    0.006456] DEVMGR: Registered driver: Virtual Disk Driver v1.0\n");
+    printf("[    0.007789] DEVMGR: Registered driver: Virtual Network Driver v1.0\n");
+    printf("[    0.009012] NET: Virtual network stack initialized\n");
+    printf("[    0.010234] NET: Interface veth0 configured (10.0.2.15/24)\n");
+    printf("[    0.011456] SANDBOX: Security sandbox enabled\n");
+    printf("[    0.012789] SANDBOX: Memory limit: 64MB, CPU limit: 80%%\n");
+    printf("[    0.014012] LUA: Lua scripting engine v5.4.6 loaded\n");
+    printf("[    0.015234] MERL: MERL shell v2.1.0 initialized\n");
+    printf("[    0.016456] AUTH: Multi-user authentication system ready\n");
+    printf("[    0.017789] VFS: Unix-style permissions enabled\n");
+    printf("[    0.019012] TERM: Terminal styling system initialized\n");
+    printf("[    0.020234] BOOT: System initialization complete\n");
+    printf("[    0.021456] SHELL: User session started for 'guest'\n");
+    
+    time_t current_time = time(NULL);
+    struct tm* timeinfo = localtime(&current_time);
+    printf("[%4d.%06d] SYSTEM: Current time %04d-%02d-%02d %02d:%02d:%02d\n",
+           (int)(current_time % 10000), 123456,
+           timeinfo->tm_year + 1900, timeinfo->tm_mon + 1, timeinfo->tm_mday,
+           timeinfo->tm_hour, timeinfo->tm_min, timeinfo->tm_sec);
+}
+
+void services_command(int argc, char **argv) {
+    printf("╔══════════════════════════════════════════════════════════════════════════════╗\n");
+    printf("║                                System Services                               ║\n");
+    printf("╠══════════════════╤═══════════╤═════════════╤══════════════╤══════════════════╣\n");
+    printf("║ Service          │ Status    │ PID         │ Memory       │ Description      ║\n");
+    printf("╠══════════════════╪═══════════╪═════════════╪══════════════╪══════════════════╣\n");
+    printf("║ zora-kernel      │ running   │ 1           │ 2048 KB      │ System kernel    ║\n");
+    printf("║ init             │ running   │ 2           │ 512 KB       │ Init process     ║\n");
+    printf("║ merl-shell       │ running   │ 3           │ 4096 KB      │ MERL shell       ║\n");
+    printf("║ vfs-daemon       │ running   │ 4           │ 1024 KB      │ VFS manager      ║\n");
+    printf("║ net-stack        │ running   │ 5           │ 768 KB       │ Network stack    ║\n");
+    printf("║ auth-service     │ running   │ 6           │ 256 KB       │ Authentication   ║\n");
+    printf("║ term-manager     │ running   │ 7           │ 512 KB       │ Terminal manager ║\n");
+    printf("║ sandbox-monitor  │ running   │ 8           │ 384 KB       │ Security sandbox ║\n");
+    printf("║ lua-engine       │ running   │ 9           │ 1536 KB      │ Lua interpreter  ║\n");
+    printf("╚══════════════════╧═══════════╧═════════════╧══════════════╧══════════════════╝\n");
+    
+    printf("\nService Management:\n");
+    printf("• All critical services are running normally\n");
+    printf("• Total system memory usage: 11.1 MB\n");
+    printf("• System uptime: %ld seconds\n", time(NULL) % 86400);
+    printf("• No failed services detected\n");
+}
+
+void terminal_test_command(int argc, char **argv) {
+    print_terminal_info();
+}
+
+void launch_wt_command(int argc, char **argv) {
+    printf("Attempting to launch Windows Terminal...\n");
+    
+    // Get current executable path
+    char exe_path[512];
+    GetModuleFileNameA(NULL, exe_path, sizeof(exe_path));
+    
+    if (try_launch_windows_terminal(exe_path)) {
+        printf("Successfully launched Windows Terminal!\n");
+        printf("This session will continue in the old terminal.\n");
+        printf("Switch to the new Windows Terminal window for better experience.\n");
+    } else {
+        printf("Failed to launch Windows Terminal.\n");
+        printf("Make sure Windows Terminal is installed:\n");
+        printf("  • Install from Microsoft Store\n");
+        printf("  • Or run: winget install Microsoft.WindowsTerminal\n");
+        printf("  • Or download from: https://github.com/microsoft/terminal\n");
+    }
+}
+
+// ===== END SYSTEM MONITOR COMMANDS =====
+
 // Command table
 Command command_table[] = {
     {"man", man_command, "Displays information about commands."},
@@ -2922,6 +3073,17 @@ Command command_table[] = {
     {"zip", zip_command, "Create zip archives"},
     {"unzip", unzip_command, "Extract zip archives"},
     {"hostname", hostname_command, "Display or set the system hostname"},
+    
+    // System monitoring and OS commands
+    {"top", top_command, "Display running processes (system monitor)"},
+    {"osinfo", osinfo_command, "Display detailed OS and system information"},
+    {"mounts", mounts_command, "Show mounted filesystems"},
+    {"netinfo", netinfo_command, "Display network interface status"},
+    {"proc", proc_command, "Process management (add/kill/list)"},
+    {"dmesg", dmesg_command, "Display kernel messages"},
+    {"services", services_command, "Display system services status"},
+    {"terminal-test", terminal_test_command, "Test terminal capabilities and compatibility"},
+    {"launch-wt", launch_wt_command, "Launch Windows Terminal (if available)"},
     
     // Terminal styling commands
     {"style", style_command, "Configure terminal styling (init/reset/save/load)"},

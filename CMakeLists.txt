@@ -127,6 +127,8 @@ set(SOURCES
     src/memory/memory.c
     src/devices/device.c
     src/kernel/kernel.c
+    src/kernel/system_monitor.c
+    src/kernel/init.c
     
     # Binary execution
     src/binary/binary_executor.c
@@ -150,6 +152,7 @@ set(SOURCES
     src/meisei/virtual_silicon.c
     src/meisei/script_accelerator.c
     src/terminal/terminal_style.c
+    src/terminal/terminal_detector.c
     
     # MERL shell
     MERL/color-and-test.c
