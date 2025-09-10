@@ -1689,16 +1689,43 @@ void start_shell() {
 
         // Debug: Check for suspicious input before processing
         int has_non_printable = 0;
+        int has_utf8_replacement = 0;
+        
         for (int i = 0; input[i] != '\0' && i < sizeof(input); i++) {
             unsigned char c = (unsigned char)input[i];
+            
+            // Check for non-printable characters
             if (c < 32 && c != '\n' && c != '\t' && c != '\r') {
                 printf("DEBUG: Non-printable character detected at position %d: 0x%02X\n", i, c);
                 has_non_printable = 1;
             }
+            
+            // Check for UTF-8 replacement character sequence (EF BF BD)
+            if (i < sizeof(input) - 2 && 
+                c == 0xEF && (unsigned char)input[i+1] == 0xBF && (unsigned char)input[i+2] == 0xBD) {
+                printf("DEBUG: UTF-8 replacement character detected at position %d\n", i);
+                has_utf8_replacement = 1;
+            }
+            
+            // Check for high-bit characters that might be corruption
+            if (c >= 0x80 && c <= 0xFF) {
+                printf("DEBUG: High-bit character detected at position %d: 0x%02X\n", i, c);
+                has_non_printable = 1;
+            }
         }
         
-        if (has_non_printable) {
-            printf("WARNING: Input contains non-printable characters, clearing buffer\n");
+        if (has_non_printable || has_utf8_replacement) {
+            if (has_utf8_replacement) {
+                printf("WARNING: Input contains UTF-8 replacement characters (corruption)\n");
+            } else {
+                printf("WARNING: Input contains non-printable characters\n");
+            }
+            
+            // More aggressive buffer clearing
+#ifdef _WIN32
+            FlushConsoleInputBuffer(GetStdHandle(STD_INPUT_HANDLE));
+            while (_kbhit()) _getch();
+#endif
             // Clear any remaining input
             int ch;
             while ((ch = getchar()) != '\n' && ch != EOF);
@@ -1763,20 +1790,19 @@ void start_shell() {
         fflush(stdout);
         fflush(stderr);
         
-        // Check for and clear any spurious input (Windows-compatible)
+        // More aggressive buffer clearing for Windows
 #ifdef _WIN32
-        // On Windows, use _kbhit() to check for pending input
-        if (_kbhit()) {
-            // Drain pending input
-            char drain_buffer[256];
-            int drained = 0;
-            while (_kbhit() && drained < sizeof(drain_buffer) - 1) {
-                drain_buffer[drained++] = _getch();
-            }
-            if (drained > 0) {
-                printf("DEBUG: Drained %d bytes of spurious input after command\n", drained);
-            }
+        // Method 1: Clear Windows console input buffer
+        FlushConsoleInputBuffer(GetStdHandle(STD_INPUT_HANDLE));
+        
+        // Method 2: Drain any pending keyboard input
+        while (_kbhit()) {
+            _getch(); // Consume and discard
         }
+        
+        // Method 3: Clear C runtime input buffer
+        fflush(stdin);
+        rewind(stdin);
 #else
         // Unix/Linux version with select()
         fd_set read_fds;

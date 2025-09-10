@@ -8,8 +8,8 @@ set(CMAKE_C_STANDARD_REQUIRED ON)
 option(ZORA_VERBOSE_BOOT "Enable verbose boot messages and debug output" OFF)
 option(ZORA_RELEASE_MODE "Enable clean release mode startup (minimal messages)" ON)
 option(ENABLE_LUA_SCRIPTING "Enable Lua scripting support" ON)
-option(ENABLE_PYTHON_SCRIPTING "Enable Python scripting support" OFF)
-option(ENABLE_PERL_SCRIPTING "Enable Perl scripting support" OFF)
+option(ENABLE_PYTHON_SCRIPTING "Enable Python scripting support" ON)
+option(ENABLE_PERL_SCRIPTING "Enable Perl scripting support" ON)
 
 # Set preprocessor definitions based on build options
 if(ZORA_VERBOSE_BOOT)
