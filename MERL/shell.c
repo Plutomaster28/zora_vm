@@ -30,6 +30,7 @@
 #include "terminal/terminal_style.h"  // Add terminal styling support
 #include "kernel/system_monitor.h"  // System monitoring capabilities
 #include "terminal/terminal_detector.h"  // Terminal detection and compatibility
+#include "version.h"  // Auto-versioning system
 // #include "shell_script.h"  // Enhanced shell scripting - temporarily disabled
 
 // Windows-specific includes
@@ -802,8 +803,11 @@ void du_command(int argc, char **argv) {
 }
 
 void uname_command(int argc, char **argv) {
+    char version_short[32];
+    get_zora_version_short(version_short, sizeof(version_short));
+    
     if (argc > 1 && strcmp(argv[1], "-a") == 0) {
-        printf("ZoraVM 1.0 zora-vm x86_64 x86_64 x86_64 Windows\n");
+        printf("ZoraVM %s \"%s\" zora-vm x86_64 x86_64 x86_64 Windows\n", version_short, get_version_codename());
     } else {
         printf("ZoraVM\n");
     }
@@ -1661,13 +1665,20 @@ void start_shell() {
     // Initialize ZoraVM Terminal Styling (font only)
     terminal_init_styling();
     
-    printf("=== Zora VM - MERL Shell ===\n");
-    printf("Virtual Machine OS with MERL Shell\n");
-    printf("Enhanced Terminal: MS Mincho font, Campbell colors, Block cursor\n");
-    printf("Type 'help' for available commands, 'terminal-demo' for styling demo.\n");
-    printf("Terminal commands: 'style', 'font', 'cursor', 'colors', 'retro', 'syntax'\n");
-    printf("Type 'exit' to quit VM.\n");
-    printf("VM Commands: vmstat, reboot, shutdown\n\n");
+    char version_short[32];
+    get_zora_version_short(version_short, sizeof(version_short));
+    
+    printf("════════════════════════════════════════════════════════════════════════════════\n");
+    printf("  ███████╗ ██████╗ ██████╗  █████╗ ██╗   ██╗███╗   ███╗   v%s \"%s\"\n", version_short, get_version_codename());
+    printf("  ╚══███╔╝██╔═══██╗██╔══██╗██╔══██╗██║   ██║████╗ ████║\n");
+    printf("    ███╔╝ ██║   ██║██████╔╝███████║██║   ██║██╔████╔██║   Multi-Environment\n");
+    printf("   ███╔╝  ██║   ██║██╔══██╗██╔══██║╚██╗ ██╔╝██║╚██╔╝██║   Runtime Layer\n");
+    printf("  ███████╗╚██████╔╝██║  ██║██║  ██║ ╚████╔╝ ██║ ╚═╝ ██║\n");
+    printf("  ╚══════╝ ╚═════╝ ╚═╝  ╚═╝╚═╝  ╚═╝  ╚═══╝  ╚═╝     ╚═╝   Built %s\n", __DATE__);
+    printf("════════════════════════════════════════════════════════════════════════════════\n");
+    printf("Virtual Operating System • Terminal: Campbell Colors • UTF-8 Support\n");
+    printf("Type 'help' for commands • 'version' for details • 'exit' to quit\n");
+    printf("════════════════════════════════════════════════════════════════════════════════\n\n");
 
     while (1) {
         static int command_count = 0;
@@ -1830,10 +1841,18 @@ void start_shell() {
 // Command implementations
 
 void sysinfo_command(int argc, char **argv) {
-    printf("MERL Shell: %s\n", OS_VERSION);
-    printf("Developed by: Tomoko Saito\n");
-    printf("System: %s\n", SYSTEM_NAME);
-    printf("Note: Unlike Zora, this is meant to provide a unix-like experience :3\n");
+    char version_short[32];
+    get_zora_version_short(version_short, sizeof(version_short));
+    
+    printf("═══════════════════════════════════════════════════════════════════════\n");
+    printf("  ZoraVM v%s \"%s\" - Multi-Environment Runtime Layer\n", version_short, get_version_codename());
+    printf("═══════════════════════════════════════════════════════════════════════\n");
+    printf("  Developed by: Tomoko Saito\n");
+    printf("  System: %s\n", SYSTEM_NAME);
+    printf("  Built: %s at %s (%d days of development)\n", __DATE__, __TIME__, days_since_epoch());
+    printf("  Note: Unlike traditional systems, this provides a Unix-like experience\n");
+    printf("        within a Windows-hosted virtual environment! :3\n");
+    printf("═══════════════════════════════════════════════════════════════════════\n");
 }
 
 // Helper function to expand path shortcuts like ".." and "~"
@@ -3110,10 +3129,13 @@ void proc_command(int argc, char **argv) {
 }
 
 void dmesg_command(int argc, char **argv) {
+    char version_short[32];
+    get_zora_version_short(version_short, sizeof(version_short));
+    
     printf("╔══════════════════════════════════════════════════════════════════════════════╗\n");
     printf("║                              ZoraVM Kernel Messages                         ║\n");
     printf("╚══════════════════════════════════════════════════════════════════════════════╝\n");
-    printf("[    0.000000] ZoraVM kernel version 2.1.0 starting...\n");
+    printf("[    0.000000] ZoraVM kernel version %s \"%s\" starting...\n", version_short, get_version_codename());
     printf("[    0.001234] Initializing virtual CPU with x86_64 architecture\n");
     printf("[    0.002456] Memory management initialized: 64MB virtual memory\n");
     printf("[    0.003789] VFS: Virtual filesystem mounted at /\n");
@@ -3126,7 +3148,7 @@ void dmesg_command(int argc, char **argv) {
     printf("[    0.011456] SANDBOX: Security sandbox enabled\n");
     printf("[    0.012789] SANDBOX: Memory limit: 64MB, CPU limit: 80%%\n");
     printf("[    0.014012] LUA: Lua scripting engine v5.4.6 loaded\n");
-    printf("[    0.015234] MERL: MERL shell v2.1.0 initialized\n");
+    printf("[    0.015234] MERL: MERL shell v%s initialized\n", version_short);
     printf("[    0.016456] AUTH: Multi-user authentication system ready\n");
     printf("[    0.017789] VFS: Unix-style permissions enabled\n");
     printf("[    0.019012] TERM: Terminal styling system initialized\n");
@@ -5609,27 +5631,93 @@ void scripts_command(int argc, char **argv) {
 void version_command(int argc, char **argv) {
     (void)argc; (void)argv;
     
-    printf("Zora VM Version 2.1.0\n");
-    printf("Multi-Environment Runtime Layer (MERL) Shell\n");
-    printf("Build Date: %s %s\n", __DATE__, __TIME__);
-    printf("Platform: Windows (MinGW)\n");
-    printf("Features: VFS, Lua, Python, Perl VMs, Sandboxing\n");
-    printf("Terminal: Campbell Color Scheme with Enhanced Styling\n");
+    char version_full[64], version_short[32];
+    get_zora_version_string(version_full, sizeof(version_full));
+    get_zora_version_short(version_short, sizeof(version_short));
+    
+    int major, minor, patch, build;
+    get_zora_version(&major, &minor, &patch, &build);
+    
+    printf("╔══════════════════════════════════════════════════════════════════════════════╗\n");
+    printf("║                              ZORA VM VERSION INFO                           ║\n");
+    printf("╠══════════════════════════════════════════════════════════════════════════════╣\n");
+    printf("║ Version: ZoraVM v%s                                                   ║\n", version_short);
+    printf("║ Full Version: %s (Build %d)                                          ║\n", version_full, build);
+    printf("║ Codename: \"%s\"                                                         ║\n", get_version_codename());
+    printf("║ Multi-Environment Runtime Layer (MERL) Shell                               ║\n");
+    printf("║                                                                              ║\n");
+    printf("║ Build Information:                                                           ║\n");
+    printf("║ • Compiled: %s at %s                                          ║\n", __DATE__, __TIME__);
+    printf("║ • Platform: Windows (MinGW-w64)                                             ║\n");
+    printf("║ • Architecture: x86_64                                                      ║\n");
+    printf("║                                                                              ║\n");
+    printf("║ Features Enabled:                                                            ║\n");
+    printf("║ • Virtual File System (VFS)                                                 ║\n");
+#ifdef LUA_SCRIPTING
+    printf("║ • Lua Scripting Engine                                                      ║\n");
+#endif
+#ifdef PYTHON_SCRIPTING
+    printf("║ • Python Scripting Engine                                                   ║\n");
+#endif
+#ifdef PERL_SCRIPTING
+    printf("║ • Perl Scripting Engine                                                     ║\n");
+#endif
+    printf("║ • Process Sandboxing                                                        ║\n");
+    printf("║ • Virtual Network Stack                                                     ║\n");
+    printf("║ • Terminal Styling & Themes                                                 ║\n");
+    printf("║ • Campbell Color Scheme                                                     ║\n");
+    printf("║ • UTF-8 Support with Auto-fixes                                             ║\n");
+    printf("╚══════════════════════════════════════════════════════════════════════════════╝\n");
 }
 
 void systeminfo_command(int argc, char **argv) {
     (void)argc; (void)argv;
     
-    printf("=== ZORA VM SYSTEM INFORMATION ===\n\n");
-    printf("System Type: Virtual Machine\n");
-    printf("Architecture: x86_64 Virtual\n");
-    printf("Shell: MERL (Multi-Environment Runtime Layer)\n");
-    printf("VFS: Virtual File System Active\n");
-    printf("Network: Virtual Network Stack\n");
-    printf("Memory: Virtual Memory Management\n");
-    printf("Scripting: Lua, Python, Perl VMs\n");
-    printf("Terminal: Enhanced with Campbell Colors\n");
-    printf("Security: Sandboxed Execution Environment\n");
+    char version_full[64], version_short[32];
+    get_zora_version_string(version_full, sizeof(version_full));
+    get_zora_version_short(version_short, sizeof(version_short));
+    
+    int major, minor, patch, build;
+    get_zora_version(&major, &minor, &patch, &build);
+    
+    printf("╔══════════════════════════════════════════════════════════════════════════════╗\n");
+    printf("║                         ZORA VM SYSTEM INFORMATION                          ║\n");
+    printf("╠══════════════════════════════════════════════════════════════════════════════╣\n");
+    printf("║ System: ZoraVM v%s \"%s\"                                         ║\n", version_short, get_version_codename());
+    printf("║ Type: Virtual Operating System                                               ║\n");
+    printf("║ Architecture: x86_64 Virtual Machine                                        ║\n");
+    printf("║ Shell: MERL (Multi-Environment Runtime Layer)                               ║\n");
+    printf("║ Build: %s (%d days since inception)                                    ║\n", __DATE__, days_since_epoch());
+    printf("║                                                                              ║\n");
+    printf("║ Core Components:                                                             ║\n");
+    printf("║ • Virtual File System (VFS) - Active                                        ║\n");
+    printf("║ • Virtual Network Stack - Running                                           ║\n");
+    printf("║ • Virtual Memory Management - Operational                                   ║\n");
+    printf("║ • Process Sandboxing - Enabled                                              ║\n");
+    printf("║                                                                              ║\n");
+    printf("║ Scripting Engines:                                                          ║\n");
+#ifdef LUA_SCRIPTING
+    printf("║ • Lua VM - Enabled                                                          ║\n");
+#else
+    printf("║ • Lua VM - Disabled                                                         ║\n");
+#endif
+#ifdef PYTHON_SCRIPTING
+    printf("║ • Python VM - Enabled                                                       ║\n");
+#else
+    printf("║ • Python VM - Disabled                                                      ║\n");
+#endif
+#ifdef PERL_SCRIPTING
+    printf("║ • Perl VM - Enabled                                                         ║\n");
+#else
+    printf("║ • Perl VM - Disabled                                                        ║\n");
+#endif
+    printf("║                                                                              ║\n");
+    printf("║ Terminal Features:                                                           ║\n");
+    printf("║ • Campbell Color Scheme                                                     ║\n");
+    printf("║ • UTF-8 Support with Auto-corrections                                       ║\n");
+    printf("║ • Syntax Highlighting                                                       ║\n");
+    printf("║ • Theme Support                                                             ║\n");
+    printf("╚══════════════════════════════════════════════════════════════════════════════╝\n");
 }
 
 // Additional Unix command implementations

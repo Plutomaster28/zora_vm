@@ -5,6 +5,7 @@
 #include <windows.h>
 #include "kernel.h"
 #include "terminal/terminal_detector.h"
+#include "version.h"  // Auto-versioning system
 
 // System monitoring and OS-like features
 
@@ -195,11 +196,18 @@ void system_monitor_display_system_info(void) {
     ZeroMemory(&osvi, sizeof(OSVERSIONINFOEXA));
     osvi.dwOSVersionInfoSize = sizeof(OSVERSIONINFOEXA);
     
+    char version_short[32];
+    get_zora_version_short(version_short, sizeof(version_short));
+    
+    int major, minor, patch, build;
+    get_zora_version(&major, &minor, &patch, &build);
+    
     printf("╔══════════════════════════════════════════════════════════════════════════════╗\n");
     printf("║                              ZoraVM System Information                       ║\n");
     printf("╠══════════════════════════════════════════════════════════════════════════════╣\n");
-    printf("║ OS Name: ZoraVM Virtual Operating System v2.1.0                             ║\n");
-    printf("║ Kernel: ZORA Kernel v2.1.0 (Built %s %s)                           ║\n", __DATE__, __TIME__);
+    printf("║ OS Name: ZoraVM Virtual Operating System v%s \"%s\"                     ║\n", version_short, get_version_codename());
+    printf("║ Kernel: ZORA Kernel v%s (Built %s %s)                           ║\n", version_short, __DATE__, __TIME__);
+    printf("║ Development Days: %d (since project inception)                              ║\n", days_since_epoch());
     printf("║ Architecture: %s                                                            ║\n",
            si.wProcessorArchitecture == PROCESSOR_ARCHITECTURE_AMD64 ? "x86_64" : "x86");
     printf("║ CPU Cores: %ld                                                               ║\n", si.dwNumberOfProcessors);
