@@ -1,6 +1,7 @@
 #include "../../include/kernel/java_detector.h"
 #include "../../include/vfs/vfs.h"
 #include "../../include/terminal/terminal_style.h"
+#include "../../include/kernel.h"  // For kernel_panic()
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -188,14 +189,54 @@ int java_check_file_content(const char* filepath) {
 }
 
 void java_trigger_kernel_panic(JavaThreatAssessment* threat) {
-    printf("\n CRITICAL SYSTEM ERROR \n");
+    printf("\n🚨 CRITICAL SYSTEM ERROR 🚨\n");
     printf("JAVA DETECTED - INITIATING EMERGENCY PROTOCOLS\n\n");
     
     // Brief delay for dramatic effect
-    for (volatile int i = 0; i < 100000000; i++);
+    for (volatile int i = 0; i < 50000000; i++);
     
+    // Display our custom Java BSOD first
     java_display_bsod(threat);
-    java_emergency_shutdown();
+    
+    // Now trigger the ACTUAL kernel panic with Java-specific error codes
+    uint32_t java_error_code;
+    char panic_message[512];
+    
+    if (threat->threat_level >= 11) {
+        java_error_code = 0xE47E4491; // "ENTERPF1SE" approximation in hex
+        snprintf(panic_message, sizeof(panic_message), 
+                "ENTERPRISE JAVA NIGHTMARE: %s detected! AbstractSingletonProxyFactoryBean contamination!", 
+                threat->violation_type);
+    } else if (threat->threat_level >= 10) {
+        java_error_code = 0xDEADBEEF; // Massive Java infestation  
+        snprintf(panic_message, sizeof(panic_message), 
+                "MASSIVE JAVA INFESTATION: %d files detected! System integrity compromised!", 
+                threat->file_count);
+    } else if (threat->threat_level >= 8) {
+        java_error_code = 0xCAFFEBAD; // Coffee is bad (Java reference)
+        snprintf(panic_message, sizeof(panic_message), 
+                "ENTERPRISE JAVA FRAMEWORK DETECTED: %s - Spring/Hibernate contamination!", 
+                threat->violation_type);
+    } else if (threat->threat_level >= 6) {
+        java_error_code = 0xC0FFEE; // Coffee/Java reference
+        snprintf(panic_message, sizeof(panic_message), 
+                "JAVA FRAMEWORK CONTAMINATION: %d files found! System refusing to continue!", 
+                threat->file_count);
+    } else {
+        java_error_code = 0xBADC0DE; // Bad code (Java is bad code)
+        snprintf(panic_message, sizeof(panic_message), 
+                "BASIC JAVA VIOLATION: %s detected! Even basic Java is unacceptable!", 
+                threat->violation_type);
+    }
+    
+    printf("\n⚠️  TRIGGERING KERNEL PANIC ⚠️\n");
+    printf("Passing control to Zora Kernel panic handler...\n\n");
+    
+    // Trigger the ACTUAL kernel panic - this will halt the system properly
+    kernel_panic(java_error_code, panic_message);
+    
+    // This line should never be reached due to kernel_panic halting the system
+    exit(java_error_code);
 }
 
 void java_display_bsod(JavaThreatAssessment* threat) {

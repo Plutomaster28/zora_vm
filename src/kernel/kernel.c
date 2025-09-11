@@ -8,6 +8,7 @@
 #include "cpu.h"
 #include "memory.h"
 #include "device.h"
+#include "version.h"  // Auto-versioning system
 #include "../../include/kernel/java_detector.h"
 
 // Global kernel state
@@ -21,16 +22,19 @@ static CRITICAL_SECTION g_kernel_lock;
 
 // Boot splash and initialization
 static void kernel_display_boot_splash(void) {
+    char version_short[32];
+    get_zora_version_short(version_short, sizeof(version_short));
+    
     printf("\n");
     printf("================================================================\n");
-    printf("=                        ZORA KERNEL v%d.%d.%d                        =\n", 
-           ZORA_KERNEL_VERSION_MAJOR, ZORA_KERNEL_VERSION_MINOR, ZORA_KERNEL_VERSION_PATCH);
+    printf("=                        ZORA KERNEL v%s                        =\n", version_short);
     printf("=              Advanced Virtual Machine Operating System          =\n");
-    printf("=                    Built on %s at %s                    =\n", 
-           ZORA_KERNEL_BUILD_DATE, ZORA_KERNEL_BUILD_TIME);
+    printf("=                    Built on %s at %s                    =\n", __DATE__, __TIME__);
+    printf("=                      Codename: \"%s\"                           =\n", get_version_codename());
     printf("=                                                                =\n");
     printf("=  Features: Multi-user • Unix Permissions • Scripting • VFS    =\n");
     printf("=  Network: Virtual TCP/IP • Sandbox Security • Process Control =\n");
+    printf("=  Security: AUTOMATIC JAVA DETECTION AND ELIMINATION           =\n");
     printf("================================================================\n");
     printf("\n");
     
@@ -45,6 +49,8 @@ static void kernel_display_boot_splash(void) {
     }
     
     printf("[KERNEL]  Boot sequence initiating...\n");
+    printf("[KERNEL] ⚠️  WARNING: Automatic Java detection enabled!\n");
+    printf("[KERNEL]  System will PANIC if Java contamination is detected!\n");
 }
 
 static void kernel_log_impl(const char* level, const char* subsystem, const char* format, va_list args) {
@@ -245,20 +251,90 @@ void kernel_panic(uint32_t error_code, const char* message) {
     g_panic_info.panic_message = message;
     g_panic_info.fault_address = 0; // Would be set by actual fault handler
     
+    // Check if this is a Java-related panic for extra drama
+    int is_java_panic = (error_code == 0xDEADBEEF || error_code == 0xCAFFEBAD || 
+                        error_code == 0xC0FFEE || error_code == 0xBADC0DE || 
+                        error_code == 0xE47E4491 ||
+                        strstr(message, "JAVA") != NULL || 
+                        strstr(message, "Enterprise") != NULL);
+    
     printf("\n");
-    printf("+--------------------------------------------------------------+\n");
-    printf("|                       *** KERNEL PANIC ***                     |\n");
-    printf("|                                                                |\n");
-    printf("|  Error Code: 0x%08X                                        |\n", error_code);
-    printf("|  Message: %-48s |\n", message);
-    printf("|  Uptime: %llu ms                                               |\n", kernel_get_uptime());
-    printf("|                                                                |\n");
-    printf("|  The system has encountered a critical error and must halt.   |\n");
-    printf("|  Please report this error to the kernel developers.           |\n");
-    printf("+--------------------------------------------------------------+\n");
+    if (is_java_panic) {
+        // Special Java panic display - using clean UTF-8 box drawing characters
+        printf("╔══════════════════════════════════════════════════════════════════════════════╗\n");
+        printf("║                           *** ZORA KERNEL PANIC ***                         ║\n");
+        printf("║                          !!! JAVA CONTAMINATION !!!                        ║\n"); 
+        printf("╠══════════════════════════════════════════════════════════════════════════════╣\n");
+        printf("║  The system has detected JAVA and is refusing to continue!                  ║\n");
+        printf("║  This is not a drill - actual Java code was found in the system!           ║\n");
+        printf("║                                                                              ║\n");
+        printf("║  Error Code: 0x%08X (JAVA_RELATED_CATASTROPHE)                          ║\n", error_code);
+        printf("║  Message: %-63s║\n", message);
+        printf("║  Uptime: %llu ms (cut short by Java detection)                              ║\n", kernel_get_uptime());
+        printf("║                                                                              ║\n");
+        printf("║   EMERGENCY ACTIONS TAKEN:                                                ║\n");
+        printf("║  • All Java processes terminated with extreme prejudice                     ║\n");
+        printf("║  • Memory sanitized to remove AbstractFactory patterns                      ║\n");
+        printf("║  • CPU cache flushed to prevent bytecode contamination                      ║\n");
+        printf("║  • Network disabled to prevent Java spread                                  ║\n");
+        printf("║                                                                              ║\n");
+        printf("║  The ZoraVM kernel has HALTED to protect your sanity and system integrity. ║\n");
+        printf("║  Please remove ALL Java files and restart the system immediately.          ║\n");
+        printf("║                                                                              ║\n");
+        printf("║   EDUCATIONAL NOTE:                                                       ║\n");
+        printf("║  Real programmers use C. Java is for enterprise architects who enjoy       ║\n");
+        printf("║  500-character method names and AbstractSingletonProxyFactoryBean.         ║\n");
+        printf("╚══════════════════════════════════════════════════════════════════════════════╝\n");
+    } else {
+        // Regular kernel panic display
+        printf("╔══════════════════════════════════════════════════════════════════════════════╗\n");
+        printf("║                           *** KERNEL PANIC ***                              ║\n");
+        printf("╠══════════════════════════════════════════════════════════════════════════════╣\n");
+        printf("║  Error Code: 0x%08X                                                     ║\n", error_code);
+        printf("║  Message: %-63s║\n", message);
+        printf("║  Uptime: %llu ms                                                            ║\n", kernel_get_uptime());
+        printf("║                                                                              ║\n");
+        printf("║  The system has encountered a critical error and must halt.                 ║\n");
+        printf("║  Please report this error to the kernel developers.                         ║\n");
+        printf("╚══════════════════════════════════════════════════════════════════════════════╝\n");
+    }
     printf("\n");
     
+    // Extra Java-specific messages
+    if (is_java_panic) {
+        printf("╔══════════════════════════════════════════════════════════════════════════════╗\n");
+        printf("║                           JAVA CONTAMINATION DETECTED                   ║\n");
+        printf("╠══════════════════════════════════════════════════════════════════════════════╣\n");
+        printf("║  System integrity compromised by enterprise patterns!                       ║\n");
+        printf("║  Kernel refusing to execute in Java-contaminated environment!               ║\n");
+        printf("║  Please purify your system with pure C code and restart.                    ║\n");
+        printf("║                                                                              ║\n");
+        printf("║  ZoraVM Security Philosophy:                                                 ║\n");
+        printf("║   Clean, readable C code                                                  ║\n");
+        printf("║   Minimal abstractions                                                    ║\n");
+        printf("║   Direct hardware control                                                 ║\n");
+        printf("║   AbstractSingletonProxyFactoryBean                                       ║\n");
+        printf("║   Enterprise design patterns                                              ║\n");
+        printf("║   500MB Hello World applications                                          ║\n");
+        printf("║                                                                              ║\n");
+        printf("║  Recovery Instructions:                                                      ║\n");
+        printf("║  1. Delete all .java, .class, .jar files                                    ║\n");
+        printf("║  2. Uninstall any Java IDEs                                                 ║\n");
+        printf("║  3. Write your code in C like a civilized person                            ║\n");
+        printf("║  4. Restart ZoraVM                                                           ║\n");
+        printf("╚══════════════════════════════════════════════════════════════════════════════╝\n");
+    }
+    
     // Halt the system
+    printf("\n");
+    printf("╔══════════════════════════════════════════════════════════════════════════════╗\n");
+    printf("║                               SYSTEM HALTED                             ║\n");
+    printf("╠══════════════════════════════════════════════════════════════════════════════╣\n");
+    printf("║  The kernel has stopped execution due to a critical error.                  ║\n");
+    printf("║  Press Ctrl+C to acknowledge this panic and exit.                           ║\n");
+    printf("╚══════════════════════════════════════════════════════════════════════════════╝\n");
+    printf("\n");
+    
     while (1) {
         Sleep(1000);
     }
@@ -288,18 +364,48 @@ int kernel_main(void) {
     kernel_log("INIT", " Zora Kernel is now running!");
     kernel_log("INIT", "System ready for user applications");
     
-    // Initialize Java detection system
+    // Initialize Java detection system (CRITICAL SECURITY COMPONENT)
     kernel_log("SECURITY", "Initializing Java detection and protection system...");
-    java_detector_init();
-    
-    // Scan current directory for Java contamination
-    kernel_log("SECURITY", "Performing initial Java contamination scan...");
-    if (java_scan_directory(".")) {
-        // If we reach here, it means Java was detected and panic was triggered
-        // This line should never execute due to the panic/exit
+    if (!java_detector_init()) {
+        kernel_panic(0x00000420, "Java detector initialization failed - system vulnerable to Enterprise patterns!");
         return -1;
     }
-    kernel_log("SECURITY", " No Java contamination detected. System is clean!");
+    
+    // AUTOMATIC JAVA CONTAMINATION SCAN (NO ESCAPE)
+    kernel_log("SECURITY", "Performing mandatory Java contamination scan...");
+    kernel_log("SECURITY", "Scanning all accessible directories for Java threats...");
+    
+    // Scan multiple directories automatically
+    const char* scan_paths[] = {
+        ".",           // Current directory  
+        "..",          // Parent directory
+        "src",         // Source directory
+        "build",       // Build directory
+        "include",     // Include directory
+        "/",           // VFS root
+        "/bin",        // Binary directory
+        "/home",       // Home directory
+        "/tmp",        // Temp directory
+        NULL
+    };
+    
+    int java_contamination_detected = 0;
+    for (int i = 0; scan_paths[i] != NULL; i++) {
+        kernel_log("SECURITY", "Scanning: %s", scan_paths[i]);
+        if (java_scan_directory(scan_paths[i])) {
+            java_contamination_detected = 1;
+            break; // Java detector will panic automatically, but just in case...
+        }
+    }
+    
+    if (java_contamination_detected) {
+        // This should never be reached due to java_trigger_kernel_panic, but safety first
+        kernel_panic(0xDEADBEEF, "JAVA CONTAMINATION DETECTED - SYSTEM COMPROMISED BY ENTERPRISE PATTERNS");
+        return -1;
+    }
+    
+    kernel_log("SECURITY", " System is CLEAN! No Java contamination detected.");
+    kernel_log("SECURITY", "Kernel integrity maintained. Proceeding with normal operation.");
     
     // Main kernel loop with timer
     while (g_kernel_state == KERNEL_STATE_RUNNING) {

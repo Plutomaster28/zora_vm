@@ -64,6 +64,14 @@ packages=(
     "mingw-w64-ucrt-x86_64-make" 
     "mingw-w64-ucrt-x86_64-ninja"
     "mingw-w64-ucrt-x86_64-lua"
+    "mingw-w64-ucrt-x86_64-zlib"
+    "mingw-w64-ucrt-x86_64-gcc-fortran"
+    "mingw-w64-ucrt-x86_64-binutils"
+    "mingw-w64-ucrt-x86_64-gdb"
+    "mingw-w64-ucrt-x86_64-nasm"
+    "mingw-w64-ucrt-x86_64-pkg-config"
+    "mingw-w64-ucrt-x86_64-python3"
+    "mingw-w64-ucrt-x86_64-perl"
 )
 
 for package in "${packages[@]}"; do

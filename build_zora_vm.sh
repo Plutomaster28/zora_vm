@@ -123,10 +123,18 @@ install_dependencies() {
     
     # Required libraries
     install_package "mingw-w64-ucrt-x86_64-lua" "Lua Runtime"
+    install_package "mingw-w64-ucrt-x86_64-zlib" "Zlib Compression Library"
+    
+    # GNU toolchain components
+    install_package "mingw-w64-ucrt-x86_64-gcc-fortran" "GNU Fortran Compiler"
+    install_package "mingw-w64-ucrt-x86_64-binutils" "GNU Binutils"
+    install_package "mingw-w64-ucrt-x86_64-nasm" "NASM x86 Assembler"
     
     # Optional but recommended tools
     install_package "mingw-w64-ucrt-x86_64-gdb" "GDB Debugger"
     install_package "mingw-w64-ucrt-x86_64-pkg-config" "pkg-config"
+    install_package "mingw-w64-ucrt-x86_64-python3" "Python 3 (for scripting)"
+    install_package "mingw-w64-ucrt-x86_64-perl" "Perl (for scripting)"
     
     print_success "All dependencies installed successfully!"
 }
