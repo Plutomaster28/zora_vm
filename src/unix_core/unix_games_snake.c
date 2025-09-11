@@ -109,7 +109,7 @@ void snake_draw_board(SnakeGame* game) {
     
     // Draw title and score
     gotoxy(0, 0);
-    printf("🐍 ZoraVM Snake Game - Score: %d | High Score: %d", 
+    printf(" ZoraVM Snake Game - Score: %d | High Score: %d", 
            game->snake.score, game->high_score);
     
     gotoxy(0, 1);
@@ -257,7 +257,7 @@ int snake_game_run(void) {
     
     hide_cursor();
     
-    printf("🐍 ZoraVM Snake Game\n");
+    printf(" ZoraVM Snake Game\n");
     printf("====================\n\n");
     printf("Get ready! Game starts in 3 seconds...\n");
     printf("Use WASD to control the snake!\n");
@@ -309,13 +309,13 @@ int snake_game_run(void) {
     
     // Game over screen
     clear_screen();
-    printf("🐍 Game Over!\n");
+    printf(" Game Over!\n");
     printf("=============\n\n");
     
     if (current_game.snake.alive) {
         printf("Thanks for playing!\n");
     } else {
-        printf("💀 You crashed!\n");
+        printf(" You crashed!\n");
     }
     
     printf("Final Score: %d\n", current_game.snake.score);

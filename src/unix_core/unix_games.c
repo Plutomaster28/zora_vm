@@ -157,19 +157,19 @@ int unix_make_banner(const char* text) {
 }
 
 int unix_play_snake(void) {
-    printf("🐍 Starting ZoraVM Snake Game...\n");
+    printf(" Starting ZoraVM Snake Game...\n");
     printf("===============================\n");
     return snake_game_run();
 }
 
 int unix_play_hangman(void) {
-    printf("🎯 Starting ZoraVM Hangman Game...\n");
+    printf(" Starting ZoraVM Hangman Game...\n");
     printf("==================================\n");
     return hangman_game_run();
 }
 
 int unix_arithmetic_quiz(void) {
-    printf("🧮 ZoraVM Interactive Arithmetic Quiz\n");
+    printf(" ZoraVM Interactive Arithmetic Quiz\n");
     printf("====================================\n");
     printf("\n");
     
@@ -237,29 +237,29 @@ int unix_arithmetic_quiz(void) {
             answer = atoi(input);
             
             if (answer == correct) {
-                printf("✅ Correct!\n");
+                printf(" Correct!\n");
                 score++;
             } else {
-                printf("❌ Wrong! The answer is %d\n", correct);
+                printf(" Wrong! The answer is %d\n", correct);
             }
         } else {
-            printf("❌ Invalid input! The answer is %d\n", correct);
+            printf(" Invalid input! The answer is %d\n", correct);
         }
         printf("\n");
     }
     
-    printf("🎯 Quiz Complete!\n");
+    printf(" Quiz Complete!\n");
     printf("================\n");
     printf("Final Score: %d/%d (%.1f%%)\n", score, questions, (float)score/questions * 100);
     
     if (score == questions) {
-        printf("🏆 Perfect score! You're a math wizard!\n");
+        printf(" Perfect score! You're a math wizard!\n");
     } else if (score >= questions * 0.8) {
-        printf("🌟 Excellent work! Great math skills!\n");
+        printf(" Excellent work! Great math skills!\n");
     } else if (score >= questions * 0.6) {
-        printf("👍 Good job! Keep practicing!\n");
+        printf(" Good job! Keep practicing!\n");
     } else {
-        printf("📚 Keep studying! Practice makes perfect!\n");
+        printf(" Keep studying! Practice makes perfect!\n");
     }
     
     return 0;
@@ -351,30 +351,30 @@ int unix_generate_primes(int limit) {
 }
 
 void unix_list_games(void) {
-    printf("🎮 ZoraVM Research UNIX Games Collection\n");
+    printf(" ZoraVM Research UNIX Games Collection\n");
     printf("========================================\n");
     printf("\n");
-    printf("🕹️  INTERACTIVE GAMES:\n");
-    printf("  snake       - 🐍 Real Snake game (WASD controls)\n");
-    printf("  hangman     - 🎯 Interactive word guessing game\n");
-    printf("  tetris      - 🧩 Block puzzle game (coming soon)\n");
-    printf("  arithmetic  - 🧮 Interactive math quiz\n");
+    printf("  INTERACTIVE GAMES:\n");
+    printf("  snake       -  Real Snake game (WASD controls)\n");
+    printf("  hangman     -  Interactive word guessing game\n");
+    printf("  tetris      -  Block puzzle game (coming soon)\n");
+    printf("  arithmetic  -  Interactive math quiz\n");
     printf("\n");
-    printf("🎨 UTILITIES & DEMOS:\n");
-    printf("  fortune     - 🔮 Display random fortune\n");
-    printf("  banner      - 🎨 Create ASCII art banners\n");
-    printf("  factor      - 🔢 Prime factorization tool\n");
-    printf("  primes      - 📊 Generate prime numbers\n");
+    printf(" UTILITIES & DEMOS:\n");
+    printf("  fortune     -  Display random fortune\n");
+    printf("  banner      -  Create ASCII art banners\n");
+    printf("  factor      -  Prime factorization tool\n");
+    printf("  primes      -  Generate prime numbers\n");
     printf("\n");
-    printf("📚 CLASSIC UNIX GAMES:\n");
-    printf("  rogue       - ⚔️  Classic dungeon adventure (coming soon)\n");
-    printf("  adventure   - 📖 Text-based adventure game (coming soon)\n");
+    printf(" CLASSIC UNIX GAMES:\n");
+    printf("  rogue       -   Classic dungeon adventure (coming soon)\n");
+    printf("  adventure   -  Text-based adventure game (coming soon)\n");
     printf("\n");
     printf("Usage: games <game_name> [options]\n");
     printf("       games --list     (show this list)\n");
     printf("       games --help <game_name>\n");
     printf("\n");
-    printf("💡 Tip: Try 'snake' or 'hangman' for fully interactive games!\n");
+    printf(" Tip: Try 'snake' or 'hangman' for fully interactive games!\n");
 }
 
 int unix_launch_game(const char* game_name) {

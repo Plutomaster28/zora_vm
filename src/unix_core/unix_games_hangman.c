@@ -175,7 +175,7 @@ int hangman_game_run(void) {
     srand(time(NULL));
     hangman_game_init(&current_game);
     
-    printf("🎯 ZoraVM Hangman Game\n");
+    printf(" ZoraVM Hangman Game\n");
     printf("======================\n\n");
     printf("Welcome to Hangman! Guess the word letter by letter.\n");
     printf("You have %d wrong guesses before the game ends.\n\n", MAX_GUESSES);
@@ -188,7 +188,7 @@ int hangman_game_run(void) {
         system("clear");
 #endif
         
-        printf("🎯 ZoraVM Hangman Game\n");
+        printf(" ZoraVM Hangman Game\n");
         printf("======================\n\n");
         
         hangman_draw_gallows(current_game.wrong_count);
@@ -252,17 +252,17 @@ int hangman_game_run(void) {
     system("clear");
 #endif
     
-    printf("🎯 ZoraVM Hangman - Game Over!\n");
+    printf(" ZoraVM Hangman - Game Over!\n");
     printf("===============================\n\n");
     
     hangman_draw_gallows(current_game.wrong_count);
     
     if (current_game.solved) {
-        printf("🎉 Congratulations! You won!\n");
+        printf(" Congratulations! You won!\n");
         printf("You guessed the word: %s\n", current_game.word);
         printf("Wrong guesses: %d/%d\n", current_game.wrong_count, MAX_GUESSES);
     } else {
-        printf("💀 You lost! The man was hanged.\n");
+        printf(" You lost! The man was hanged.\n");
         printf("The word was: %s\n", current_game.word);
         printf("Better luck next time!\n");
     }
