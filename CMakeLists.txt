@@ -154,6 +154,7 @@ set(SOURCES
     src/kernel/kernel.c
     src/kernel/system_monitor.c
     src/kernel/init.c
+    src/kernel/java_detector.c
     
     # Binary execution
     src/binary/binary_executor.c

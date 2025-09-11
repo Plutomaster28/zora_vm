@@ -8,6 +8,7 @@
 #include "cpu.h"
 #include "memory.h"
 #include "device.h"
+#include "../../include/kernel/java_detector.h"
 
 // Global kernel state
 static KernelState g_kernel_state = KERNEL_STATE_INITIALIZING;
@@ -284,8 +285,21 @@ int kernel_main(void) {
     }
     
     kernel_set_state(KERNEL_STATE_RUNNING);
-    kernel_log("INIT", "🚀 Zora Kernel is now running!");
+    kernel_log("INIT", " Zora Kernel is now running!");
     kernel_log("INIT", "System ready for user applications");
+    
+    // Initialize Java detection system
+    kernel_log("SECURITY", "Initializing Java detection and protection system...");
+    java_detector_init();
+    
+    // Scan current directory for Java contamination
+    kernel_log("SECURITY", "Performing initial Java contamination scan...");
+    if (java_scan_directory(".")) {
+        // If we reach here, it means Java was detected and panic was triggered
+        // This line should never execute due to the panic/exit
+        return -1;
+    }
+    kernel_log("SECURITY", " No Java contamination detected. System is clean!");
     
     // Main kernel loop with timer
     while (g_kernel_state == KERNEL_STATE_RUNNING) {

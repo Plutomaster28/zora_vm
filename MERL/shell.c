@@ -28,6 +28,7 @@
 #include "binary/binary_executor.h"
 #include "vm.h"  // For crash guard control
 #include "terminal/terminal_style.h"  // Add terminal styling support
+#include "kernel/java_detector.h"  // Add Java detection system
 #include "kernel/system_monitor.h"  // System monitoring capabilities
 #include "terminal/terminal_detector.h"  // Terminal detection and compatibility
 #include "version.h"  // Auto-versioning system
@@ -3640,6 +3641,62 @@ void primes_command(int argc, char **argv) {
     unix_generate_primes(limit);
 }
 
+// ===== JAVA DETECTION AND SECURITY COMMANDS =====
+
+void java_scan_command(int argc, char **argv) {
+    char* path = argc > 1 ? argv[1] : ".";
+    
+    printf("🔍 Initiating Java contamination scan on: %s\n\n", path);
+    
+    // Initialize detector if not already done
+    java_detector_init();
+    
+    // Perform the scan
+    if (java_scan_directory(path)) {
+        // If we reach here, it means panic was triggered and we shouldn't
+        printf("💀 JAVA DETECTED - SYSTEM PANIC TRIGGERED!\n");
+    } else {
+        printf("✅ Scan complete! No Java contamination detected.\n");
+        printf("🛡️  Your system is safe from enterprise architecture patterns.\n");
+    }
+}
+
+void java_quarantine_command(int argc, char **argv) {
+    printf("🚨 INITIATING JAVA QUARANTINE PROTOCOLS 🚨\n\n");
+    printf("This command would:\n");
+    printf("1. 🔍 Scan entire filesystem for Java files\n");
+    printf("2. 🔒 Quarantine all .java, .class, .jar files\n");
+    printf("3. 🧹 Purge AbstractFactory patterns from memory\n");
+    printf("4. 🛡️ Install C-only protection filters\n");
+    printf("5. 🔥 Burn any Enterprise Edition documentation\n\n");
+    printf("⚠️  WARNING: This is a demonstration command.\n");
+    printf("In a real scenario, this would trigger immediate kernel panic.\n");
+}
+
+void java_status_command(int argc, char **argv) {
+    printf("🛡️  JAVA DETECTION SYSTEM STATUS\n");
+    printf("================================\n\n");
+    printf("🟢 Status: ACTIVE AND VIGILANT\n");
+    printf("🔍 Scan Mode: AGGRESSIVE\n");
+    printf("⚡ Response: IMMEDIATE KERNEL PANIC\n");
+    printf("🎯 Threat Level: MAXIMUM PARANOIA\n\n");
+    
+    printf("📋 Protected Against:\n");
+    printf("  • .java source files\n");
+    printf("  • .class bytecode files\n");
+    printf("  • .jar archive files\n");
+    printf("  • .war enterprise horrors\n");
+    printf("  • Spring Framework patterns\n");
+    printf("  • Hibernate mappings\n");
+    printf("  • AbstractSingletonProxyFactoryBean nightmares\n");
+    printf("  • Maven/Gradle build files\n");
+    printf("  • Anything containing 'public static void main'\n\n");
+    
+    printf("💡 Remember: Friends don't let friends use Java!\n");
+}
+
+// ===== END JAVA DETECTION COMMANDS =====
+
 // ===== END RESEARCH UNIX COMMANDS =====
 
 // Command table
@@ -3818,6 +3875,11 @@ Command command_table[] = {
     {"compile-asm", compile_asm_command, "Real x86 assembly with embedded NASM"},
     {"compile-fortran", compile_fortran_command, "Real Fortran compilation with GFortran"},
     {"create-sample", create_sample_command, "Create sample source files for testing"},
+
+    // Java Detection and Security Commands
+    {"java-scan", java_scan_command, "💀 Scan for Java contamination (triggers kernel panic if found)"},
+    {"java-quarantine", java_quarantine_command, "🚨 Quarantine Java files (demonstration command)"},
+    {"java-status", java_status_command, "🛡️ Show Java detection system status"},
 
     {NULL, NULL, NULL}
 };
