@@ -33,9 +33,9 @@ int java_detector_init(void) {
     memset(&current_threat, 0, sizeof(JavaThreatAssessment));
     java_detector_active = 1;
     
-    printf("\n🔍 Java Detection System Initialized\n");
-    printf("⚠️  WARNING: Java presence will trigger immediate kernel panic!\n");
-    printf("🛡️  System protected against enterprise architecture patterns\n\n");
+    printf("\n Java Detection System Initialized\n");
+    printf("  WARNING: Java presence will trigger immediate kernel panic!\n");
+    printf("  System protected against enterprise architecture patterns\n\n");
     
     return 1;
 }
@@ -50,7 +50,7 @@ int java_scan_directory(const char* path) {
     dir = opendir(path);
     if (!dir) return 0;
     
-    printf("🔍 Scanning directory: %s\n", path);
+    printf(" Scanning directory: %s\n", path);
     
     while ((entry = readdir(dir)) != NULL) {
         if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0) {
@@ -114,7 +114,7 @@ int java_check_file(const char* filename) {
     // Check file extension
     for (int i = 0; java_extensions[i] != NULL; i++) {
         if (strstr(filename, java_extensions[i]) != NULL) {
-            printf("💀 JAVA FILE DETECTED: %s\n", filename);
+            printf(" JAVA FILE DETECTED: %s\n", filename);
             return 1;
         }
     }
@@ -129,7 +129,7 @@ int java_check_file(const char* filename) {
     if (strstr(lower_name, "java") || strstr(lower_name, "spring") || 
         strstr(lower_name, "hibernate") || strstr(lower_name, "maven") ||
         strstr(lower_name, "gradle") || strstr(lower_name, "tomcat")) {
-        printf("💀 SUSPICIOUS JAVA-RELATED FILE: %s\n", filename);
+        printf(" SUSPICIOUS JAVA-RELATED FILE: %s\n", filename);
         return 1;
     }
     
@@ -155,7 +155,7 @@ int java_check_file_content(const char* filepath) {
         // Check for Java keywords
         for (int i = 0; java_keywords[i] != NULL; i++) {
             if (strstr(lower_buffer, java_keywords[i]) != NULL) {
-                printf("💀 STEALTH JAVA CODE DETECTED in %s: %s\n", filepath, java_keywords[i]);
+                printf(" STEALTH JAVA CODE DETECTED in %s: %s\n", filepath, java_keywords[i]);
                 java_found = 1;
                 break;
             }
@@ -164,7 +164,7 @@ int java_check_file_content(const char* filepath) {
         // Check for enterprise horror patterns
         for (int i = 0; java_enterprise_horrors[i] != NULL; i++) {
             if (strstr(buffer, java_enterprise_horrors[i]) != NULL) {
-                printf("🔥 ENTERPRISE JAVA HORROR DETECTED: %s\n", java_enterprise_horrors[i]);
+                printf(" ENTERPRISE JAVA HORROR DETECTED: %s\n", java_enterprise_horrors[i]);
                 strcpy(current_threat.violation_type, "ENTERPRISE_ARCHITECTURE_NIGHTMARE");
                 current_threat.threat_level = 11; // Maximum threat
                 java_found = 1;
@@ -188,7 +188,7 @@ int java_check_file_content(const char* filepath) {
 }
 
 void java_trigger_kernel_panic(JavaThreatAssessment* threat) {
-    printf("\n🚨 CRITICAL SYSTEM ERROR 🚨\n");
+    printf("\n CRITICAL SYSTEM ERROR \n");
     printf("JAVA DETECTED - INITIATING EMERGENCY PROTOCOLS\n\n");
     
     // Brief delay for dramatic effect
@@ -247,29 +247,29 @@ void java_display_bsod(JavaThreatAssessment* threat) {
     
     printf("\033[0m"); // Reset colors
     
-    printf("\n💀 SYSTEM HALTED 💀\n");
+    printf("\n SYSTEM HALTED \n");
     printf("Java contamination detected. ZoraVM refuses to continue.\n");
     printf("Please remove all Java files and restart the system.\n\n");
     
     // More dramatic messages based on threat level
     if (threat->threat_level >= 10) {
-        printf("🔥🔥🔥 MAXIMUM THREAT LEVEL DETECTED 🔥🔥🔥\n");
+        printf(" MAXIMUM THREAT LEVEL DETECTED \n");
         printf("Enterprise Java patterns found. System entering emergency quarantine.\n");
         printf("Memory being wiped to prevent AbstractFactory contamination.\n");
     } else if (threat->threat_level >= 8) {
-        printf("⚠️ HIGH THREAT: Java framework detected!\n");
+        printf(" HIGH THREAT: Java framework detected!\n");
         printf("Spring/Hibernate patterns may cause permanent brain damage.\n");
     } else if (threat->threat_level >= 6) {
-        printf("⚠️ MODERATE THREAT: Multiple Java files found.\n");
+        printf(" MODERATE THREAT: Multiple Java files found.\n");
         printf("Verbose stack traces may overwhelm terminal buffers.\n");
     } else {
-        printf("⚠️ LOW THREAT: Basic Java detected.\n");
+        printf(" LOW THREAT: Basic Java detected.\n");
         printf("Still unacceptable. C is the only way.\n");
     }
 }
 
 void java_emergency_shutdown(void) {
-    printf("\n🚨 INITIATING EMERGENCY SHUTDOWN SEQUENCE 🚨\n");
+    printf("\n INITIATING EMERGENCY SHUTDOWN SEQUENCE \n");
     printf("Flushing all buffers...\n");
     printf("Clearing Java bytecode from memory...\n");
     printf("Disabling JVM loader...\n");
@@ -279,14 +279,14 @@ void java_emergency_shutdown(void) {
     printf("System will now exit to protect against Java contamination.\n");
     printf("Please remove all Java files before restarting ZoraVM.\n\n");
     
-    printf("Remember: Friends don't let friends use Java. 😉\n\n");
+    printf("Remember: Friends don't let friends use Java. \n\n");
     
     // Actually exit the program
     exit(0xDEADBEEF);
 }
 
 void java_quarantine_system(void) {
-    printf("🛡️ Quarantine protocols activated.\n");
+    printf(" Quarantine protocols activated.\n");
     printf("All Java-related processes terminated.\n");
     printf("System entering C-only safe mode.\n");
 }
