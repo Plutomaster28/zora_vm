@@ -139,7 +139,7 @@ endif()
 include_directories(include include/platform include/binary include/merl include/vfs 
                    include/syscall include/virtualization include/network include/lua 
                    include/python include/perl include/meisei include/sandbox
-                   include/terminal
+                   include/terminal include/unix_core
                    MERL ${LUA_INCLUDE_DIR})
 
 # Source files - simple and direct
@@ -172,12 +172,21 @@ set(SOURCES
     src/virtualization/virtualization.c
     src/network/network.c
     src/lua/lua_vm.c
-    src/python/python_vm.c
-    src/perl/perl_vm.c
     src/meisei/virtual_silicon.c
     src/meisei/script_accelerator.c
     src/terminal/terminal_style.c
     src/terminal/terminal_detector.c
+    
+    # Research UNIX Core Subsystem
+    src/unix_core/unix_core.c
+    src/unix_core/unix_directories.c
+    src/unix_core/unix_compiler.c
+    src/unix_core/unix_embedded_compiler.c
+    src/unix_core/unix_ipc.c
+    src/unix_core/unix_textproc.c
+    src/unix_core/unix_games.c
+    src/unix_core/unix_games_snake.c
+    src/unix_core/unix_games_hangman.c
     
     # MERL shell
     MERL/color-and-test.c
@@ -192,6 +201,18 @@ set(SOURCES
     # Windows resources (icon and version info)
     resources.rc
 )
+
+# Conditionally add Python support
+if(ENABLE_PYTHON_SCRIPTING)
+    list(APPEND SOURCES src/python/python_vm.c)
+    message(STATUS "Python VM source added to build")
+endif()
+
+# Conditionally add Perl support  
+if(ENABLE_PERL_SCRIPTING)
+    list(APPEND SOURCES src/perl/perl_vm.c)
+    message(STATUS "Perl VM source added to build")
+endif()
 
 # Create executable
 add_executable(zora_vm ${SOURCES})

@@ -31,6 +31,8 @@
 #include "kernel/system_monitor.h"  // System monitoring capabilities
 #include "terminal/terminal_detector.h"  // Terminal detection and compatibility
 #include "version.h"  // Auto-versioning system
+#include "unix_core.h"  // Research UNIX Tenth Edition support
+#include "unix_core/unix_embedded_compiler.h"  // Real embedded compilers
 // #include "shell_script.h"  // Enhanced shell scripting - temporarily disabled
 
 // Windows-specific includes
@@ -121,6 +123,34 @@ void utf8_detailed_test_command(int argc, char **argv);
 void utf8_monitor_command(int argc, char **argv);
 void utf8_fix_command(int argc, char **argv);
 void utf8_test_command(int argc, char **argv);
+
+// Research UNIX Tenth Edition command prototypes
+void cc_command(int argc, char **argv);
+void f77_command(int argc, char **argv);
+void as_command(int argc, char **argv);
+void ld_command(int argc, char **argv);
+void yacc_command(int argc, char **argv);
+void lex_command(int argc, char **argv);
+void sed_command(int argc, char **argv);
+void awk_unix_command(int argc, char **argv);
+void nroff_command(int argc, char **argv);
+void ipcs_command(int argc, char **argv);
+void msgctl_command(int argc, char **argv);
+void fortune_command(int argc, char **argv);
+void games_command(int argc, char **argv);
+void banner_command(int argc, char **argv);
+void factor_command(int argc, char **argv);
+void primes_command(int argc, char **argv);
+void uname_command(int argc, char **argv);
+
+// Real compilation commands
+void compile_c_command(int argc, char **argv);
+void compile_asm_command(int argc, char **argv);
+void compile_fortran_command(int argc, char **argv);
+void create_sample_command(int argc, char **argv);
+
+// Helper function prototypes
+void resolve_script_path(const char* name, char* out, size_t out_sz);
 
 // Enhanced command parsing and execution
 void parse_and_execute_command_line(char *command_line);
@@ -808,10 +838,217 @@ void uname_command(int argc, char **argv) {
     
     if (argc > 1 && strcmp(argv[1], "-a") == 0) {
         printf("ZoraVM %s \"%s\" zora-vm x86_64 x86_64 x86_64 Windows\n", version_short, get_version_codename());
+        printf("\nResearch UNIX Environment:\n");
+        unix_show_system_info();
     } else {
         printf("ZoraVM\n");
     }
 }
+
+// ===== REAL COMPILATION COMMANDS =====
+
+void compile_c_command(int argc, char **argv) {
+    printf("ZoraVM Real C Compilation Demo\n");
+    printf("==============================\n");
+    
+    if (argc < 2) {
+        printf("Usage: compile-c <source.c> [output]\n");
+        printf("Available samples:\n");
+        printf("  compile-c hello.c\n");
+        printf("  compile-c calculator.c\n");
+        printf("  create-sample hello.c  (to create sample)\n");
+        return;
+    }
+    
+    CompilationRequest request = {0};
+    strncpy(request.source_file, argv[1], sizeof(request.source_file) - 1);
+    
+    if (argc > 2) {
+        strncpy(request.output_file, argv[2], sizeof(request.output_file) - 1);
+    } else {
+        strcpy(request.output_file, "program.exe");
+    }
+    
+    request.verbose = 1;
+    
+    printf("Compiling %s with embedded GCC...\n", request.source_file);
+    CompilationResult* result = compile_c_real(&request);
+    
+    if (result->success) {
+        printf("\n SUCCESS! Real C compilation completed!\n");
+        printf("You can now run: %s\n", result->output_file);
+    } else {
+        printf("\n Compilation failed: %s\n", result->error_message);
+    }
+}
+
+void compile_asm_command(int argc, char **argv) {
+    printf("ZoraVM Real x86 Assembly Compilation Demo\n");
+    printf("=========================================\n");
+    
+    if (argc < 2) {
+        printf("Usage: compile-asm <source.asm> [output]\n");
+        printf("Available samples:\n");
+        printf("  compile-asm hello.asm\n");
+        printf("  create-sample hello.asm  (to create sample)\n");
+        return;
+    }
+    
+    CompilationRequest request = {0};
+    strncpy(request.source_file, argv[1], sizeof(request.source_file) - 1);
+    
+    if (argc > 2) {
+        strncpy(request.output_file, argv[2], sizeof(request.output_file) - 1);
+    } else {
+        strcpy(request.output_file, "program.o");
+    }
+    
+    request.verbose = 1;
+    
+    printf("Assembling %s with embedded NASM...\n", request.source_file);
+    CompilationResult* result = compile_asm_real(&request);
+    
+    if (result->success) {
+        printf("\n SUCCESS! Real x86 assembly completed!\n");
+        printf("Object file: %s\n", result->output_file);
+    } else {
+        printf("\n Assembly failed: %s\n", result->error_message);
+    }
+}
+
+void compile_fortran_command(int argc, char **argv) {
+    printf("ZoraVM Real Fortran Compilation Demo\n");
+    printf("====================================\n");
+    
+    if (argc < 2) {
+        printf("Usage: compile-fortran <source.f> [output]\n");
+        printf("Available samples:\n");
+        printf("  compile-fortran hello.f\n");
+        printf("  create-sample hello.f  (to create sample)\n");
+        return;
+    }
+    
+    CompilationRequest request = {0};
+    strncpy(request.source_file, argv[1], sizeof(request.source_file) - 1);
+    
+    if (argc > 2) {
+        strncpy(request.output_file, argv[2], sizeof(request.output_file) - 1);
+    } else {
+        strcpy(request.output_file, "program.exe");
+    }
+    
+    request.verbose = 1;
+    
+    printf("Compiling %s with embedded Fortran compiler...\n", request.source_file);
+    CompilationResult* result = compile_fortran_real(&request);
+    
+    if (result->success) {
+        printf("\n SUCCESS! Real Fortran compilation completed!\n");
+        printf("You can now run: %s\n", result->output_file);
+    } else {
+        printf("\n Compilation failed: %s\n", result->error_message);
+    }
+}
+
+void create_sample_command(int argc, char **argv) {
+    if (argc < 2) {
+        printf("Create Sample Source Files\n");
+        printf("==========================\n");
+        printf("Usage: create-sample <filename>\n");
+        printf("Examples:\n");
+        printf("  create-sample hello.c      - Create C hello world\n");
+        printf("  create-sample calculator.c - Create C calculator\n");
+        printf("  create-sample hello.asm    - Create assembly hello world\n");
+        printf("  create-sample hello.f      - Create Fortran hello world\n");
+        return;
+    }
+    
+    char* filename = argv[1];
+    char* extension = strrchr(filename, '.');
+    
+    if (!extension) {
+        printf("Error: No file extension specified\n");
+        return;
+    }
+    
+    printf("Creating sample file: %s\n", filename);
+    
+    if (strcmp(extension, ".c") == 0) {
+        if (strstr(filename, "calculator")) {
+            // Create calculator sample
+            char* calc_code = 
+                "#include <stdio.h>\n"
+                "int main() {\n"
+                "    int a = 10, b = 5;\n"
+                "    printf(\"ZoraVM C Calculator Demo\\n\");\n"
+                "    printf(\"%d + %d = %d\\n\", a, b, a + b);\n"
+                "    printf(\"%d - %d = %d\\n\", a, b, a - b);\n"
+                "    printf(\"%d * %d = %d\\n\", a, b, a * b);\n"
+                "    printf(\"%d / %d = %d\\n\", a, b, a / b);\n"
+                "    return 0;\n"
+                "}\n";
+            vfs_write_file(filename, calc_code, strlen(calc_code));
+        } else {
+            // Create hello world sample
+            char* hello_code = 
+                "#include <stdio.h>\n"
+                "int main() {\n"
+                "    printf(\"Hello from ZoraVM Real C Compiler!\\n\");\n"
+                "    printf(\"This was compiled with embedded GCC.\\n\");\n"
+                "    return 0;\n"
+                "}\n";
+            vfs_write_file(filename, hello_code, strlen(hello_code));
+        }
+    } else if (strcmp(extension, ".asm") == 0) {
+        char* asm_code = 
+            "; ZoraVM NASM Assembly Sample\n"
+            "section .data\n"
+            "    msg db 'Hello from ZoraVM NASM!', 0xA, 0\n"
+            "    msg_len equ $ - msg\n"
+            "\n"
+            "section .text\n"
+            "    global _start\n"
+            "\n"
+            "_start:\n"
+            "    ; Write system call\n"
+            "    mov rax, 1       ; sys_write\n"
+            "    mov rdi, 1       ; stdout\n"
+            "    mov rsi, msg     ; message\n"
+            "    mov rdx, msg_len ; length\n"
+            "    syscall\n"
+            "\n"
+            "    ; Exit system call\n"
+            "    mov rax, 60      ; sys_exit\n"
+            "    mov rdi, 0       ; status\n"
+            "    syscall\n";
+        vfs_write_file(filename, asm_code, strlen(asm_code));
+    } else if (strcmp(extension, ".f") == 0) {
+        char* fortran_code = 
+            "C     ZoraVM Fortran Sample\n"
+            "      PROGRAM HELLO\n"
+            "      WRITE(*,*) 'Hello from ZoraVM Fortran!'\n"
+            "      WRITE(*,*) 'Compiled with embedded compiler.'\n"
+            "      STOP\n"
+            "      END\n";
+        vfs_write_file(filename, fortran_code, strlen(fortran_code));
+    } else {
+        printf("Unsupported file extension: %s\n", extension);
+        return;
+    }
+    
+    printf("✓ Sample file created: %s\n", filename);
+    printf("Now compile it with:\n");
+    
+    if (strcmp(extension, ".c") == 0) {
+        printf("  compile-c %s\n", filename);
+    } else if (strcmp(extension, ".asm") == 0) {
+        printf("  compile-asm %s\n", filename);
+    } else if (strcmp(extension, ".f") == 0) {
+        printf("  compile-fortran %s\n", filename);
+    }
+}
+
+// ===== END REAL COMPILATION COMMANDS =====
 
 static char* command_history[100];
 static int history_count = 0;
@@ -3213,6 +3450,198 @@ void launch_wt_command(int argc, char **argv) {
 
 // ===== END SYSTEM MONITOR COMMANDS =====
 
+// ===== RESEARCH UNIX TENTH EDITION COMMANDS =====
+
+void cc_command(int argc, char **argv) {
+    if (argc < 2) {
+        printf("cc: C compiler for Research UNIX\n");
+        printf("Usage: cc [options] file.c\n");
+        printf("Options:\n");
+        printf("  -c      Compile only, don't link\n");
+        printf("  -o file Output to file\n");
+        printf("  -g      Generate debug information\n");
+        printf("  -O      Optimize code\n");
+        return;
+    }
+    
+    CompileOptions opts = {0};
+    strncpy(opts.input_file, argv[1], sizeof(opts.input_file) - 1);
+    strcpy(opts.output_file, "a.out");
+    opts.compile_only = 0;
+    opts.debug = 0;
+    opts.optimize = 0;
+    
+    // Parse options
+    for (int i = 1; i < argc; i++) {
+        if (strcmp(argv[i], "-c") == 0) {
+            opts.compile_only = 1;
+        } else if (strcmp(argv[i], "-o") == 0 && i + 1 < argc) {
+            strncpy(opts.output_file, argv[++i], sizeof(opts.output_file) - 1);
+        } else if (strcmp(argv[i], "-g") == 0) {
+            opts.debug = 1;
+        } else if (strcmp(argv[i], "-O") == 0) {
+            opts.optimize = 1;
+        }
+    }
+    
+    unix_compile_c(&opts);
+}
+
+void f77_command(int argc, char **argv) {
+    if (argc < 2) {
+        printf("f77: Fortran 77 compiler for Research UNIX\n");
+        printf("Usage: f77 [options] file.f\n");
+        return;
+    }
+    
+    CompileOptions opts = {0};
+    strncpy(opts.input_file, argv[1], sizeof(opts.input_file) - 1);
+    strcpy(opts.output_file, "a.out");
+    
+    unix_compile_fortran(&opts);
+}
+
+void as_command(int argc, char **argv) {
+    if (argc < 2) {
+        printf("as: Assembler for Research UNIX\n");
+        printf("Usage: as [options] file.s\n");
+        return;
+    }
+    
+    CompileOptions opts = {0};
+    strncpy(opts.input_file, argv[1], sizeof(opts.input_file) - 1);
+    strcpy(opts.output_file, "a.out");
+    
+    unix_compile_assembly(&opts);
+}
+
+void ld_command(int argc, char **argv) {
+    if (argc < 2) {
+        printf("ld: Link editor for Research UNIX\n");
+        printf("Usage: ld [options] file.o ...\n");
+        return;
+    }
+    
+    // Create list of object files
+    char** object_files = argv + 1;
+    int count = argc - 1;
+    
+    unix_link_objects(object_files, count, "a.out");
+}
+
+void yacc_command(int argc, char **argv) {
+    if (argc < 2) {
+        printf("yacc: Yet Another Compiler Compiler\n");
+        printf("Usage: yacc file.y\n");
+        return;
+    }
+    
+    CompileOptions opts = {0};
+    strncpy(opts.input_file, argv[1], sizeof(opts.input_file) - 1);
+    
+    unix_run_yacc(&opts);
+}
+
+void lex_command(int argc, char **argv) {
+    if (argc < 2) {
+        printf("lex: Lexical analyzer generator\n");
+        printf("Usage: lex file.l\n");
+        return;
+    }
+    
+    CompileOptions opts = {0};
+    strncpy(opts.input_file, argv[1], sizeof(opts.input_file) - 1);
+    
+    unix_run_lex(&opts);
+}
+
+void sed_command(int argc, char **argv) {
+    if (argc < 2) {
+        printf("sed: Stream editor for Research UNIX\n");
+        printf("Usage: sed 's/pattern/replacement/' [file]\n");
+        return;
+    }
+    
+    char* pattern = argv[1];
+    char* input_file = argc > 2 ? argv[2] : NULL;
+    unix_sed(pattern, input_file, NULL);  // NULL output means stdout
+}
+
+void awk_unix_command(int argc, char **argv) {
+    if (argc < 2) {
+        printf("awk: Pattern scanning and processing language\n");
+        printf("Usage: awk 'pattern { action }' [file]\n");
+        return;
+    }
+    
+    char* program = argv[1];
+    char* filename = argc > 2 ? argv[2] : NULL;
+    unix_awk(program, filename);
+}
+
+void nroff_command(int argc, char **argv) {
+    if (argc < 2) {
+        printf("nroff: Text formatting system\n");
+        printf("Usage: nroff [options] file\n");
+        return;
+    }
+    
+    DocFormat format = {0};
+    format.page_width = 65;
+    format.page_length = 66;
+    format.left_margin = 0;
+    format.right_margin = 0;
+    
+    unix_nroff(argv[1], NULL, &format);  // NULL output means stdout
+}
+
+void ipcs_command(int argc, char **argv) {
+    printf("IPC Facilities Status\n");
+    unix_ipcs();  // Use the correct function name
+}
+
+void msgctl_command(int argc, char **argv) {
+    if (argc < 2) {
+        printf("msgctl: Message queue control\n");
+        printf("Usage: msgctl <msgid> <cmd>\n");
+        return;
+    }
+    
+    int msgid = atoi(argv[1]);
+    char* cmd = argv[2];
+    printf("Message queue control: msgid=%d cmd=%s\n", msgid, cmd);
+}
+
+void fortune_command(int argc, char **argv) {
+    unix_show_fortune();
+}
+
+void games_command(int argc, char **argv) {
+    if (argc < 2) {
+        unix_list_games();
+        return;
+    }
+    
+    unix_launch_game(argv[1]);
+}
+
+void banner_command(int argc, char **argv) {
+    char* text = argc > 1 ? argv[1] : "ZoraVM";
+    unix_make_banner(text);
+}
+
+void factor_command(int argc, char **argv) {
+    int number = argc > 1 ? atoi(argv[1]) : 12345;
+    unix_factor_number(number);
+}
+
+void primes_command(int argc, char **argv) {
+    int limit = argc > 1 ? atoi(argv[1]) : 100;
+    unix_generate_primes(limit);
+}
+
+// ===== END RESEARCH UNIX COMMANDS =====
+
 // Command table
 Command command_table[] = {
     {"man", man_command, "Displays information about commands."},
@@ -3365,6 +3794,30 @@ Command command_table[] = {
     {"utf8-monitor", utf8_monitor_command, "Monitor UTF-8 encoding status over time"},
     {"utf8-fix", utf8_fix_command, "Attempt to fix UTF-8 encoding issues"},
     {"utf8-test", utf8_test_command, "Test and diagnose UTF-8 encoding support"},
+
+    // Research UNIX Tenth Edition commands
+    {"cc", cc_command, "C compiler for Research UNIX"},
+    {"f77", f77_command, "Fortran 77 compiler"},
+    {"as", as_command, "Assembler"},
+    {"ld", ld_command, "Link editor"},
+    {"yacc", yacc_command, "Yet Another Compiler Compiler"},
+    {"lex", lex_command, "Lexical analyzer generator"},
+    {"sed", sed_command, "Stream editor"},
+    {"nroff", nroff_command, "Text formatting system"},
+    {"ipcs", ipcs_command, "Display IPC facilities status"},
+    {"msgctl", msgctl_command, "Message queue control"},
+    {"fortune", fortune_command, "Display random fortune"},
+    {"games", games_command, "Launch classic UNIX games"},
+    {"banner", banner_command, "Create ASCII art banners"},
+    {"factor", factor_command, "Prime factorization"},
+    {"primes", primes_command, "Generate prime numbers"},
+    {"uname", uname_command, "Display system information"},
+
+    // Real Embedded Compilation Commands
+    {"compile-c", compile_c_command, "Real C compilation with embedded GCC"},
+    {"compile-asm", compile_asm_command, "Real x86 assembly with embedded NASM"},
+    {"compile-fortran", compile_fortran_command, "Real Fortran compilation with GFortran"},
+    {"create-sample", create_sample_command, "Create sample source files for testing"},
 
     {NULL, NULL, NULL}
 };
@@ -4328,6 +4781,22 @@ void help_command(int argc, char **argv) {
     printf("  %-12s - Binary execution                 %-12s - Windows binary exec\n", "exec", "run-windows");
     printf("  %-12s - List available binaries          \n", "list-binaries");
     printf("\n");
+
+    printf(" REAL EMBEDDED COMPILERS:\n");
+    printf("  %-12s - Real C compilation with GCC      %-12s - Real x86 assembly with NASM\n", "compile-c", "compile-asm");
+    printf("  %-12s - Real Fortran compilation         %-12s - Create sample source files\n", "compile-fortran", "create-sample");
+    printf("\n");
+
+    printf(" RESEARCH UNIX COMMANDS:\n");
+    printf("  %-12s - C compiler interface             %-12s - Fortran 77 compiler\n", "cc", "f77");
+    printf("  %-12s - Assembler interface              %-12s - Link editor\n", "as", "ld");
+    printf("  %-12s - Yet Another Compiler Compiler    %-12s - Lexical analyzer generator\n", "yacc", "lex");
+    printf("  %-12s - Stream editor                    %-12s - Text formatting system\n", "sed", "nroff");
+    printf("  %-12s - Display IPC facilities           %-12s - Message queue control\n", "ipcs", "msgctl");
+    printf("  %-12s - Display random fortune           %-12s - Launch classic UNIX games\n", "fortune", "games");
+    printf("  %-12s - Create ASCII art banners         %-12s - Prime factorization\n", "banner", "factor");
+    printf("  %-12s - Generate prime numbers           \n", "primes");
+    printf("\n");
     
     printf(" SHELL OPERATORS:\n");
     printf("  %-12s - Sequential execution (cmd1 ; cmd2)\n", ";");
@@ -4352,6 +4821,11 @@ void help_command(int argc, char **argv) {
     printf("  export USER=admin            - Export environment variable\n");
     printf("  lua myscript.lua arg1 arg2   - Execute Lua script with arguments\n");
     printf("  python analytics.py data.csv - Execute Python script with file\n");
+    printf("  create-sample hello.c        - Create sample C program for compilation\n");
+    printf("  compile-c hello.c program    - Compile C code with embedded GCC\n");
+    printf("  compile-asm hello.asm        - Assemble x86 code with embedded NASM\n");
+    printf("  compile-fortran hello.f      - Compile Fortran with embedded GFortran\n");
+    printf("  cc hello.c && ./a.out        - Research UNIX style C compilation\n");
     printf("  top | head -20               - Show top 20 processes\n");
     printf("  find . -name '*.txt' | wc -l - Count text files recursively\n");
     printf("  version && osinfo            - Show version then system info\n");

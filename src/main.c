@@ -25,6 +25,8 @@
 #include "binary/binary_executor.h"
 #include "meisei/virtual_silicon.h"
 #include "terminal/terminal_detector.h"
+#include "unix_core.h"
+#include "unix_core/unix_embedded_compiler.h"
 
 #ifdef PYTHON_SCRIPTING
 #include "python/python_vm.h"
@@ -459,6 +461,15 @@ int main(int argc, char* argv[]) {
     }
 #endif
 
+    // Initialize embedded compiler system
+#if ZORA_VERBOSE_BOOT
+    printf("Initializing embedded compiler toolchain...\n");
+#endif
+    if (embedded_compiler_init() != 0) {
+        fprintf(stderr, "Warning: Embedded compiler initialization failed - compilation features may be limited\n");
+        // Don't fail the VM startup for compiler issues
+    }
+
 #if ZORA_VERBOSE_BOOT
     printf("Initializing binary executor...\n");
 #endif
@@ -472,6 +483,14 @@ int main(int argc, char* argv[]) {
 #endif
     if (meisei_silicon_init() != 0) {
         fprintf(stderr, "Failed to initialize Meisei Virtual Silicon\n");
+        goto cleanup;
+    }
+
+#if ZORA_VERBOSE_BOOT
+    printf("Initializing Research UNIX Tenth Edition environment...\n");
+#endif
+    if (unix_core_init() != 0) {
+        fprintf(stderr, "Failed to initialize UNIX core environment\n");
         goto cleanup;
     }
 
@@ -520,6 +539,9 @@ int main(int argc, char* argv[]) {
         vfs_cleanup();
         binary_executor_cleanup();
         meisei_silicon_cleanup();
+        
+        // Cleanup embedded compiler system
+        embedded_compiler_cleanup();
         
 #ifdef PYTHON_SCRIPTING
         python_vm_cleanup();
@@ -584,6 +606,9 @@ cleanup:
     vfs_cleanup();
     binary_executor_cleanup();
     meisei_silicon_cleanup();
+    
+    // Cleanup embedded compiler system
+    embedded_compiler_cleanup();
     
 #ifdef PYTHON_SCRIPTING
     python_vm_cleanup();
