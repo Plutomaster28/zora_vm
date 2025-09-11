@@ -26,6 +26,7 @@ void cd_command(int argc, char **argv);
 void mkdir_command(int argc, char **argv);
 void rmdir_command(int argc, char **argv);
 void touch_command(int argc, char **argv);
+void nano_command(int argc, char **argv);
 void rm_command(int argc, char **argv);
 void cp_command(int argc, char **argv);
 void mv_command(int argc, char **argv);

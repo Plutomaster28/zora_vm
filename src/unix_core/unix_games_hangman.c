@@ -5,8 +5,33 @@
 #include <ctype.h>
 #ifdef _WIN32
 #include <conio.h>
+#include <windows.h>
+
+void show_cursor() {
+    CONSOLE_CURSOR_INFO cursorInfo;
+    GetConsoleCursorInfo(GetStdHandle(STD_OUTPUT_HANDLE), &cursorInfo);
+    cursorInfo.bVisible = TRUE;
+    SetConsoleCursorInfo(GetStdHandle(STD_OUTPUT_HANDLE), &cursorInfo);
+}
+
+void hide_cursor() {
+    CONSOLE_CURSOR_INFO cursorInfo;
+    GetConsoleCursorInfo(GetStdHandle(STD_OUTPUT_HANDLE), &cursorInfo);
+    cursorInfo.bVisible = FALSE;
+    SetConsoleCursorInfo(GetStdHandle(STD_OUTPUT_HANDLE), &cursorInfo);
+}
 #else
 #include <unistd.h>
+
+void show_cursor() {
+    printf("\033[?25h");
+    fflush(stdout);
+}
+
+void hide_cursor() {
+    printf("\033[?25l");
+    fflush(stdout);
+}
 #endif
 #include "unix_games_hangman.h"
 
@@ -175,10 +200,22 @@ int hangman_game_run(void) {
     srand(time(NULL));
     hangman_game_init(&current_game);
     
+    // Clear screen for clean start
+#ifdef _WIN32
+    system("cls");
+#else
+    system("clear");
+#endif
+    
     printf(" ZoraVM Hangman Game\n");
     printf("======================\n\n");
     printf("Welcome to Hangman! Guess the word letter by letter.\n");
-    printf("You have %d wrong guesses before the game ends.\n\n", MAX_GUESSES);
+    printf("You have %d wrong guesses before the game ends.\n", MAX_GUESSES);
+    printf("\nPress Enter to start...");
+    fflush(stdout);
+    
+    // Wait for user to press Enter
+    getchar();
     
     while (!current_game.game_over) {
         // Clear screen and display game state
@@ -208,20 +245,38 @@ int hangman_game_run(void) {
         
         // Get player input
         printf("Enter a letter (or 'quit' to exit): ");
+        fflush(stdout);
+        
         char input[10];
+        memset(input, 0, sizeof(input));
+        
         if (fgets(input, sizeof(input), stdin)) {
-            // Remove newline
-            input[strcspn(input, "\\n")] = 0;
+            // Remove newline and carriage return
+            input[strcspn(input, "\r\n")] = '\0';
             
-            if (strcmp(input, "quit") == 0) {
+            // Handle quit command
+            if (strcmp(input, "quit") == 0 || strcmp(input, "q") == 0) {
+#ifdef _WIN32
+                system("cls");
+#else
+                system("clear");
+#endif
                 printf("Thanks for playing!\n");
                 return 0;
+            }
+            
+            // Validate input
+            if (strlen(input) == 0) {
+                printf("Please enter a letter.\n");
+                printf("Press Enter to continue...");
+                getchar();
+                continue;
             }
             
             if (strlen(input) != 1 || !isalpha(input[0])) {
                 printf("Please enter a single letter.\n");
                 printf("Press Enter to continue...");
-                getchar();
+                while (getchar() != '\n'); // Clear input buffer
                 continue;
             }
             
@@ -242,6 +297,10 @@ int hangman_game_run(void) {
                 printf("Press Enter to continue...");
                 getchar();
             }
+        } else {
+            printf("Error reading input. Please try again.\n");
+            printf("Press Enter to continue...");
+            getchar();
         }
     }
     
@@ -271,8 +330,10 @@ int hangman_game_run(void) {
     printf("Efficiency: %.1f%%\n", 
            (float)(current_game.word_length) / current_game.guess_count * 100);
     
-    printf("\nPress Enter to continue...");
-    getchar();
+    printf("\nPress Enter to close...");
+    fflush(stdout);
+    
+    getchar(); // Wait for Enter key
     
     return 0;
 }

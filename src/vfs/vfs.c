@@ -708,10 +708,53 @@ int vm_pwd(void) {
 }
 
 FILE* vm_fopen(const char* filename, const char* mode) {
-    // For now, return NULL to indicate file operations are not supported
-    // In a full implementation, this would create virtual file handles
-    printf("vm_fopen: Virtual file operations not fully implemented\n");
-    return NULL;
+    if (!filename || !mode) {
+        return NULL;
+    }
+    
+    // Check if file exists in VFS
+    VNode* node = vfs_find_node(filename);
+    
+    // If opening for write/append, create file if it doesn't exist
+    if ((strchr(mode, 'w') || strchr(mode, 'a')) && !node) {
+        // Create the file in VFS first
+        if (vfs_create_file(filename) != 0) {
+            printf("vm_fopen: Failed to create file in VFS: %s\n", filename);
+            return NULL;
+        }
+        node = vfs_find_node(filename);
+    }
+    
+    if (!node) {
+        printf("vm_fopen: File not found in VFS: %s\n", filename);
+        return NULL;
+    }
+    
+    // Get the corresponding host path if VFS is mounted to host
+    char* host_path = vfs_get_host_path(node);
+    if (host_path) {
+        // Ensure the directory exists on host
+        vfs_ensure_host_directory(host_path);
+        
+        // Open the actual host file
+        FILE* fp = fopen(host_path, mode);
+        free(host_path);
+        return fp;
+    } else {
+        // Pure virtual file system - create a temporary file
+        // This is a fallback when no host mapping exists
+        printf("vm_fopen: Opening virtual file (no host mapping): %s\n", filename);
+        
+        // For now, we'll create temporary files in the system temp directory
+        // but tagged with our VM identifier
+        char temp_path[512];
+        snprintf(temp_path, sizeof(temp_path), "%s\\ZoraVM_%s_%p", 
+                 getenv("TEMP") ? getenv("TEMP") : "C:\\temp", 
+                 strrchr(filename, '/') ? strrchr(filename, '/') + 1 : filename,
+                 (void*)node);
+        
+        return fopen(temp_path, mode);
+    }
 }
 
 int vm_ps(void) {

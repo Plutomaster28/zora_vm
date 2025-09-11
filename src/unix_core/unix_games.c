@@ -22,7 +22,7 @@ int unix_games_init(void) {
     
     printf("[GAMES] Initializing Research UNIX Games Collection...\n");
     
-    // Create games directory structure
+    // Create games directory structure using VFS
     vfs_mkdir("/usr/games");
     vfs_mkdir("/usr/games/lib");
     vfs_mkdir("/usr/games/scores");
@@ -30,7 +30,7 @@ int unix_games_init(void) {
     // Load fortunes
     unix_load_fortunes();
     
-    // Create game executables
+    // Create game executables using VFS
     const char* rogue_script = 
         "#!/bin/sh\n"
         "# Rogue - The classic dungeon adventure\n"
@@ -39,7 +39,9 @@ int unix_games_init(void) {
         "echo \"Use WASD to move, 'q' to quit\"\n"
         "rogue-game\n";
     
-    vfs_write_file("/usr/games/rogue", rogue_script, strlen(rogue_script));
+    if (vfs_create_file("/usr/games/rogue") == 0) {
+        vfs_write_file("/usr/games/rogue", rogue_script, strlen(rogue_script));
+    }
     
     const char* adventure_script = 
         "#!/bin/sh\n"
@@ -49,10 +51,12 @@ int unix_games_init(void) {
         "echo \"Around you is a forest. A small stream flows out of the building.\"\n"
         "adventure-game\n";
     
-    vfs_write_file("/usr/games/adventure", adventure_script, strlen(adventure_script));
+    if (vfs_create_file("/usr/games/adventure") == 0) {
+        vfs_write_file("/usr/games/adventure", adventure_script, strlen(adventure_script));
+    }
     
     games_initialized = 1;
-    printf("[GAMES] Games collection initialized\n");
+    printf("[GAMES] Games collection initialized with VFS support\n");
     return 0;
 }
 
@@ -157,14 +161,10 @@ int unix_make_banner(const char* text) {
 }
 
 int unix_play_snake(void) {
-    printf(" Starting ZoraVM Snake Game...\n");
-    printf("===============================\n");
     return snake_game_run();
 }
 
 int unix_play_hangman(void) {
-    printf(" Starting ZoraVM Hangman Game...\n");
-    printf("==================================\n");
     return hangman_game_run();
 }
 

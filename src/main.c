@@ -27,6 +27,7 @@
 #include "terminal/terminal_detector.h"
 #include "unix_core.h"
 #include "unix_core/unix_embedded_compiler.h"
+#include "unix_core/unix_games.h"
 
 #ifdef PYTHON_SCRIPTING
 #include "python/python_vm.h"
@@ -201,11 +202,16 @@ int main(int argc, char* argv[]) {
     printf("Starting Zora VM...\n");
 #endif
 
-    // Check if running in batch mode (for healthcheck)
+    // Check for special command line modes
     int batch_mode = 0;
+    const char* game_mode = NULL;
+    
     for (int i = 1; i < argc; i++) {
         if (strcmp(argv[i], "--batch-mode") == 0) {
             batch_mode = 1;
+            break;
+        } else if (strcmp(argv[i], "--game") == 0 && i + 1 < argc) {
+            game_mode = argv[i + 1];
             break;
         }
     }
@@ -214,6 +220,57 @@ int main(int argc, char* argv[]) {
         printf("Running in batch mode for healthcheck\n");
         // Quick initialization and exit
         return 0;
+    }
+    
+    if (game_mode) {
+        printf("ZoraVM Game Mode: %s\n", game_mode);
+        printf("==============================\n");
+        printf("Initializing game environment...\n");
+        
+        // Quick initialization for game mode
+        setlocale(LC_ALL, "");
+        
+        #ifdef _WIN32
+        SetConsoleOutputCP(CP_UTF8);
+        SetConsoleCP(CP_UTF8);
+        #endif
+        
+        // Initialize minimal systems needed for games
+        sandbox_init();
+        vm_init();
+        vfs_init();
+        
+        // Create minimal VFS structure for games
+        char executable_path[512];
+        char executable_dir[512];
+        char zora_perl_path[512];
+        
+        GetModuleFileNameA(NULL, executable_path, sizeof(executable_path));
+        strcpy(executable_dir, executable_path);
+        char* last_backslash = strrchr(executable_dir, '\\');
+        if (last_backslash) *last_backslash = '\0';
+        snprintf(zora_perl_path, sizeof(zora_perl_path), "%s\\ZoraPerl", executable_dir);
+        
+        create_directory_recursive(zora_perl_path);
+        vfs_mount_root_autodiscover(zora_perl_path);
+        
+        // Initialize games system
+        unix_games_init();
+        
+        printf("Starting %s...\n\n", game_mode);
+        
+        // Launch the specific game
+        int game_result = unix_launch_game(game_mode);
+        
+        printf("\nGame finished. Press Enter to close...");
+        getchar();
+        
+        // Cleanup
+        vfs_cleanup();
+        vm_cleanup();
+        sandbox_cleanup();
+        
+        return game_result;
     }
 
 #if ZORA_RELEASE_MODE && !ZORA_VERBOSE_BOOT

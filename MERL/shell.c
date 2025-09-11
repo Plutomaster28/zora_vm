@@ -2495,6 +2495,98 @@ void touch_command(int argc, char **argv) {
     }
 }
 
+void nano_command(int argc, char **argv) {
+    if (argc < 2) {
+        printf("Usage: nano <filename>\n");
+        return;
+    }
+    
+    char expanded_path[512];
+    expand_path(argv[1], expanded_path, sizeof(expanded_path));
+    
+    // Build absolute path if relative
+    char full_path[512];
+    if (expanded_path[0] != '/') {
+        char* cwd = vfs_getcwd();
+        snprintf(full_path, sizeof(full_path), "%s/%s", cwd, expanded_path);
+    } else {
+        strcpy(full_path, expanded_path);
+    }
+    
+    printf("ZoraVM Nano Editor - Editing: %s\n", full_path);
+    printf("=========================================\n");
+    
+    // Try to read existing file content
+    void* data;
+    size_t size;
+    int file_exists = (vfs_read_file(full_path, &data, &size) == 0);
+    
+    if (!file_exists) {
+        // Create new file
+        if (vfs_create_file(full_path) != 0) {
+            printf("nano: Failed to create file '%s'\n", full_path);
+            return;
+        }
+        data = NULL;
+        size = 0;
+    }
+    
+    // Display current content if any
+    if (data && size > 0) {
+        printf("Current content:\n");
+        printf("----------------\n");
+        printf("%.*s", (int)size, (char*)data);
+        if (((char*)data)[size-1] != '\n') printf("\n");
+        printf("----------------\n");
+    }
+    
+    printf("Enter new content (press Enter twice to finish):\n");
+    
+    char buffer[4096] = {0};
+    char line[256];
+    int total_len = 0;
+    int empty_line_count = 0;
+    
+    while (1) {
+        if (fgets(line, sizeof(line), stdin)) {
+            // Check for double enter (empty line)
+            if (line[0] == '\n') {
+                empty_line_count++;
+                if (empty_line_count >= 2) break;
+                
+                // Add the newline to buffer
+                if (total_len < sizeof(buffer) - 1) {
+                    buffer[total_len++] = '\n';
+                }
+            } else {
+                empty_line_count = 0;
+                
+                // Add line to buffer
+                int line_len = strlen(line);
+                if (total_len + line_len < sizeof(buffer)) {
+                    strcpy(buffer + total_len, line);
+                    total_len += line_len;
+                } else {
+                    printf("nano: Content too large, truncating...\n");
+                    break;
+                }
+            }
+        } else {
+            break;
+        }
+    }
+    
+    // Write content to VFS
+    if (vfs_write_file(full_path, buffer, total_len) == 0) {
+        printf("nano: File saved successfully to %s (%d bytes)\n", full_path, total_len);
+    } else {
+        printf("nano: Failed to save file '%s'\n", full_path);
+    }
+    
+    // Clean up
+    if (data) free(data);
+}
+
 void rm_command(int argc, char **argv) {
     if (argc < 2) {
         printf("Usage: rm <filename>\n");
@@ -3623,7 +3715,34 @@ void games_command(int argc, char **argv) {
         return;
     }
     
-    unix_launch_game(argv[1]);
+    // Initialize games system if not already done
+    unix_games_init();
+    
+    const char* game_name = argv[1];
+    
+    // Complex games that need their own shell window
+    if (strcmp(game_name, "snake") == 0 || strcmp(game_name, "hangman") == 0) {
+#ifdef _WIN32
+        // Launch in new Command Prompt window
+        char command[512];
+        snprintf(command, sizeof(command), 
+            "start \"ZoraVM %s Game\" cmd /k \"cd /d \"%s\" && echo Starting %s game in dedicated window... && echo Use 'exit' to close this window when done && .\\zora_vm.exe --game %s\"",
+            game_name, "c:\\Users\\theni\\OneDrive\\Documents\\zora_vm", game_name, game_name);
+        system(command);
+        printf("Game '%s' launched in new window\n", game_name);
+#else
+        // Launch in new terminal window (Linux/Unix)
+        char command[512];
+        snprintf(command, sizeof(command), 
+            "gnome-terminal --title='ZoraVM %s Game' -- ./zora_vm --game %s &", 
+            game_name, game_name);
+        system(command);
+        printf("Game '%s' launched in new terminal\n", game_name);
+#endif
+    } else {
+        // Simple games run in current terminal normally
+        unix_launch_game(argv[1]);
+    }
 }
 
 void banner_command(int argc, char **argv) {
@@ -3711,6 +3830,7 @@ Command command_table[] = {
     {"mkdir", mkdir_command, "Creates a new directory."},
     {"rmdir", rmdir_command, "Removes a directory."},
     {"touch", touch_command, "Creates a new file."},
+    {"nano", nano_command, "Simple text editor for files."},
     {"rm", rm_command, "Removes a file."},
     {"cp", cp_command, "Copies a file."},
     {"mv", mv_command, "Moves a file."},

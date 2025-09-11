@@ -132,9 +132,9 @@ void snake_draw_board(SnakeGame* game) {
             for (int i = 0; i < game->snake.length; i++) {
                 if (game->snake.body[i].x == x && game->snake.body[i].y == y) {
                     if (i == 0) {
-                        printf("O"); // Head
+                        printf("●"); // Head - solid circle
                     } else {
-                        printf("o"); // Body
+                        printf("○"); // Body - hollow circle
                     }
                     is_snake = 1;
                     break;
@@ -144,7 +144,7 @@ void snake_draw_board(SnakeGame* game) {
             if (!is_snake) {
                 // Check if this is food
                 if (game->food.x == x && game->food.y == y) {
-                    printf("*");
+                    printf("◆"); // Diamond for food
                 } else {
                     printf(" ");
                 }
@@ -255,81 +255,112 @@ int snake_game_run(void) {
     srand(time(NULL));
     snake_game_init(&current_game);
     
+    // Clear screen once for clean start
+#ifdef _WIN32
+    system("cls");
+#else
+    system("clear");
+#endif
+    
     hide_cursor();
     
     printf(" ZoraVM Snake Game\n");
     printf("====================\n\n");
-    printf("Get ready! Game starts in 3 seconds...\n");
+    printf("Get ready! Game starts in 1 second...\n");
     printf("Use WASD to control the snake!\n");
+    printf("Press Q to quit anytime.\n");
     
 #ifdef _WIN32
-    Sleep(3000);
+    Sleep(1000);
 #else
-    sleep(3);
+    sleep(1);
 #endif
+    
+    int frame_counter = 0;
+    int input_responsiveness = 2; // Reduced for faster gameplay
     
     while (!current_game.game_over) {
-        snake_draw_board(&current_game);
-        
-        // Handle input
-        int key = snake_get_input();
-        if (key) {
-            switch (tolower(key)) {
-                case 'w':
-                    if (current_game.snake.direction != 2) // Can't go down if going up
-                        current_game.snake.direction = 0;
-                    break;
-                case 'd':
-                    if (current_game.snake.direction != 3) // Can't go left if going right
-                        current_game.snake.direction = 1;
-                    break;
-                case 's':
-                    if (current_game.snake.direction != 0) // Can't go up if going down
-                        current_game.snake.direction = 2;
-                    break;
-                case 'a':
-                    if (current_game.snake.direction != 1) // Can't go right if going left
-                        current_game.snake.direction = 3;
-                    break;
-                case 'q':
-                    current_game.game_over = 1;
-                    break;
+        // Handle input more frequently for better responsiveness
+        for (int input_check = 0; input_check < input_responsiveness; input_check++) {
+            int key = snake_get_input();
+            if (key) {
+                switch (tolower(key)) {
+                    case 'w':
+                        if (current_game.snake.direction != 2) // Can't go down if going up
+                            current_game.snake.direction = 0;
+                        break;
+                    case 'd':
+                        if (current_game.snake.direction != 3) // Can't go left if going right
+                            current_game.snake.direction = 1;
+                        break;
+                    case 's':
+                        if (current_game.snake.direction != 0) // Can't go up if going down
+                            current_game.snake.direction = 2;
+                        break;
+                    case 'a':
+                        if (current_game.snake.direction != 1) // Can't go right if going left
+                            current_game.snake.direction = 3;
+                        break;
+                    case 'q':
+                    case 27: // ESC key
+                        current_game.game_over = 1;
+                        goto game_cleanup;
+                }
             }
+            
+            // Shorter sleep for faster, more responsive gameplay
+#ifdef _WIN32
+            Sleep(15); // Reduced from 30ms
+#else
+            usleep(15000);
+#endif
         }
         
-        snake_update_game(&current_game);
+        // Update game logic more frequently (every 2 frames instead of 5)
+        if (frame_counter % 2 == 0) {
+            snake_update_game(&current_game);
+            snake_draw_board(&current_game);
+        }
         
-        // Game speed (smaller = faster)
-#ifdef _WIN32
-        Sleep(150);
-#else
-        usleep(150000);
-#endif
+        frame_counter++;
     }
     
-    // Game over screen
-    clear_screen();
-    printf(" Game Over!\n");
-    printf("=============\n\n");
-    
-    if (current_game.snake.alive) {
-        printf("Thanks for playing!\n");
-    } else {
-        printf(" You crashed!\n");
-    }
-    
-    printf("Final Score: %d\n", current_game.snake.score);
-    printf("High Score: %d\n", current_game.high_score);
-    printf("Snake Length: %d\n", current_game.snake.length);
-    
+game_cleanup:
+    // Clean game exit
     show_cursor();
     
-    printf("\nPress any key to continue...");
 #ifdef _WIN32
-    _getch();
+    system("cls");
 #else
-    getchar();
+    system("clear");
 #endif
+    
+    printf("\n");
+    printf(" ============================\n");
+    printf("         GAME OVER!          \n");
+    printf(" ============================\n");
+    printf("\n");
+    
+    if (current_game.snake.alive) {
+        printf(" Thanks for playing!\n");
+    } else {
+        printf(" Snake crashed!\n");
+    }
+    
+    printf("\n");
+    printf(" Final Score: %d\n", current_game.snake.score);
+    printf(" High Score: %d\n", current_game.high_score);
+    printf(" Snake Length: %d\n", current_game.snake.length);
+    printf("\n");
+    printf(" Press Enter to close...");
+    fflush(stdout);
+    
+    // Clear input buffer first
+    int ch;
+    while ((ch = getchar()) != '\n' && ch != EOF);
+    
+    // Wait for Enter key
+    getchar();
     
     return 0;
 }
