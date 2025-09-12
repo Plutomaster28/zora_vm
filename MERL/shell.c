@@ -57,6 +57,7 @@ int execute_command_with_parsing(char *cmd_str);
 int execute_command_with_redirection(char *args[], int argc, char *input_file, char *output_file, int append_mode);
 int try_execute_script_command(const char* command, int argc, char** argv);
 void execute_simple_command(char *args[], int argc);
+int execute_simple_command_with_exit_code(char *args[], int argc);
 void execute_simple_command_with_redirect(char *args[], int argc);
 int execute_pipeline(char *pipeline_str);
 void redirect_printf(const char* format, ...);
@@ -1936,60 +1937,60 @@ void start_shell() {
             break;
         }
 
-        // Debug: Check for suspicious input before processing
-        int has_non_printable = 0;
-        int has_utf8_replacement = 0;
-        
-        for (int i = 0; input[i] != '\0' && i < sizeof(input); i++) {
-            unsigned char c = (unsigned char)input[i];
-            
-            // Check for non-printable characters
-            if (c < 32 && c != '\n' && c != '\t' && c != '\r') {
-                printf("DEBUG: Non-printable character detected at position %d: 0x%02X\n", i, c);
-                has_non_printable = 1;
-            }
-            
-            // Check for UTF-8 replacement character sequence (EF BF BD)
-            if (i < sizeof(input) - 2 && 
-                c == 0xEF && (unsigned char)input[i+1] == 0xBF && (unsigned char)input[i+2] == 0xBD) {
-                printf("DEBUG: UTF-8 replacement character detected at position %d\n", i);
-                has_utf8_replacement = 1;
-            }
-            
-            // Check for high-bit characters that might be corruption
-            if (c >= 0x80 && c <= 0xFF) {
-                printf("DEBUG: High-bit character detected at position %d: 0x%02X\n", i, c);
-                has_non_printable = 1;
-            }
-        }
-        
-        if (has_non_printable || has_utf8_replacement) {
-            if (has_utf8_replacement) {
-                printf("WARNING: Input contains UTF-8 replacement characters (corruption)\n");
-            } else {
-                printf("WARNING: Input contains non-printable characters\n");
-            }
-            
-            // More aggressive buffer clearing
-#ifdef _WIN32
-            FlushConsoleInputBuffer(GetStdHandle(STD_INPUT_HANDLE));
-            while (_kbhit()) _getch();
-#endif
-            // Clear any remaining input
-            int ch;
-            while ((ch = getchar()) != '\n' && ch != EOF);
-            continue;
-        }
-
-        // Remove trailing newline character
+        // Remove trailing newline character FIRST
         input[strcspn(input, "\n")] = '\0';
         
-        // Validate input for corrupted data
-        for (int i = 0; input[i] != '\0'; i++) {
-            if ((unsigned char)input[i] < 32 && input[i] != '\t') {
-                printf("Warning: Invalid characters detected in input, skipping command\n");
-                goto next_input;
+        // Aggressive input validation and corruption detection
+        int input_corrupted = 0;
+        int input_length = strlen(input);
+        
+        // Check for various types of corruption
+        for (int i = 0; i < input_length; i++) {
+            unsigned char c = (unsigned char)input[i];
+            
+            // Check for UTF-8 replacement character (0xEF 0xBF 0xBD)
+            if (i < input_length - 2 && 
+                c == 0xEF && (unsigned char)input[i+1] == 0xBF && (unsigned char)input[i+2] == 0xBD) {
+                input_corrupted = 1;
+                break;
             }
+            
+            // Check for other non-printable characters (except tab)
+            if ((c < 32 && c != '\t') || c == 0xFF || c == 0xFE) {
+                input_corrupted = 1;
+                break;
+            }
+            
+            // Check for isolated high-bit characters that are likely corruption
+            if (c >= 0x80 && c <= 0xFF) {
+                // Allow valid UTF-8 sequences, reject isolated bytes
+                if (i == input_length - 1 || 
+                    (c >= 0x80 && c <= 0xBF) || // Continuation byte without starter
+                    (c >= 0xF8)) { // Invalid UTF-8 starter
+                    input_corrupted = 1;
+                    break;
+                }
+            }
+        }
+        
+        // If input is corrupted, clear everything and restart
+        if (input_corrupted || input_length == 0) {
+            if (input_corrupted) {
+                printf("Input corruption detected, clearing buffers...\n");
+                // Don't execute corrupted input as a command
+                
+                // Aggressive buffer clearing
+#ifdef _WIN32
+                FlushConsoleInputBuffer(GetStdHandle(STD_INPUT_HANDLE));
+                while (_kbhit()) _getch();
+#endif
+                // Clear C runtime buffers
+                fflush(stdin);
+                
+                // Zero out the input buffer completely
+                memset(input, 0, sizeof(input));
+            }
+            continue; // Skip to next input prompt
         }
 
         // Exit condition
@@ -2070,9 +2071,6 @@ void start_shell() {
             }
         }
 #endif
-        
-        next_input:
-            continue;
     }
 }
 
@@ -4452,11 +4450,42 @@ int execute_command_with_redirection(char *args[], int argc, char *input_file, c
         char temp_filename[256];
         snprintf(temp_filename, sizeof(temp_filename), "temp_stdout_%d.tmp", (int)time(NULL));
         
+        // Execute command and capture exit code
+        int exit_code = 0;
+        
         // Simple approach: just use freopen and restore with freopen
         FILE* temp_file = freopen(temp_filename, "w", stdout);
         if (temp_file) {
-            // Execute the command with stdout redirected
-            execute_simple_command(args, argc);
+            // Search for the command in the command table and execute with exit code tracking
+            int command_found = 0;
+            for (int i = 0; i < command_table_size; i++) {
+                if (command_table[i].name && strcmp(args[0], command_table[i].name) == 0) {
+                    command_found = 1;
+                    if (command_table[i].handler) {
+                        command_table[i].handler(argc, args);
+                        exit_code = 0; // Command executed successfully
+                    } else {
+                        exit_code = 1; // Handler was NULL
+                    }
+                    break;
+                }
+            }
+            
+            if (!command_found) {
+                // Try script execution
+                if (try_execute_script_command(args[0], argc, args)) {
+                    exit_code = 0; // Script found and executed
+                } else {
+                    // Command not found
+                    terminal_print_error("Unknown command: '");
+                    printf("%s", args[0]);
+                    terminal_print_error("'\n");
+                    printf("Type ");
+                    terminal_print_command("help");
+                    printf(" to see available commands.\n");
+                    exit_code = 1; // Command not found
+                }
+            }
             
             // Flush and close
             fflush(stdout);
@@ -4486,6 +4515,7 @@ int execute_command_with_redirection(char *args[], int argc, char *input_file, c
         } else {
             // Fallback to original method if freopen fails
             execute_simple_command_with_redirect(args, argc);
+            exit_code = 0; // Assume success for fallback
         }
         
         // Stop capturing
@@ -4502,21 +4532,23 @@ int execute_command_with_redirection(char *args[], int argc, char *input_file, c
                 printf("Output redirection completed to: %s (%zu bytes)\n", full_path, redirect_buffer_size);
             } else {
                 printf("Error: Failed to write to VFS file '%s'\n", full_path);
+                exit_code = 1; // VFS write failed
             }
         } else {
             printf("Output redirection completed to: %s (empty)\n", full_path);
         }
+        
+        // Handle input redirection (TODO: implement properly)
+        if (input_file && strlen(input_file) > 0) {
+            printf("Note: Input redirection from '%s' not yet fully implemented\n", input_file);
+        }
+        
+        return exit_code; // Return the command's exit code
     } else {
         // No redirection, execute normally
-        execute_simple_command(args, argc);
+        int exit_code = execute_simple_command_with_exit_code(args, argc);
+        return exit_code;
     }
-    
-    // Handle input redirection (TODO: implement properly)
-    if (input_file && strlen(input_file) > 0) {
-        printf("Note: Input redirection from '%s' not yet fully implemented\n", input_file);
-    }
-    
-    return 0;
 }
 
 void execute_simple_command_with_redirect(char *args[], int argc) {
@@ -4801,6 +4833,38 @@ void execute_simple_command(char *args[], int argc) {
     printf("Type ");
     terminal_print_command("help");
     printf(" to see available commands.\n");
+}
+
+// New function that returns exit codes for logical operators
+int execute_simple_command_with_exit_code(char *args[], int argc) {
+    // Skip empty commands
+    if (argc == 0) return 0;
+
+    // Search for the command in the command table
+    for (int i = 0; i < command_table_size; i++) {
+        if (command_table[i].name && strcmp(args[0], command_table[i].name) == 0) {
+            // Execute the command handler safely
+            if (command_table[i].handler) {
+                command_table[i].handler(argc, args);
+                return 0; // Command found and executed successfully
+            }
+            return 1; // Command found but handler was NULL
+        }
+    }
+
+    // Command not found in built-ins - check for scripts in /bin/
+    if (try_execute_script_command(args[0], argc, args)) {
+        return 0; // Script was found and executed
+    }
+
+    // Command not found - show styled error message
+    terminal_print_error("Unknown command: '");
+    printf("%s", args[0]);
+    terminal_print_error("'\n");
+    printf("Type ");
+    terminal_print_command("help");
+    printf(" to see available commands.\n");
+    return 1; // Command not found - return error code
 }
 
 void man_command(int argc, char **argv) {
