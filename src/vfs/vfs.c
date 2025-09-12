@@ -1409,3 +1409,54 @@ void vfs_stop_live_sync(void) {
 int vfs_is_live_sync_enabled(void) {
     return live_sync_enabled;
 }
+
+// Public function to get host path from VFS path
+char* vfs_get_host_path_from_vfs_path(const char* vfs_path) {
+    if (!vfs_path) {
+        return NULL;
+    }
+    
+    // Find the VFS node for this path
+    VNode* node = vfs_find_node(vfs_path);
+    if (!node) {
+        // If node doesn't exist, we can still try to construct the path
+        // by creating parent directories and returning what the host path would be
+        
+        // Create any missing parent directories
+        char path_copy[1024];
+        strncpy(path_copy, vfs_path, sizeof(path_copy) - 1);
+        path_copy[sizeof(path_copy) - 1] = '\0';
+        
+        // Extract directory path
+        char* last_slash = strrchr(path_copy, '/');
+        if (last_slash && last_slash != path_copy) {
+            *last_slash = '\0';
+            vfs_mkdir(path_copy);  // Create parent directory if needed
+        }
+        
+        // Try to find the node again, or at least get the parent
+        node = vfs_find_node(path_copy);
+        if (!node) {
+            return NULL;
+        }
+        
+        // Get host path for parent and append filename
+        char* parent_host_path = vfs_get_host_path(node);
+        if (!parent_host_path) {
+            return NULL;
+        }
+        
+        static char full_host_path[1024];
+        if (last_slash) {
+            snprintf(full_host_path, sizeof(full_host_path), "%s\\%s", 
+                     parent_host_path, last_slash + 1);
+        } else {
+            strncpy(full_host_path, parent_host_path, sizeof(full_host_path) - 1);
+            full_host_path[sizeof(full_host_path) - 1] = '\0';
+        }
+        return full_host_path;
+    }
+    
+    // Node exists, get its host path
+    return vfs_get_host_path(node);
+}

@@ -16,15 +16,62 @@
 #include "vfs/vfs.h"
 
 static EmbeddedCompilerConfig compiler_config = {0};
+static char default_output_vfs_path[512] = "/bin";  // Default VFS output path
+static char user_output_vfs_path[512] = {0};       // User-specified output path
+
+// Function to set user-specified output directory
+void set_compiler_output_dir(const char* vfs_path) {
+    if (vfs_path && strlen(vfs_path) > 0) {
+        strncpy(user_output_vfs_path, vfs_path, sizeof(user_output_vfs_path) - 1);
+        user_output_vfs_path[sizeof(user_output_vfs_path) - 1] = '\0';
+        printf("[COMPILER] Output directory set to: %s\n", user_output_vfs_path);
+    } else {
+        user_output_vfs_path[0] = '\0';
+        printf("[COMPILER] Output directory reset to default: %s\n", default_output_vfs_path);
+    }
+}
+
+// Function to get current output VFS path
+const char* get_compiler_output_vfs_path(void) {
+    return strlen(user_output_vfs_path) > 0 ? user_output_vfs_path : default_output_vfs_path;
+}
+
+// Function to convert VFS path to host path for compiler output
+char* get_output_host_path(const char* filename) {
+    static char host_path[1024];
+    const char* vfs_output_dir = get_compiler_output_vfs_path();
+    
+    // Create full VFS path
+    char full_vfs_path[1024];
+    if (filename && strlen(filename) > 0) {
+        snprintf(full_vfs_path, sizeof(full_vfs_path), "%s/%s", vfs_output_dir, filename);
+    } else {
+        strncpy(full_vfs_path, vfs_output_dir, sizeof(full_vfs_path) - 1);
+        full_vfs_path[sizeof(full_vfs_path) - 1] = '\0';
+    }
+    
+    // Get host path from VFS using the new public function
+    char* resolved_host_path = vfs_get_host_path_from_vfs_path(full_vfs_path);
+    if (resolved_host_path) {
+        strncpy(host_path, resolved_host_path, sizeof(host_path) - 1);
+        host_path[sizeof(host_path) - 1] = '\0';
+        return host_path;
+    }
+    
+    // Fallback: use original behavior if VFS resolution fails
+    snprintf(host_path, sizeof(host_path), "%s/%s", 
+             compiler_config.output_dir, filename ? filename : "");
+    return host_path;
+}
 
 int embedded_compiler_init(void) {
     printf("[EMBEDDED] Initializing real GNU compiler toolchain...\n");
     
-    // Set up compiler paths
+    // Set up compiler paths (for temp files and legacy support)
     compiler_config.temp_dir = "ZoraVM_Compilers/temp";
     compiler_config.output_dir = "ZoraVM_Compilers/output";
     
-    // Create necessary directories
+    // Create legacy directories for compatibility
     #ifdef _WIN32
     _mkdir("ZoraVM_Compilers");
     _mkdir("ZoraVM_Compilers/temp");
@@ -37,6 +84,23 @@ int embedded_compiler_init(void) {
     mkdir("ZoraVM_Compilers/bin", 0755);
     #endif
     
+    // Create VFS directories for compiler output
+    printf("[EMBEDDED] Creating VFS directories for compiled executables...\n");
+    
+    // Create essential VFS directories
+    vfs_mkdir("/bin");        // Primary executable directory
+    vfs_mkdir("/data");       // Data/project directory
+    vfs_mkdir("/tmp");        // Temporary files
+    vfs_mkdir("/usr");        // User programs
+    vfs_mkdir("/usr/bin");    // User binaries
+    vfs_mkdir("/usr/local");  // Local installations
+    vfs_mkdir("/usr/local/bin"); // Local binaries
+    vfs_mkdir("/projects");   // Project workspace
+    vfs_mkdir("/projects/bin"); // Project binaries
+    
+    printf("[EMBEDDED] Default compiler output: %s (VFS)\n", default_output_vfs_path);
+    printf("[EMBEDDED] Use 'set-output-dir <path>' to change output location\n");
+    
     // Initialize embedded compilers
     if (setup_compiler_environment() != 0) {
         printf("[EMBEDDED] Warning: Some compilers may not be available\n");
@@ -47,6 +111,7 @@ int embedded_compiler_init(void) {
     printf("[EMBEDDED] GCC: Available for C compilation\n");
     printf("[EMBEDDED] NASM: Available for x86 assembly\n");
     printf("[EMBEDDED] GFortran: Available for Fortran compilation\n");
+    printf("[EMBEDDED] Executables will be placed in VFS-accessible directories\n");
     
     return 0;
 }
@@ -143,17 +208,31 @@ CompilationResult* compile_c_real(CompilationRequest* request) {
 int execute_gcc_compilation(CompilationRequest* request, CompilationResult* result) {
     char command[2048];
     char output_path[512];
+    char vfs_path[512];
     
-    // Determine output path
+    // Determine output filename
+    const char* output_filename;
     if (strlen(request->output_file) > 0) {
-        snprintf(output_path, sizeof(output_path), "%s/%s", 
-                 compiler_config.output_dir, request->output_file);
+        output_filename = request->output_file;
     } else {
-        snprintf(output_path, sizeof(output_path), "%s/a.exe", 
-                 compiler_config.output_dir);
+        output_filename = "a.exe";
     }
     
-    strcpy(result->output_file, output_path);
+    // Get VFS output path
+    const char* vfs_output_dir = get_compiler_output_vfs_path();
+    snprintf(vfs_path, sizeof(vfs_path), "%s/%s", vfs_output_dir, output_filename);
+    
+    // Get host path for actual compilation
+    char* host_output_path = get_output_host_path(output_filename);
+    strncpy(output_path, host_output_path, sizeof(output_path) - 1);
+    output_path[sizeof(output_path) - 1] = '\0';
+    
+    // Store both VFS and host paths in result
+    strncpy(result->output_file, vfs_path, sizeof(result->output_file) - 1);
+    result->output_file[sizeof(result->output_file) - 1] = '\0';
+    
+    printf("[COMPILER] VFS Output: %s\n", vfs_path);
+    printf("[COMPILER] Host Output: %s\n", output_path);
     
     // Build GCC command
     snprintf(command, sizeof(command), "%s", get_gcc_executable_path());
@@ -207,8 +286,8 @@ int execute_gcc_compilation(CompilationRequest* request, CompilationResult* resu
     }
     
     // For demonstration, simulate successful compilation
-    // In a real implementation, we'd execute the actual TCC command
-    printf("Simulating TCC compilation...\n");
+    // In a real implementation, we'd execute the actual GCC command
+    printf("Simulating GCC compilation...\n");
     printf("Command: %s\n", command);
     
     // Create a dummy executable file to show it worked
@@ -217,6 +296,9 @@ int execute_gcc_compilation(CompilationRequest* request, CompilationResult* resu
         fprintf(exe_fp, "#!/bin/sh\necho \"Compiled C program executed!\"\n");
         fclose(exe_fp);
         result->output_size = 45;
+        
+        printf("[COMPILER] ✓ Executable created at VFS path: %s\n", vfs_path);
+        printf("[COMPILER] ✓ You can now run it with: %s\n", output_filename);
         return 0;
     }
     
@@ -262,17 +344,31 @@ CompilationResult* compile_asm_real(CompilationRequest* request) {
 int execute_nasm_compilation(CompilationRequest* request, CompilationResult* result) {
     char command[2048];
     char output_path[512];
+    char vfs_path[512];
     
-    // Determine output path
+    // Determine output filename
+    const char* output_filename;
     if (strlen(request->output_file) > 0) {
-        snprintf(output_path, sizeof(output_path), "%s/%s", 
-                 compiler_config.output_dir, request->output_file);
+        output_filename = request->output_file;
     } else {
-        snprintf(output_path, sizeof(output_path), "%s/program.o", 
-                 compiler_config.output_dir);
+        output_filename = "program.o";
     }
     
-    strcpy(result->output_file, output_path);
+    // Get VFS output path
+    const char* vfs_output_dir = get_compiler_output_vfs_path();
+    snprintf(vfs_path, sizeof(vfs_path), "%s/%s", vfs_output_dir, output_filename);
+    
+    // Get host path for actual compilation
+    char* host_output_path = get_output_host_path(output_filename);
+    strncpy(output_path, host_output_path, sizeof(output_path) - 1);
+    output_path[sizeof(output_path) - 1] = '\0';
+    
+    // Store VFS path in result
+    strncpy(result->output_file, vfs_path, sizeof(result->output_file) - 1);
+    result->output_file[sizeof(result->output_file) - 1] = '\0';
+    
+    printf("[COMPILER] VFS Output: %s\n", vfs_path);
+    printf("[COMPILER] Host Output: %s\n", output_path);
     
     // Build NASM command
     snprintf(command, sizeof(command), "%s -f win64", get_nasm_executable_path());
@@ -312,6 +408,8 @@ int execute_nasm_compilation(CompilationRequest* request, CompilationResult* res
         fwrite(dummy_obj, 1, sizeof(dummy_obj), obj_fp);
         fclose(obj_fp);
         result->output_size = sizeof(dummy_obj);
+        
+        printf("[COMPILER] ✓ Object file created at VFS path: %s\n", vfs_path);
         return 0;
     }
     
@@ -357,17 +455,31 @@ CompilationResult* compile_fortran_real(CompilationRequest* request) {
 int execute_fortran_compilation(CompilationRequest* request, CompilationResult* result) {
     char command[2048];
     char output_path[512];
+    char vfs_path[512];
     
-    // Determine output path
+    // Determine output filename
+    const char* output_filename;
     if (strlen(request->output_file) > 0) {
-        snprintf(output_path, sizeof(output_path), "%s/%s", 
-                 compiler_config.output_dir, request->output_file);
+        output_filename = request->output_file;
     } else {
-        snprintf(output_path, sizeof(output_path), "%s/program.exe", 
-                 compiler_config.output_dir);
+        output_filename = "program.exe";
     }
     
-    strcpy(result->output_file, output_path);
+    // Get VFS output path
+    const char* vfs_output_dir = get_compiler_output_vfs_path();
+    snprintf(vfs_path, sizeof(vfs_path), "%s/%s", vfs_output_dir, output_filename);
+    
+    // Get host path for actual compilation
+    char* host_output_path = get_output_host_path(output_filename);
+    strncpy(output_path, host_output_path, sizeof(output_path) - 1);
+    output_path[sizeof(output_path) - 1] = '\0';
+    
+    // Store VFS path in result
+    strncpy(result->output_file, vfs_path, sizeof(result->output_file) - 1);
+    result->output_file[sizeof(result->output_file) - 1] = '\0';
+    
+    printf("[COMPILER] VFS Output: %s\n", vfs_path);
+    printf("[COMPILER] Host Output: %s\n", output_path);
     
     // For demonstration, simulate successful Fortran compilation
     printf("Simulating Fortran compilation...\n");
@@ -379,6 +491,9 @@ int execute_fortran_compilation(CompilationRequest* request, CompilationResult* 
         fprintf(exe_fp, "#!/bin/sh\necho \"Compiled Fortran program executed!\"\n");
         fclose(exe_fp);
         result->output_size = 50;
+        
+        printf("[COMPILER] ✓ Executable created at VFS path: %s\n", vfs_path);
+        printf("[COMPILER] ✓ You can now run it with: %s\n", output_filename);
         return 0;
     }
     

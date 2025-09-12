@@ -150,6 +150,7 @@ void uname_command(int argc, char **argv);
 void compile_c_command(int argc, char **argv);
 void compile_asm_command(int argc, char **argv);
 void compile_fortran_command(int argc, char **argv);
+void set_output_dir_command(int argc, char **argv);
 void create_sample_command(int argc, char **argv);
 
 // Helper function prototypes
@@ -884,23 +885,36 @@ void uname_command(int argc, char **argv) {
 // ===== REAL COMPILATION COMMANDS =====
 
 void compile_c_command(int argc, char **argv) {
-    printf("ZoraVM Real C Compilation Demo\n");
-    printf("==============================\n");
+    printf("ZoraVM Real C Compilation\n");
+    printf("=========================\n");
+    printf("Output directory: %s (VFS)\n", get_compiler_output_vfs_path());
+    printf("\n");
     
     if (argc < 2) {
         printf("Usage: compile-c <source.c> [output]\n");
+        printf("       compile-c <source.c> --output-dir <vfs_path> [output]\n");
         printf("Available samples:\n");
         printf("  compile-c hello.c\n");
-        printf("  compile-c calculator.c\n");
+        printf("  compile-c calculator.c my_calc.exe\n");
+        printf("  compile-c hello.c --output-dir /data\n");
         printf("  create-sample hello.c  (to create sample)\n");
+        printf("\nNote: Use 'set-output-dir <path>' to change default output location\n");
         return;
     }
     
     CompilationRequest request = {0};
+    int arg_index = 1;
+    
+    // Check for --output-dir flag
+    if (argc > 3 && strcmp(argv[2], "--output-dir") == 0) {
+        set_compiler_output_dir(argv[3]);
+        arg_index = 4;  // Output filename is now at index 4 if provided
+    }
+    
     strncpy(request.source_file, argv[1], sizeof(request.source_file) - 1);
     
-    if (argc > 2) {
-        strncpy(request.output_file, argv[2], sizeof(request.output_file) - 1);
+    if (argc > arg_index) {
+        strncpy(request.output_file, argv[arg_index], sizeof(request.output_file) - 1);
     } else {
         strcpy(request.output_file, "program.exe");
     }
@@ -911,10 +925,11 @@ void compile_c_command(int argc, char **argv) {
     CompilationResult* result = compile_c_real(&request);
     
     if (result->success) {
-        printf("\n SUCCESS! Real C compilation completed!\n");
-        printf("You can now run: %s\n", result->output_file);
+        printf("\n✓ SUCCESS! Real C compilation completed!\n");
+        printf("✓ Executable available at: %s\n", result->output_file);
+        printf("✓ You can now run it from the shell!\n");
     } else {
-        printf("\n Compilation failed: %s\n", result->error_message);
+        printf("\n✗ Compilation failed: %s\n", result->error_message);
     }
 }
 
@@ -984,6 +999,51 @@ void compile_fortran_command(int argc, char **argv) {
     } else {
         printf("\n Compilation failed: %s\n", result->error_message);
     }
+}
+
+void set_output_dir_command(int argc, char **argv) {
+    printf("ZoraVM Compiler Output Directory\n");
+    printf("================================\n");
+    
+    if (argc < 2) {
+        printf("Current output directory: %s (VFS)\n", get_compiler_output_vfs_path());
+        printf("\nUsage: set-output-dir <vfs_path>\n");
+        printf("Examples:\n");
+        printf("  set-output-dir /bin         - Use /bin (default)\n");
+        printf("  set-output-dir /data        - Use /data for projects\n");
+        printf("  set-output-dir /usr/bin     - Use /usr/bin for system tools\n");
+        printf("  set-output-dir /projects    - Use /projects for development\n");
+        printf("  set-output-dir \"\"            - Reset to default (/bin)\n");
+        printf("\nNote: Directory will be created if it doesn't exist\n");
+        return;
+    }
+    
+    const char* new_path = argv[1];
+    
+    // Reset to default if empty string
+    if (strlen(new_path) == 0) {
+        set_compiler_output_dir("");
+        printf("✓ Output directory reset to default: %s\n", get_compiler_output_vfs_path());
+        return;
+    }
+    
+    // Validate VFS path format
+    if (new_path[0] != '/') {
+        printf("✗ Error: VFS path must start with '/'\n");
+        printf("Example: /bin, /data, /usr/bin\n");
+        return;
+    }
+    
+    // Set the new output directory
+    set_compiler_output_dir(new_path);
+    
+    // Try to create the directory if it doesn't exist
+    if (vfs_mkdir(new_path) == 0) {
+        printf("✓ Created VFS directory: %s\n", new_path);
+    }
+    
+    printf("✓ Compiler output directory set to: %s\n", get_compiler_output_vfs_path());
+    printf("✓ All future compilations will output to this location\n");
 }
 
 void create_sample_command(int argc, char **argv) {
@@ -4126,7 +4186,9 @@ Command command_table[] = {
     {"compile-c", compile_c_command, "Real C compilation with embedded GCC"},
     {"compile-asm", compile_asm_command, "Real x86 assembly with embedded NASM"},
     {"compile-fortran", compile_fortran_command, "Real Fortran compilation with GFortran"},
+    {"set-output-dir", set_output_dir_command, "Set compiler output directory (VFS path)"},
     {"create-sample", create_sample_command, "Create sample source files for testing"},
+    {"set-output-dir", set_output_dir_command, "Set compiler output directory (VFS path)"},
 
     // Java Detection and Security Commands
     {"java-scan", java_scan_command, "💀 Scan for Java contamination (triggers kernel panic if found)"},

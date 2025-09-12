@@ -79,4 +79,9 @@ int execute_fortran_compilation(CompilationRequest* request, CompilationResult* 
 void parse_compiler_errors(const char* compiler_output, CompilationResult* result);
 void format_compilation_output(CompilationResult* result);
 
+// VFS output path management
+void set_compiler_output_dir(const char* vfs_path);
+const char* get_compiler_output_vfs_path(void);
+char* get_output_host_path(const char* filename);
+
 #endif // UNIX_EMBEDDED_COMPILER_H

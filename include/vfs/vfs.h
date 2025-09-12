@@ -136,6 +136,9 @@ int vm_remove(const char* filename);
 int vm_ls(void);
 FILE* vm_fopen(const char* filename, const char* mode);
 
+// VFS to host path conversion
+char* vfs_get_host_path_from_vfs_path(const char* vfs_path);
+
 // Live file synchronization
 int vfs_sync_from_host(void);           // Sync changes from host to VFS (silent)
 int vfs_sync_from_host_verbose(void);   // Sync changes from host to VFS (with output)
