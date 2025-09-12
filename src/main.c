@@ -124,51 +124,31 @@ int vm_is_running(void) {
     return vm_initialized;
 }
 
+int vm_is_rebooting(void) {
+    return rebooting;
+}
+
 int main(int argc, char* argv[]) {
-    // Record startup time for UTF-8 debugging
-    time_t startup_time = time(NULL);
-    printf("[MAIN] ZoraVM starting at timestamp %ld\n", startup_time);
-    
     // Set locale and console encoding for proper Unicode/box-drawing character support
     setlocale(LC_ALL, "");
     
     // Windows-specific console encoding fixes
     #ifdef _WIN32
-    printf("[MAIN] Setting up UTF-8 console encoding...\n");
-    
     // Set console to UTF-8 for proper box-drawing characters
-    if (SetConsoleOutputCP(CP_UTF8)) {
-        printf("[MAIN] Console output set to UTF-8 (CP_UTF8)\n");
-    } else {
-        printf("[MAIN] WARNING: Failed to set console output to UTF-8\n");
-    }
-    
-    if (SetConsoleCP(CP_UTF8)) {
-        printf("[MAIN] Console input set to UTF-8 (CP_UTF8)\n");
-    } else {
-        printf("[MAIN] WARNING: Failed to set console input to UTF-8\n");
-    }
+    SetConsoleOutputCP(CP_UTF8);
+    SetConsoleCP(CP_UTF8);
     
     // Enable Unicode/UTF-8 output on Windows console
     HANDLE hOut = GetStdHandle(STD_OUTPUT_HANDLE);
     if (hOut != INVALID_HANDLE_VALUE) {
         DWORD dwMode = 0;
         GetConsoleMode(hOut, &dwMode);
-        printf("[MAIN] Current console mode: 0x%08X\n", dwMode);
         dwMode |= ENABLE_VIRTUAL_TERMINAL_PROCESSING;
-        if (SetConsoleMode(hOut, dwMode)) {
-            printf("[MAIN] Virtual terminal processing enabled\n");
-        } else {
-            printf("[MAIN] WARNING: Failed to enable virtual terminal processing\n");
-        }
+        SetConsoleMode(hOut, dwMode);
     }
     
-    // Force console mode reset to fix UTF-8 rendering issues
-    // This mimics what happens during pipe operations that fix the UTF-8
-    printf("[MAIN] Forcing console refresh to fix UTF-8 rendering...\n");
+    // Force console mode refresh to fix UTF-8 rendering issues
     fflush(stdout);
-    
-    // Instead of freopen, just force a console mode refresh
     HANDLE hStdout = GetStdHandle(STD_OUTPUT_HANDLE);
     if (hStdout != INVALID_HANDLE_VALUE) {
         DWORD currentMode;
@@ -176,21 +156,14 @@ int main(int argc, char* argv[]) {
             // Force console refresh by toggling a mode bit
             SetConsoleMode(hStdout, currentMode & ~ENABLE_VIRTUAL_TERMINAL_PROCESSING);
             SetConsoleMode(hStdout, currentMode | ENABLE_VIRTUAL_TERMINAL_PROCESSING);
-            printf("[MAIN] Console refreshed successfully - UTF-8 should now work\n");
         }
     }
     fflush(stdout);
-    
-    // Quick UTF-8 test immediately after setup
-    printf("[MAIN] UTF-8 test immediately after setup: ╔═══╗\n");
     
     // Detect terminal capabilities early
     int is_modern_terminal = detect_windows_terminal();
     if (!is_modern_terminal) {
         printf("NOTE: Running in legacy Console Host. For best experience, use Windows Terminal.\n");
-        printf("Run 'terminal-test' command in ZoraVM to check terminal capabilities.\n");
-    } else {
-        printf("[MAIN] Detected Windows Terminal - UTF-8 should work properly\n");
     }
     #endif
     
@@ -608,30 +581,33 @@ int main(int argc, char* argv[]) {
 #endif
         
 #if ZORA_VERBOSE_BOOT
-        printf("Cleanup complete. Restarting Zora VM...\n");
+        printf("Cleanup complete. VM ready for restart.\n");
+#else
+        printf("ZoraVM cleanup complete.\n");
 #endif
         
-        // Get the current executable path
-        char exe_path[MAX_PATH];
-        GetModuleFileNameA(NULL, exe_path, MAX_PATH);
+        // Instead of trying to restart automatically, prompt user to restart manually
+        printf("\n");
+        printf("════════════════════════════════════════════════════════════════════════════════\n");
+        printf("                               REBOOT COMPLETE                                 \n");
+        printf("════════════════════════════════════════════════════════════════════════════════\n");
+        printf("All VM components have been cleanly shut down.\n");
+        printf("To restart ZoraVM, simply run the executable again.\n");
+        printf("\n");
+        printf("Press 'q' and Enter to exit...\n");
         
-        // Create new process to restart the VM
-        STARTUPINFOA si = {0};
-        PROCESS_INFORMATION pi = {0};
-        si.cb = sizeof(si);
-        
-        if (CreateProcessA(NULL, exe_path, NULL, NULL, FALSE, 0, NULL, NULL, &si, &pi)) {
-#if ZORA_VERBOSE_BOOT
-            printf("VM restart initiated successfully.\n");
-#endif
-            CloseHandle(pi.hProcess);
-            CloseHandle(pi.hThread);
-            return 0; // Exit current instance
-        } else {
-            printf("Failed to restart VM. Error code: %lu\n", GetLastError());
-            printf("Please restart manually.\n");
-            return 1;
+        char exit_choice;
+        while (1) {
+            scanf(" %c", &exit_choice);
+            if (exit_choice == 'q' || exit_choice == 'Q') {
+                printf("Exiting ZoraVM. Goodbye!\n");
+                break;
+            } else {
+                printf("Press 'q' to exit: ");
+            }
         }
+        
+        return 0; // Clean exit
     }
 
 cleanup:

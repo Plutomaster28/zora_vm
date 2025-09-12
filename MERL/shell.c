@@ -68,6 +68,7 @@ void save_command(int argc, char* argv[]);
 void load_command(int argc, char* argv[]);
 void mount_command(int argc, char* argv[]);
 void sync_command(int argc, char* argv[]);
+void livesync_command(int argc, char* argv[]);
 void persistent_ls_command(int argc, char* argv[]);
 void ifconfig_command(int argc, char* argv[]);
 void ping_command(int argc, char **argv);
@@ -1920,6 +1921,12 @@ void start_shell() {
     printf("════════════════════════════════════════════════════════════════════════════════\n\n");
 
     while (1) {
+        // Check if VM reboot has been triggered
+        if (vm_is_rebooting()) {
+            printf("Shell exiting for VM reboot...\n");
+            break;
+        }
+        
         static int command_count = 0;
         command_count++;
         
@@ -3867,6 +3874,7 @@ Command command_table[] = {
     {"load", load_command, "Load directory from persistent storage"},
     {"mount", mount_command, "Mount host directory to VM path"},
     {"sync", sync_command, "Sync all persistent storage"},
+    {"livesync", livesync_command, "Control live file synchronization"},
     {"pls", persistent_ls_command, "List persistent storage contents"},
     {"ifconfig", ifconfig_command, "Configure network interface"},
     {"ping", ping_command, "Send ICMP ping packets"},
@@ -5138,6 +5146,58 @@ void sync_command(int argc, char* argv[]) {
     vfs_sync_all();
     
     printf("Sync complete\n");
+}
+
+void livesync_command(int argc, char* argv[]) {
+    if (argc < 2) {
+        printf("Live File Synchronization Control\n");
+        printf("Usage: livesync <command>\n");
+        printf("Commands:\n");
+        printf("  start    - Start live file synchronization\n");
+        printf("  stop     - Stop live file synchronization\n");
+        printf("  status   - Show live sync status\n");
+        printf("  sync     - Perform one-time sync from host\n");
+        printf("\nLive sync monitors the host filesystem and automatically\n");
+        printf("updates the VFS when files are added or modified externally.\n");
+        return;
+    }
+    
+    if (strcmp(argv[1], "start") == 0) {
+        if (vfs_is_live_sync_enabled()) {
+            printf("Live sync is already running\n");
+        } else {
+            if (vfs_start_live_sync()) {
+                printf("Live file synchronization started successfully\n");
+                printf("Background daemon will silently monitor for external file changes\n");
+            } else {
+                printf("Failed to start live file synchronization\n");
+            }
+        }
+    } else if (strcmp(argv[1], "stop") == 0) {
+        if (vfs_is_live_sync_enabled()) {
+            vfs_stop_live_sync();
+            printf("Live file synchronization stopped\n");
+        } else {
+            printf("Live sync is not running\n");
+        }
+    } else if (strcmp(argv[1], "status") == 0) {
+        if (vfs_is_live_sync_enabled()) {
+            printf("Live file synchronization: ACTIVE\n");
+            printf("Background daemon silently monitoring host filesystem\n");
+        } else {
+            printf("Live file synchronization: INACTIVE\n");
+        }
+    } else if (strcmp(argv[1], "sync") == 0) {
+        printf("Performing one-time sync from host filesystem...\n");
+        if (vfs_sync_from_host_verbose()) {
+            printf("Host-to-VFS sync completed\n");
+        } else {
+            printf("Sync failed - check that host root directory is set\n");
+        }
+    } else {
+        printf("Unknown livesync command: %s\n", argv[1]);
+        printf("Use 'livesync' without arguments for help\n");
+    }
 }
 
 void persistent_ls_command(int argc, char* argv[]) {

@@ -136,4 +136,11 @@ int vm_remove(const char* filename);
 int vm_ls(void);
 FILE* vm_fopen(const char* filename, const char* mode);
 
+// Live file synchronization
+int vfs_sync_from_host(void);           // Sync changes from host to VFS (silent)
+int vfs_sync_from_host_verbose(void);   // Sync changes from host to VFS (with output)
+int vfs_start_live_sync(void);          // Start background file monitoring
+void vfs_stop_live_sync(void);          // Stop background file monitoring
+int vfs_is_live_sync_enabled(void);     // Check if live sync is active
+
 #endif // VFS_H

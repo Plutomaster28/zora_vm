@@ -355,6 +355,9 @@ void vfs_cleanup_node(VNode* node) {
 }
 
 void vfs_cleanup(void) {
+    // Stop live sync before cleanup
+    vfs_stop_live_sync();
+    
     if (vm_fs) {
         vfs_cleanup_node(vm_fs->root);
         free(vm_fs);
@@ -1140,4 +1143,269 @@ int vfs_parse_permissions(const char* perm_str) {
     }
     
     return VFS_DEFAULT_FILE_PERMS;
+}
+
+// Live file synchronization implementation
+static int live_sync_enabled = 0;
+static HANDLE live_sync_thread = NULL;
+static int live_sync_should_stop = 0;
+
+// Recursively scan host directory and update VFS
+static int vfs_sync_directory_from_host(const char* host_path, VNode* vfs_node, int verbose) {
+    WIN32_FIND_DATAA find_data;
+    HANDLE hFind;
+    char search_path[MAX_PATH];
+    char full_path[MAX_PATH];
+    
+    // Create search pattern
+    snprintf(search_path, sizeof(search_path), "%s\\*", host_path);
+    
+    // First pass: Mark all existing VFS files as "not found" using a temporary flag
+    // We'll use the modified_time field temporarily to mark files (set to 0 = not found)
+    for (VNode* child = vfs_node->children; child; child = child->next) {
+        if (!child->is_directory) {
+            child->modified_time = 0; // Mark as not found
+        }
+    }
+    
+    hFind = FindFirstFileA(search_path, &find_data);
+    if (hFind == INVALID_HANDLE_VALUE) {
+        return 0; // Directory doesn't exist or can't be read
+    }
+    
+    do {
+        // Skip . and ..
+        if (strcmp(find_data.cFileName, ".") == 0 || strcmp(find_data.cFileName, "..") == 0) {
+            continue;
+        }
+        
+        // Create full path
+        snprintf(full_path, sizeof(full_path), "%s\\%s", host_path, find_data.cFileName);
+        
+        // Check if this file/directory exists in VFS
+        VNode* existing = NULL;
+        for (VNode* child = vfs_node->children; child; child = child->next) {
+            if (strcmp(child->name, find_data.cFileName) == 0) {
+                existing = child;
+                break;
+            }
+        }
+        
+        if (find_data.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) {
+            // It's a directory
+            if (!existing) {
+                // Create new directory in VFS
+                VNode* new_dir = vfs_create_directory_node(find_data.cFileName);
+                if (new_dir) {
+                    new_dir->parent = vfs_node;
+                    new_dir->next = vfs_node->children;
+                    vfs_node->children = new_dir;
+                    if (verbose) {
+                        printf("[LIVE-SYNC] Added directory: %s\n", find_data.cFileName);
+                    }
+                }
+                existing = new_dir;
+            }
+            
+            // Recursively sync subdirectory
+            if (existing) {
+                vfs_sync_directory_from_host(full_path, existing, verbose);
+            }
+        } else {
+            // It's a file
+            if (!existing) {
+                // Create new file in VFS
+                VNode* new_file = vfs_create_file_node(find_data.cFileName);
+                if (new_file) {
+                    new_file->parent = vfs_node;
+                    new_file->next = vfs_node->children;
+                    vfs_node->children = new_file;
+                    
+                    // Load file content from host
+                    FILE* file = fopen(full_path, "rb");
+                    if (file) {
+                        fseek(file, 0, SEEK_END);
+                        long file_size = ftell(file);
+                        fseek(file, 0, SEEK_SET);
+                        
+                        if (file_size > 0) {
+                            new_file->data = malloc(file_size);
+                            if (new_file->data) {
+                                fread(new_file->data, 1, file_size, file);
+                                new_file->size = file_size;
+                            }
+                        } else {
+                            new_file->size = 0; // Empty file
+                        }
+                        fclose(file);
+                    }
+                    
+                    // Set proper modification time
+                    new_file->modified_time = time(NULL);
+                    
+                    if (verbose) {
+                        printf("[LIVE-SYNC] Added file: %s (%zu bytes)\n", find_data.cFileName, new_file->size);
+                    }
+                }
+            } else {
+                // File exists, mark as found
+                time_t original_mod_time = existing->modified_time;
+                existing->modified_time = time(NULL); // Mark as found
+                
+                // Check if file was actually modified on host
+                FILETIME ft;
+                HANDLE hFile = CreateFileA(full_path, GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
+                if (hFile != INVALID_HANDLE_VALUE) {
+                    if (GetFileTime(hFile, NULL, NULL, &ft)) {
+                        ULARGE_INTEGER uli;
+                        uli.LowPart = ft.dwLowDateTime;
+                        uli.HighPart = ft.dwHighDateTime;
+                        time_t file_time = (time_t)((uli.QuadPart - 116444736000000000ULL) / 10000000ULL);
+                        
+                        if (file_time > original_mod_time) {
+                            // File was modified, reload it
+                            if (existing->data) {
+                                free(existing->data);
+                                existing->data = NULL;
+                            }
+                            
+                            FILE* file = fopen(full_path, "rb");
+                            if (file) {
+                                fseek(file, 0, SEEK_END);
+                                long file_size = ftell(file);
+                                fseek(file, 0, SEEK_SET);
+                                
+                                if (file_size > 0) {
+                                    existing->data = malloc(file_size);
+                                    if (existing->data) {
+                                        fread(existing->data, 1, file_size, file);
+                                        existing->size = file_size;
+                                    }
+                                } else {
+                                    existing->size = 0; // Empty file
+                                }
+                                fclose(file);
+                            }
+                            
+                            existing->modified_time = file_time;
+                            
+                            if (verbose) {
+                                printf("[LIVE-SYNC] Updated file: %s (%zu bytes)\n", find_data.cFileName, existing->size);
+                            }
+                        }
+                    }
+                    CloseHandle(hFile);
+                }
+            }
+        }
+    } while (FindNextFileA(hFind, &find_data));
+    
+    FindClose(hFind);
+    
+    // Second pass: Remove VFS files that were not found on host
+    VNode* child = vfs_node->children;
+    VNode* prev = NULL;
+    while (child) {
+        VNode* next = child->next;
+        
+        if (!child->is_directory && child->modified_time == 0) {
+            // This file was not found on host, remove it from VFS
+            if (verbose) {
+                printf("[LIVE-SYNC] Removed file: %s (no longer exists on host)\n", child->name);
+            }
+            
+            if (prev) {
+                prev->next = next;
+            } else {
+                vfs_node->children = next;
+            }
+            
+            if (child->data) {
+                free(child->data);
+            }
+            free(child);
+        } else {
+            prev = child;
+        }
+        
+        child = next;
+    }
+    
+    return 1;
+}
+
+// Sync changes from host filesystem to VFS
+int vfs_sync_from_host(void) {
+    if (!vm_fs || !vm_fs->root || strlen(host_root_directory) == 0) {
+        return 0;
+    }
+    
+    // Silent sync - only output if manually triggered
+    return vfs_sync_directory_from_host(host_root_directory, vm_fs->root, 0);
+}
+
+// Verbose sync for manual use
+int vfs_sync_from_host_verbose(void) {
+    if (!vm_fs || !vm_fs->root || strlen(host_root_directory) == 0) {
+        return 0;
+    }
+    
+    printf("[LIVE-SYNC] Syncing from host: %s\n", host_root_directory);
+    return vfs_sync_directory_from_host(host_root_directory, vm_fs->root, 1);
+}
+
+// Background thread for live file monitoring
+static DWORD WINAPI live_sync_thread_proc(LPVOID lpParam) {
+    while (!live_sync_should_stop) {
+        vfs_sync_from_host();
+        Sleep(2000); // Check every 2 seconds
+    }
+    return 0;
+}
+
+// Start background file monitoring
+int vfs_start_live_sync(void) {
+    if (live_sync_enabled) {
+        return 1; // Already running
+    }
+    
+    if (strlen(host_root_directory) == 0) {
+        printf("[LIVE-SYNC] Error: No host root directory set\n");
+        return 0;
+    }
+    
+    live_sync_should_stop = 0;
+    live_sync_thread = CreateThread(NULL, 0, live_sync_thread_proc, NULL, 0, NULL);
+    
+    if (live_sync_thread) {
+        live_sync_enabled = 1;
+        printf("[LIVE-SYNC] Live file synchronization started (background daemon)\n");
+        return 1;
+    } else {
+        printf("[LIVE-SYNC] Error: Failed to start live sync thread\n");
+        return 0;
+    }
+}
+
+// Stop background file monitoring
+void vfs_stop_live_sync(void) {
+    if (!live_sync_enabled) {
+        return;
+    }
+    
+    live_sync_should_stop = 1;
+    
+    if (live_sync_thread) {
+        WaitForSingleObject(live_sync_thread, 5000); // Wait up to 5 seconds
+        CloseHandle(live_sync_thread);
+        live_sync_thread = NULL;
+    }
+    
+    live_sync_enabled = 0;
+    printf("[LIVE-SYNC] Live file synchronization stopped\n");
+}
+
+// Check if live sync is active
+int vfs_is_live_sync_enabled(void) {
+    return live_sync_enabled;
 }
