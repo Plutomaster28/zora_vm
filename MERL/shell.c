@@ -297,15 +297,32 @@ void reset_color() {
 }
 
 void print_colored_prompt() {
-    // Simpler, more robust approach to avoid encoding issues
-    // Make sure console mode is set properly for ANSI
-    HANDLE hConsole = GetStdHandle(STD_OUTPUT_HANDLE);
-    DWORD dwMode = 0;
+    // Aggressive buffer clearing before printing prompt
+#ifdef _WIN32
+    HANDLE hStdin = GetStdHandle(STD_INPUT_HANDLE);
+    HANDLE hStdout = GetStdHandle(STD_OUTPUT_HANDLE);
     
-    if (GetConsoleMode(hConsole, &dwMode)) {
-        dwMode |= ENABLE_VIRTUAL_TERMINAL_PROCESSING;
-        SetConsoleMode(hConsole, dwMode);
+    // Flush all output buffers first
+    fflush(stdout);
+    fflush(stderr);
+    
+    // Clear any pending console input
+    if (hStdin != INVALID_HANDLE_VALUE) {
+        FlushConsoleInputBuffer(hStdin);
     }
+    
+    // Drain any pending keyboard input
+    while (_kbhit()) {
+        _getch();
+    }
+    
+    // Ensure console mode is set properly for ANSI
+    DWORD dwMode = 0;
+    if (GetConsoleMode(hStdout, &dwMode)) {
+        dwMode |= ENABLE_VIRTUAL_TERMINAL_PROCESSING;
+        SetConsoleMode(hStdout, dwMode);
+    }
+#endif
     
     // Use simple ANSI colors - avoid complex sequences
     printf("\033[92m%s\033[0m", current_user);  // Bright green user
@@ -316,6 +333,22 @@ void print_colored_prompt() {
     printf("\033[92m> \033[0m");                // Bright green prompt
     
     fflush(stdout);  // Ensure prompt is displayed immediately
+    
+    // Additional aggressive buffer clearing after prompt
+#ifdef _WIN32
+    // Small delay to let console settle
+    Sleep(1);
+    
+    // Clear input buffer again
+    if (hStdin != INVALID_HANDLE_VALUE) {
+        FlushConsoleInputBuffer(hStdin);
+    }
+    
+    // Final drain of any stray input
+    while (_kbhit()) {
+        _getch();
+    }
+#endif
 }
 
 // Missing file system commands
@@ -1939,6 +1972,36 @@ void start_shell() {
         // Render the colored shell prompt
         print_colored_prompt();
         
+        // Extra buffer flushing to prevent ANSI sequence leakage
+#ifdef _WIN32
+        HANDLE hStdin = GetStdHandle(STD_INPUT_HANDLE);
+        if (hStdin != INVALID_HANDLE_VALUE) {
+            FlushConsoleInputBuffer(hStdin);
+        }
+#endif
+        fflush(stdout);
+        fflush(stdin);
+        
+        // Even more aggressive buffer clearing with multiple methods
+#ifdef _WIN32
+        // Method 1: Windows console buffer clearing
+        FlushConsoleInputBuffer(GetStdHandle(STD_INPUT_HANDLE));
+        
+        // Method 2: Drain keyboard buffer
+        while (_kbhit()) {
+            _getch();
+        }
+        
+        // Method 3: Small delay to let console settle
+        Sleep(5);
+        
+        // Method 4: Clear again after delay
+        FlushConsoleInputBuffer(GetStdHandle(STD_INPUT_HANDLE));
+        while (_kbhit()) {
+            _getch();
+        }
+#endif
+        
         if (fgets(input, sizeof(input), stdin) == NULL) {
             printf("\nExiting VM...\n");
             break;
@@ -1947,13 +2010,36 @@ void start_shell() {
         // Remove trailing newline character FIRST
         input[strcspn(input, "\n")] = '\0';
         
+        // Quick rejection of obviously corrupted input at start
+        int input_length = strlen(input);
+        if (input_length > 0) {
+            unsigned char first_char = (unsigned char)input[0];
+            
+            // Immediately reject input starting with high-bit characters or control chars
+            if (first_char >= 0x80 || (first_char < 32 && first_char != '\t')) {
+                printf("Input corruption detected (starts with \\x%02X), clearing buffers...\n", first_char);
+#ifdef _WIN32
+                FlushConsoleInputBuffer(GetStdHandle(STD_INPUT_HANDLE));
+                while (_kbhit()) _getch();
+#endif
+                fflush(stdin);
+                memset(input, 0, sizeof(input));
+                continue;
+            }
+        }
+        
         // Aggressive input validation and corruption detection
         int input_corrupted = 0;
-        int input_length = strlen(input);
         
         // Check for various types of corruption
         for (int i = 0; i < input_length; i++) {
             unsigned char c = (unsigned char)input[i];
+            
+            // Check for ANSI escape sequences that leaked into input
+            if (c == 0x1B || c == 27) { // ESC character
+                input_corrupted = 1;
+                break;
+            }
             
             // Check for UTF-8 replacement character (0xEF 0xBF 0xBD)
             if (i < input_length - 2 && 
@@ -1966,6 +2052,15 @@ void start_shell() {
             if ((c < 32 && c != '\t') || c == 0xFF || c == 0xFE) {
                 input_corrupted = 1;
                 break;
+            }
+            
+            // Check for cursor control characters that sometimes leak through
+            if (c == 'A' || c == 'B' || c == 'C' || c == 'D') {
+                // If it's a single character command and looks like cursor control
+                if (input_length == 1) {
+                    input_corrupted = 1;
+                    break;
+                }
             }
             
             // Check for isolated high-bit characters that are likely corruption
@@ -1983,7 +2078,18 @@ void start_shell() {
         // If input is corrupted, clear everything and restart
         if (input_corrupted || input_length == 0) {
             if (input_corrupted) {
-                printf("Input corruption detected, clearing buffers...\n");
+                // More detailed corruption reporting
+                printf("Input corruption detected (input: '");
+                for (int i = 0; i < input_length && i < 20; i++) {
+                    unsigned char c = (unsigned char)input[i];
+                    if (c >= 32 && c <= 126) {
+                        printf("%c", c);
+                    } else {
+                        printf("\\x%02X", c);
+                    }
+                }
+                printf("'), clearing buffers...\n");
+                
                 // Don't execute corrupted input as a command
                 
                 // Aggressive buffer clearing
@@ -2390,6 +2496,26 @@ void ls_command(int argc, char **argv) {
     if (!long_format) {
         printf("\n");
     }
+    
+    // Aggressive buffer flushing after ls output
+    fflush(stdout);
+    fflush(stderr);
+    
+#ifdef _WIN32
+    // Clear console input buffer to prevent corruption
+    HANDLE hStdin = GetStdHandle(STD_INPUT_HANDLE);
+    if (hStdin != INVALID_HANDLE_VALUE) {
+        FlushConsoleInputBuffer(hStdin);
+    }
+    
+    // Drain any stray keyboard input that might have accumulated
+    while (_kbhit()) {
+        _getch();
+    }
+    
+    // Small delay to let console settle after VFS operations
+    Sleep(1);
+#endif
     
     free_parsed_command(cmd);
 }
