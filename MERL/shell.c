@@ -18,6 +18,7 @@
 #include "platform/platform.h"  // FIXED: Use correct path
 #include "shell.h"
 #include "user.h"
+#include "../include/i18n.h"
 #include "kernel.h"
 #include "tetra.h"
 #include "color-and-test.h"
@@ -63,6 +64,7 @@ int execute_pipeline(char *pipeline_str);
 void redirect_printf(const char* format, ...);
 void man_command(int argc, char **argv);
 void help_command(int argc, char **argv);
+void language_command(int argc, char **argv);
 void theme_command(int argc, char **argv);
 void save_command(int argc, char* argv[]);
 void load_command(int argc, char* argv[]);
@@ -1976,6 +1978,9 @@ void plcode_command(int argc, char **argv) {
 void start_shell() {
     char input[256];
 
+    // Initialize internationalization system
+    i18n_init();
+    
     // Initialize user system
     load_users();
     
@@ -4013,6 +4018,8 @@ void java_status_command(int argc, char **argv) {
 Command command_table[] = {
     {"man", man_command, "Displays information about commands."},
     {"help", help_command, "Displays the help menu."},
+    {"language", language_command, "Change system language (en, ja, zh-cn, ko)."},
+    {"lang", language_command, "Change system language (shortcut for language)."},
     {"theme", theme_command, "Change ZoraVM visual theme."},
     {"sysinfo", sysinfo_command, "Displays system information and credits."},
     {"pwd", pwd_command, "Prints the current working directory."},
@@ -5120,7 +5127,13 @@ void help_command(int argc, char **argv) {
     printf("╔══════════════════════════════════════════════════════════════════════════════╗\n");
     printf("║                            ZORA VM - MERL SHELL                            ║\n");
     printf("║                        Unix-Compatible Command Environment                    ║\n");
+    printf("║                      Multi-Language Support: EN/日本語/中文/한국어                ║\n");
     printf("╚══════════════════════════════════════════════════════════════════════════════╝\n");
+    printf("\n");
+    
+    printf(" LANGUAGE & INTERNATIONALIZATION:\n");
+    printf("  %-12s - Change system language (en/ja/zh-cn/ko) %-12s - Language shortcut\n", "language", "lang");
+    printf("  Examples: 'language ja' (日本語), 'lang zh-cn' (简体中文), 'language ko' (한국어)\n");
     printf("\n");
     
     printf(" FILE SYSTEM COMMANDS:\n");
@@ -5196,18 +5209,29 @@ void help_command(int argc, char **argv) {
     printf("  %-12s - Toggle retro mode                %-12s - Syntax highlighting\n", "retro", "syntax");
     printf("  %-12s - Theme control                    %-12s - List available themes\n", "theme", "themes");
     printf("  %-12s - Test terminal capabilities       %-12s - Launch Windows Terminal\n", "terminal-test", "launch-wt");
-    printf("  %-12s - Monitor UTF-8 over time          %-12s - Fix UTF-8 encoding\n", "utf8-monitor", "utf8-fix");
-    printf("  %-12s - Test UTF-8 support               \n", "utf8-test");
+    printf("  %-12s - Terminal demo features           \n", "terminal-demo");
+    printf("\n");
+    
+    printf(" CONSOLE & UTF-8 DIAGNOSTICS:\n");
+    printf("  %-12s - Debug console font compatibility %-12s - Force console refresh\n", "font-debug", "console-refresh");
+    printf("  %-12s - Test console capabilities        %-12s - Clear input buffer\n", "console-test", "clear-buffer");
+    printf("  %-12s - Detailed UTF-8 rendering test    %-12s - Monitor UTF-8 over time\n", "utf8-detailed", "utf8-monitor");
+    printf("  %-12s - Attempt to fix UTF-8 issues      %-12s - Test UTF-8 support\n", "utf8-fix", "utf8-test");
+    printf("\n");
+    
+    printf(" VFS & LIVE SYNCHRONIZATION:\n");
+    printf("  %-12s - Control live file synchronization    %-12s - Save to persistent storage\n", "livesync", "save");
+    printf("  %-12s - Load from persistent storage         %-12s - Mount host directory\n", "load", "mount");
+    printf("  %-12s - Sync all persistent storage          %-12s - List persistent contents\n", "sync", "pls");
+    printf("  %-12s - Test VFS functionality               %-12s - Debug VFS structure\n", "testvfs", "debugvfs");
     printf("\n");
     
     printf(" VM SPECIFIC COMMANDS:\n");
     printf("  %-12s - VM status information            %-12s - Reboot virtual machine\n", "vmstat", "reboot");
-    printf("  %-12s - Shutdown VM                      %-12s - Test VFS functionality\n", "shutdown", "testvfs");
-    printf("  %-12s - Debug VFS structure              %-12s - Execute binary files\n", "debugvfs", "exec");
+    printf("  %-12s - Shutdown VM                      %-12s - Execute binary files\n", "shutdown", "exec");
     printf("  %-12s - Sandbox status                   %-12s - Security testing\n", "sandbox-status", "test-sandbox");
-    printf("  %-12s - Persistent storage list          %-12s - Save to persistent\n", "pls", "save");
-    printf("  %-12s - Load from persistent             %-12s - Mount host directory\n", "load", "mount");
-    printf("  %-12s - Sync persistent storage          %-12s - Exit shell and VM\n", "sync", "exit");
+    printf("  %-12s - Windows binary execution         %-12s - List available binaries\n", "run-windows", "list-binaries");
+    printf("  %-12s - Exit shell and VM               \n", "exit");
     printf("\n");
     
     printf(" SCRIPTING & PROGRAMMING:\n");
@@ -5226,18 +5250,26 @@ void help_command(int argc, char **argv) {
 
     printf(" REAL EMBEDDED COMPILERS:\n");
     printf("  %-12s - Real C compilation with GCC      %-12s - Real x86 assembly with NASM\n", "compile-c", "compile-asm");
-    printf("  %-12s - Real Fortran compilation         %-12s - Create sample source files\n", "compile-fortran", "create-sample");
+    printf("  %-12s - Real Fortran compilation         %-12s - Set compiler output directory\n", "compile-fortran", "set-output-dir");
+    printf("  %-12s - Create sample source files       \n", "create-sample");
     printf("\n");
 
     printf(" RESEARCH UNIX COMMANDS:\n");
     printf("  %-12s - C compiler interface             %-12s - Fortran 77 compiler\n", "cc", "f77");
     printf("  %-12s - Assembler interface              %-12s - Link editor\n", "as", "ld");
     printf("  %-12s - Yet Another Compiler Compiler    %-12s - Lexical analyzer generator\n", "yacc", "lex");
-    printf("  %-12s - Stream editor                    %-12s - Text formatting system\n", "sed", "nroff");
-    printf("  %-12s - Display IPC facilities           %-12s - Message queue control\n", "ipcs", "msgctl");
+    printf("  %-12s - Stream editor                    %-12s - Advanced UNIX awk\n", "sed", "awk_unix");
+    printf("  %-12s - Text formatting system           %-12s - Display IPC facilities\n", "nroff", "ipcs");
+    printf("  %-12s - Message queue control            %-12s - Telnet connection\n", "msgctl", "telnet");
     printf("  %-12s - Display random fortune           %-12s - Launch classic UNIX games\n", "fortune", "games");
     printf("  %-12s - Create ASCII art banners         %-12s - Prime factorization\n", "banner", "factor");
     printf("  %-12s - Generate prime numbers           \n", "primes");
+    printf("\n");
+    
+    printf(" JAVA DETECTION & SECURITY (DEMONSTRATION):\n");
+    printf("  %-12s -  Scan for Java contamination    %-12s -  Quarantine Java files\n", "java-scan", "java-quarantine");
+    printf("  %-12s -  Show Java detection status     \n", "java-status");
+    printf("  Warning: java-scan triggers kernel panic if Java files detected! (Demo feature)\n");
     printf("\n");
     
     printf(" SHELL OPERATORS:\n");
@@ -5252,6 +5284,13 @@ void help_command(int argc, char **argv) {
     
     printf(" USAGE EXAMPLES:\n");
     printf("  help grep                    - Get detailed help for grep command\n");
+    printf("  language ja                  - Switch to Japanese (日本語)\n");
+    printf("  lang zh-cn                   - Switch to Simplified Chinese (简体中文)\n");
+    printf("  livesync enable              - Enable live file synchronization\n");
+    printf("  save myproject /host/backup  - Save project to persistent storage\n");
+    printf("  mount /host/data /vm/data    - Mount host directory in VM\n");
+    printf("  utf8-fix && utf8-test        - Fix then test UTF-8 encoding\n");
+    printf("  java-scan                    - Scan for Java contamination (demo)\n");
     printf("  ls | grep .txt               - List files and filter for .txt files\n");
     printf("  ps | grep myprocess          - Find specific processes\n");
     printf("  help | grep file             - Find all file-related commands\n");
@@ -5271,7 +5310,8 @@ void help_command(int argc, char **argv) {
     printf("  top | head -20               - Show top 20 processes\n");
     printf("  find . -name '*.txt' | wc -l - Count text files recursively\n");
     printf("  version && osinfo            - Show version then system info\n");
-    printf("  utf8-fix && utf8-test        - Fix then test UTF-8 encoding\n");
+    printf("  theme dark && style save     - Apply dark theme and save styling\n");
+    printf("  console-refresh              - Refresh console for better UTF-8 display\n");
     printf("\n");
     
     printf(" QUICK HELP:\n");
@@ -5280,6 +5320,42 @@ void help_command(int argc, char **argv) {
     printf("  Type 'which <command>' to locate a command\n");
     printf("  Use Tab completion for command names and file paths\n");
     printf("\n");
+}
+
+void language_command(int argc, char **argv) {
+    if (argc == 1) {
+        // Show current language and available options
+        printf("%s %s (%s)\n", 
+               _(STR_CURRENT_LANGUAGE),
+               i18n_get_language_name(i18n_get_language()),
+               i18n_get_language_native_name(i18n_get_language()));
+        printf("\n");
+        i18n_list_languages();
+        printf("\nUsage: language <code>\n");
+        printf("Example: language ja\n");
+        return;
+    }
+    
+    if (argc == 2) {
+        language_t new_lang = i18n_parse_language(argv[1]);
+        
+        if (new_lang == ZORA_LANG_COUNT) {
+            printf("%s\n", _(STR_INVALID_LANGUAGE));
+            i18n_list_languages();
+            return;
+        }
+        
+        i18n_set_language(new_lang);
+        printf("%s %s (%s)\n", 
+               _(STR_LANGUAGE_CHANGED),
+               i18n_get_language_name(new_lang),
+               i18n_get_language_native_name(new_lang));
+        return;
+    }
+    
+    printf("%s\n", _(STR_INVALID_ARGUMENTS));
+    printf("Usage: language [code]\n");
+    printf("Available codes: en, ja, zh-cn, ko\n");
 }
 
 void theme_command(int argc, char **argv) {

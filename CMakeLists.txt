@@ -146,6 +146,7 @@ include_directories(include include/platform include/binary include/merl include
 set(SOURCES
     # Main
     src/main.c
+    src/i18n.c
     
     # Core VM
     src/cpu/cpu.c
