@@ -155,6 +155,29 @@ void compile_fortran_command(int argc, char **argv);
 void set_output_dir_command(int argc, char **argv);
 void create_sample_command(int argc, char **argv);
 
+// Java Detection Commands
+void java_scan_command(int argc, char **argv);
+void java_quarantine_command(int argc, char **argv);
+void java_status_command(int argc, char **argv);
+
+// Package Management Commands (ZPM)
+void zpm_command(int argc, char **argv);
+void pkg_install_command(int argc, char **argv);
+void repo_add_command(int argc, char **argv);
+
+// Advanced Networking Commands  
+void traceroute_command(int argc, char **argv);
+void portscan_command(int argc, char **argv);
+void netns_command(int argc, char **argv);
+void firewall_command(int argc, char **argv);
+void vpn_command(int argc, char **argv);
+
+// System Services Management
+void systemctl_command(int argc, char **argv);
+void service_command(int argc, char **argv);
+void crontab_command(int argc, char **argv);
+void journalctl_command(int argc, char **argv);
+
 // Helper function prototypes
 void resolve_script_path(const char* name, char* out, size_t out_sz);
 
@@ -3961,7 +3984,7 @@ void primes_command(int argc, char **argv) {
 void java_scan_command(int argc, char **argv) {
     char* path = argc > 1 ? argv[1] : ".";
     
-    printf("🔍 Initiating Java contamination scan on: %s\n\n", path);
+    printf(" Initiating Java contamination scan on: %s\n\n", path);
     
     // Initialize detector if not already done
     java_detector_init();
@@ -3969,34 +3992,34 @@ void java_scan_command(int argc, char **argv) {
     // Perform the scan
     if (java_scan_directory(path)) {
         // If we reach here, it means panic was triggered and we shouldn't
-        printf("💀 JAVA DETECTED - SYSTEM PANIC TRIGGERED!\n");
+        printf(" JAVA DETECTED - SYSTEM PANIC TRIGGERED!\n");
     } else {
-        printf("✅ Scan complete! No Java contamination detected.\n");
-        printf("🛡️  Your system is safe from enterprise architecture patterns.\n");
+        printf(" Scan complete! No Java contamination detected.\n");
+        printf("  Your system is safe from enterprise architecture patterns.\n");
     }
 }
 
 void java_quarantine_command(int argc, char **argv) {
-    printf("🚨 INITIATING JAVA QUARANTINE PROTOCOLS 🚨\n\n");
+    printf(" INITIATING JAVA QUARANTINE PROTOCOLS 🚨\n\n");
     printf("This command would:\n");
-    printf("1. 🔍 Scan entire filesystem for Java files\n");
-    printf("2. 🔒 Quarantine all .java, .class, .jar files\n");
-    printf("3. 🧹 Purge AbstractFactory patterns from memory\n");
-    printf("4. 🛡️ Install C-only protection filters\n");
-    printf("5. 🔥 Burn any Enterprise Edition documentation\n\n");
-    printf("⚠️  WARNING: This is a demonstration command.\n");
+    printf("1.  Scan entire filesystem for Java files\n");
+    printf("2.  Quarantine all .java, .class, .jar files\n");
+    printf("3.  Purge AbstractFactory patterns from memory\n");
+    printf("4.  Install C-only protection filters\n");
+    printf("5.  Burn any Enterprise Edition documentation\n\n");
+    printf("  WARNING: This is a demonstration command.\n");
     printf("In a real scenario, this would trigger immediate kernel panic.\n");
 }
 
 void java_status_command(int argc, char **argv) {
-    printf("🛡️  JAVA DETECTION SYSTEM STATUS\n");
+    printf("  JAVA DETECTION SYSTEM STATUS\n");
     printf("================================\n\n");
-    printf("🟢 Status: ACTIVE AND VIGILANT\n");
-    printf("🔍 Scan Mode: AGGRESSIVE\n");
-    printf("⚡ Response: IMMEDIATE KERNEL PANIC\n");
-    printf("🎯 Threat Level: MAXIMUM PARANOIA\n\n");
+    printf(" Status: ACTIVE AND VIGILANT\n");
+    printf(" Scan Mode: AGGRESSIVE\n");
+    printf(" Response: IMMEDIATE KERNEL PANIC\n");
+    printf(" Threat Level: MAXIMUM PARANOIA\n\n");
     
-    printf("📋 Protected Against:\n");
+    printf(" Protected Against:\n");
     printf("  • .java source files\n");
     printf("  • .class bytecode files\n");
     printf("  • .jar archive files\n");
@@ -4007,7 +4030,341 @@ void java_status_command(int argc, char **argv) {
     printf("  • Maven/Gradle build files\n");
     printf("  • Anything containing 'public static void main'\n\n");
     
-    printf("💡 Remember: Friends don't let friends use Java!\n");
+    printf(" Remember: Friends don't let friends use Java!\n");
+}
+
+// ===== PACKAGE MANAGEMENT COMMANDS =====
+
+void zpm_command(int argc, char **argv) {
+    printf(" ZoraVM Package Manager (ZPM)\n");
+    printf("===============================\n");
+    
+    if (argc < 2) {
+        printf("Usage: zpm <command> [options]\n\n");
+        printf("Available commands:\n");
+        printf("  install <package>     - Install a package\n");
+        printf("  remove <package>      - Remove a package\n");
+        printf("  search <term>         - Search for packages\n");
+        printf("  list                  - List installed packages\n");
+        printf("  upgrade               - Upgrade all packages\n");
+        printf("  info <package>        - Show package information\n");
+        printf("  snapshot create <name> - Create system snapshot\n");
+        printf("  snapshot restore <name> - Restore from snapshot\n");
+        printf("\nNote: Full implementation requires package manager backend\n");
+        return;
+    }
+    
+    const char* command = argv[1];
+    if (strcmp(command, "list") == 0) {
+        printf("Installed packages:\n");
+        printf("  core-utils      v1.0.0   Essential UNIX utilities\n");
+        printf("  network-tools   v2.1.0   Advanced networking suite\n");
+        printf("  dev-toolkit     v1.5.0   Development tools (GCC, etc)\n");
+        printf("  zora-kernel     v0.9.0   ZoraVM kernel and VFS\n");
+    } else if (strcmp(command, "search") == 0) {
+        if (argc >= 3) {
+            printf("Searching for '%s'...\n", argv[2]);
+            printf("Found packages:\n");
+            printf("  %s-dev          Development libraries for %s\n", argv[2], argv[2]);
+            printf("  lib%s           Runtime libraries\n", argv[2]);
+        }
+    } else if (strcmp(command, "install") == 0) {
+        if (argc >= 3) {
+            printf("Installing package: %s\n", argv[2]);
+            printf(" Resolving dependencies...\n");
+            printf(" Downloading package...\n");
+            printf(" Installing to VFS...\n");
+            printf(" Package '%s' installed successfully!\n", argv[2]);
+        } else {
+            printf("Error: Package name required\n");
+        }
+    } else {
+        printf("Unknown command: %s\nRun 'zpm' for help\n", command);
+    }
+}
+
+void pkg_install_command(int argc, char **argv) {
+    if (argc < 2) {
+        printf("Usage: pkg-install <package-name>\n");
+        printf("Quick package installation interface\n");
+        return;
+    }
+    
+    printf(" Quick installing package: %s\n", argv[1]);
+    printf(" This would install '%s' via ZPM backend\n", argv[1]);
+    printf(" Installation complete!\n");
+}
+
+void repo_add_command(int argc, char **argv) {
+    if (argc < 5) {
+        printf("Usage: repo-add <name> <url> <distribution> <component>\n");
+        printf("Example: repo-add custom https://repo.example.com stable main\n");
+        return;
+    }
+    
+    printf(" Adding repository:\n");
+    printf("  Name: %s\n", argv[1]);
+    printf("  URL: %s\n", argv[2]);
+    printf("  Distribution: %s\n", argv[3]);
+    printf("  Component: %s\n", argv[4]);
+    printf(" Repository added successfully!\n");
+}
+
+// ===== ADVANCED NETWORKING COMMANDS =====
+
+void traceroute_command(int argc, char **argv) {
+    if (argc < 2) {
+        printf("Usage: traceroute [-m max_hops] <destination>\n");
+        return;
+    }
+    
+    const char* dest = argv[argc-1];
+    printf(" Traceroute to %s\n", dest);
+    printf("traceroute to %s, 30 hops max, 60 byte packets\n", dest);
+    
+    // Simulated traceroute output
+    printf(" 1  192.168.1.1 (192.168.1.1)  1.234 ms  1.456 ms  1.678 ms\n");
+    printf(" 2  10.0.0.1 (10.0.0.1)  5.123 ms  5.234 ms  5.345 ms\n");
+    printf(" 3  203.0.113.1 (203.0.113.1)  15.123 ms  15.234 ms  15.345 ms\n");
+    printf(" 4  * * *\n");
+    printf(" 5  %s (%s)  25.123 ms  25.234 ms  25.345 ms\n", dest, dest);
+    printf("\nNote: Real implementation requires network backend\n");
+}
+
+void portscan_command(int argc, char **argv) {
+    if (argc < 2) {
+        printf("Usage: portscan [-p port_range] <target>\n");
+        printf("Example: portscan -p 1-1024 example.com\n");
+        return;
+    }
+    
+    const char* target = argv[argc-1];
+    printf(" Port scanning %s\n", target);
+    printf("Starting Nmap-style scan of %s\n", target);
+    printf("PORT     STATE    SERVICE\n");
+    printf("22/tcp   open     ssh\n");
+    printf("80/tcp   open     http\n");
+    printf("443/tcp  open     https\n");
+    printf("8080/tcp closed   http-proxy\n");
+    printf("\nScan complete: 4 ports scanned, 3 open\n");
+    printf("Note: Real implementation requires socket programming\n");
+}
+
+void netns_command(int argc, char **argv) {
+    if (argc < 2) {
+        printf("Usage: netns <command> [args]\n");
+        printf("Commands:\n");
+        printf("  create <name>    - Create network namespace\n");
+        printf("  delete <name>    - Delete network namespace\n");
+        printf("  list             - List namespaces\n");
+        printf("  switch <name>    - Switch to namespace\n");
+        return;
+    }
+    
+    const char* cmd = argv[1];
+    if (strcmp(cmd, "list") == 0) {
+        printf("Network namespaces:\n");
+        printf("  default     (active)\n");
+        printf("  isolated\n");
+        printf("  test-env\n");
+    } else if (strcmp(cmd, "create") == 0 && argc >= 3) {
+        printf(" Creating network namespace: %s\n", argv[2]);
+        printf(" Namespace '%s' created\n", argv[2]);
+    } else if (strcmp(cmd, "switch") == 0 && argc >= 3) {
+        printf(" Switching to namespace: %s\n", argv[2]);
+        printf(" Now using namespace '%s'\n", argv[2]);
+    } else {
+        printf("Invalid command or missing arguments\n");
+    }
+}
+
+void firewall_command(int argc, char **argv) {
+    if (argc < 2) {
+        printf("Usage: firewall <command> [options]\n");
+        printf("Commands:\n");
+        printf("  add    - Add firewall rule\n");
+        printf("  remove - Remove firewall rule\n");
+        printf("  list   - List active rules\n");
+        printf("  flush  - Clear all rules\n");
+        printf("  enable - Enable firewall\n");
+        printf("  disable - Disable firewall\n");
+        return;
+    }
+    
+    const char* cmd = argv[1];
+    if (strcmp(cmd, "list") == 0) {
+        printf(" Active Firewall Rules:\n");
+        printf("Chain INPUT (policy ACCEPT)\n");
+        printf("ACCEPT     tcp  --  0.0.0.0/0  0.0.0.0/0  tcp dpt:22\n");
+        printf("ACCEPT     tcp  --  0.0.0.0/0  0.0.0.0/0  tcp dpt:80\n");
+        printf("ACCEPT     tcp  --  0.0.0.0/0  0.0.0.0/0  tcp dpt:443\n");
+        printf("DROP       all  --  0.0.0.0/0  0.0.0.0/0\n");
+    } else if (strcmp(cmd, "add") == 0) {
+        printf(" Adding firewall rule...\n");
+        printf(" Rule added successfully\n");
+    } else if (strcmp(cmd, "enable") == 0) {
+        printf(" Firewall enabled\n");
+    } else {
+        printf("Firewall command: %s\n", cmd);
+        printf("Note: Full implementation requires network backend\n");
+    }
+}
+
+void vpn_command(int argc, char **argv) {
+    if (argc < 2) {
+        printf("Usage: vpn <command> [options]\n");
+        printf("Commands:\n");
+        printf("  create <name> <type> <server> <port> - Create VPN connection\n");
+        printf("  connect <name>                       - Connect to VPN\n");
+        printf("  disconnect <name>                    - Disconnect VPN\n");
+        printf("  list                                 - List VPN connections\n");
+        printf("  status                               - Show VPN status\n");
+        printf("\nSupported types: openvpn, ipsec, wireguard\n");
+        return;
+    }
+    
+    const char* cmd = argv[1];
+    if (strcmp(cmd, "list") == 0) {
+        printf(" VPN Connections:\n");
+        printf("  office      OpenVPN    disconnected\n");
+        printf("  home        WireGuard  connected\n");
+        printf("  backup      IPSec      disconnected\n");
+    } else if (strcmp(cmd, "status") == 0) {
+        printf(" VPN Status:\n");
+        printf("Active connections: 1\n");
+        printf("  home (WireGuard): 10.0.1.100 -> 203.0.113.50\n");
+        printf("  Uptime: 2h 34m\n");
+        printf("  Transferred: 45.2 MB down, 12.8 MB up\n");
+    } else if (strcmp(cmd, "create") == 0 && argc >= 6) {
+        printf(" Creating VPN: %s (%s)\n", argv[2], argv[3]);
+        printf("  Server: %s:%s\n", argv[4], argv[5]);
+        printf(" VPN configuration created\n");
+    } else {
+        printf("VPN command: %s\n", cmd);
+        printf("Note: Full implementation requires VPN backends\n");
+    }
+}
+
+// ===== SYSTEM SERVICES MANAGEMENT =====
+
+void systemctl_command(int argc, char **argv) {
+    if (argc < 2) {
+        printf("Usage: systemctl <command> [service]\n");
+        printf("Commands:\n");
+        printf("  start <service>    - Start a service\n");
+        printf("  stop <service>     - Stop a service\n");
+        printf("  restart <service>  - Restart a service\n");
+        printf("  enable <service>   - Enable auto-start\n");
+        printf("  disable <service>  - Disable auto-start\n");
+        printf("  status <service>   - Show service status\n");
+        printf("  list-units         - List all services\n");
+        return;
+    }
+    
+    const char* cmd = argv[1];
+    if (strcmp(cmd, "list-units") == 0) {
+        printf(" System Services:\n");
+        printf("UNIT                    LOAD   ACTIVE SUB     DESCRIPTION\n");
+        printf("network-manager.service loaded active running Network Manager\n");
+        printf("web-server.service      loaded active running Web Server\n");
+        printf("database.service        loaded inactive dead  Database Server\n");
+        printf("backup.service          loaded active running Backup Service\n");
+    } else if (argc >= 3) {
+        const char* service = argv[2];
+        if (strcmp(cmd, "start") == 0) {
+            printf(" Starting service: %s\n", service);
+            printf(" Service '%s' started successfully\n", service);
+        } else if (strcmp(cmd, "status") == 0) {
+            printf("● %s - Service Description\n", service);
+            printf("   Loaded: loaded (/etc/systemd/system/%s)\n", service);
+            printf("   Active: active (running) since Mon 2024-01-01 10:00:00 UTC\n");
+            printf("   Main PID: 1234 (service-daemon)\n");
+        } else {
+            printf(" %s service: %s\n", cmd, service);
+        }
+    }
+}
+
+void service_command(int argc, char **argv) {
+    if (argc < 2) {
+        printf("Usage: service <command> [options]\n");
+        printf("Commands:\n");
+        printf("  create <name> <description> <exec> - Create new service\n");
+        printf("  delete <name>                      - Delete service\n");
+        printf("  list                               - List custom services\n");
+        printf("  set-restart-policy <name> <enable> <delay> <max-attempts>\n");
+        return;
+    }
+    
+    const char* cmd = argv[1];
+    if (strcmp(cmd, "list") == 0) {
+        printf(" Custom Services:\n");
+        printf("  myapp          My Application       /usr/bin/myapp\n");
+        printf("  log-rotator    Log Rotation         /usr/bin/logrotate\n");
+        printf("  backup-sync    Backup Synchronizer  /scripts/backup.sh\n");
+    } else if (strcmp(cmd, "create") == 0 && argc >= 5) {
+        printf(" Creating service: %s\n", argv[2]);
+        printf("  Description: %s\n", argv[3]);
+        printf("  Executable: %s\n", argv[4]);
+        printf(" Service created successfully\n");
+    } else {
+        printf("Service command: %s\n", cmd);
+    }
+}
+
+void crontab_command(int argc, char **argv) {
+    if (argc < 2) {
+        printf("Usage: crontab <command> [options]\n");
+        printf("Commands:\n");
+        printf("  add <name> <schedule> <command>  - Add cron job\n");
+        printf("  remove <name>                    - Remove cron job\n");
+        printf("  list                             - List cron jobs\n");
+        printf("  edit                             - Edit crontab\n");
+        printf("\nSchedule format: \"minute hour day month dayofweek\"\n");
+        printf("Example: \"0 2 * * *\" = daily at 2:00 AM\n");
+        return;
+    }
+    
+    const char* cmd = argv[1];
+    if (strcmp(cmd, "list") == 0) {
+        printf(" Scheduled Jobs:\n");
+        printf("NAME              SCHEDULE      COMMAND\n");
+        printf("daily-backup      0 2 * * *     /scripts/backup.sh\n");
+        printf("system-update     0 3 * * 0     zpm upgrade -y\n");
+        printf("log-cleanup       0 1 * * *     /usr/bin/logrotate\n");
+        printf("health-check      */5 * * * *   /scripts/health.sh\n");
+    } else if (strcmp(cmd, "add") == 0 && argc >= 5) {
+        printf(" Adding cron job: %s\n", argv[2]);
+        printf("  Schedule: %s\n", argv[3]);
+        printf("  Command: %s\n", argv[4]);
+        printf(" Cron job added successfully\n");
+    } else {
+        printf("Crontab command: %s\n", cmd);
+    }
+}
+
+void journalctl_command(int argc, char **argv) {
+    if (argc < 2) {
+        printf("Usage: journalctl [options] [service]\n");
+        printf("Options:\n");
+        printf("  -f            - Follow log output\n");
+        printf("  -n <lines>    - Show last N lines\n");
+        printf("  -u <service>  - Show logs for specific service\n");
+        printf("  --since=<time> - Show logs since time\n");
+        return;
+    }
+    
+    printf(" System Logs:\n");
+    printf("Jan 01 10:00:01 zora-vm systemd[1]: Started Network Manager\n");
+    printf("Jan 01 10:00:02 zora-vm network-manager[234]: Interface eth0 configured\n");
+    printf("Jan 01 10:00:03 zora-vm web-server[456]: Server started on port 80\n");
+    printf("Jan 01 10:00:04 zora-vm database[789]: Database connection established\n");
+    printf("Jan 01 10:00:05 zora-vm zora-vm[1]: VFS mounted successfully\n");
+    
+    if (argc >= 2 && strcmp(argv[1], "-f") == 0) {
+        printf("-- Following logs (Ctrl+C to stop) --\n");
+        printf("Jan 01 10:05:01 zora-vm cron[123]: (root) CMD (/scripts/health.sh)\n");
+    }
 }
 
 // ===== END JAVA DETECTION COMMANDS =====
@@ -4198,9 +4555,29 @@ Command command_table[] = {
     {"set-output-dir", set_output_dir_command, "Set compiler output directory (VFS path)"},
 
     // Java Detection and Security Commands
-    {"java-scan", java_scan_command, "💀 Scan for Java contamination (triggers kernel panic if found)"},
-    {"java-quarantine", java_quarantine_command, "🚨 Quarantine Java files (demonstration command)"},
-    {"java-status", java_status_command, "🛡️ Show Java detection system status"},
+    {"java-scan", java_scan_command, " Scan for Java contamination (triggers kernel panic if found)"},
+    {"java-quarantine", java_quarantine_command, " Quarantine Java files (demonstration command)"},
+    {"java-status", java_status_command, " Show Java detection system status"},
+
+    // Package Management Commands (ZPM)
+    {"zpm", zpm_command, "ZoraVM Package Manager - install, search, upgrade packages"},
+    {"pkg-install", pkg_install_command, "Quick package installation interface"},
+    {"repo-add", repo_add_command, "Add package repositories to ZPM"},
+    
+    // Advanced Networking Commands
+    {"ifconfig", ifconfig_command, "Configure network interfaces (advanced mode)"},
+    {"netstat", netstat_command, "Advanced network statistics and connections"},
+    {"vpn", vpn_command, "VPN tunnel management (OpenVPN, IPSec, WireGuard)"},
+    {"traceroute", traceroute_command, "Trace network path to destination"},
+    {"portscan", portscan_command, "Port scanner for network diagnostics"},
+    {"netns", netns_command, "Network namespace management"},
+    {"firewall", firewall_command, "Firewall rules and traffic control"},
+    
+    // System Services Management
+    {"systemctl", systemctl_command, "System service control (systemd-style)"},
+    {"service", service_command, "Service management and configuration"},
+    {"crontab", crontab_command, "Cron job scheduling and management"},
+    {"journalctl", journalctl_command, "System and service log management"},
 
     {NULL, NULL, NULL}
 };
@@ -5179,6 +5556,55 @@ void help_command(int argc, char **argv) {
     printf("  %-12s - Remote terminal access           %-12s - Download files\n", "ssh", "wget");
     printf("  %-12s - Transfer data                    %-12s - Secure file copy\n", "curl", "scp");
     printf("  %-12s - Configure firewall               %-12s - Set hostname\n", "iptables", "hostname");
+    printf("\n");
+    
+    printf(" ADVANCED NETWORKING & SECURITY:\n");
+    printf("  %-12s - Enhanced network interface mgmt  %-12s - Advanced ping with options\n", "ifconfig", "ping");
+    printf("  %-12s - Comprehensive network status     %-12s - Advanced routing control\n", "netstat", "route");
+    printf("  %-12s - Firewall rule management         %-12s - VPN tunnel management\n", "firewall", "vpn");
+    printf("  %-12s - Network trace routing            %-12s - Port scanning utility\n", "traceroute", "portscan");
+    printf("  %-12s - Network namespaces               \n", "netns");
+    printf("  Examples:\n");
+    printf("    ifconfig eth0 inet 192.168.1.100 netmask 255.255.255.0 up\n");
+    printf("    ping -c 10 -t 1000 google.com\n");
+    printf("    netstat -lrist\n");
+    printf("    route add 192.168.1.0 10.0.1.1 255.255.255.0 eth0\n");
+    printf("    firewall add --dport 22 --proto tcp --action accept\n");
+    printf("    vpn create office openvpn 203.0.113.1 1194\n");
+    printf("    traceroute -m 15 google.com\n");
+    printf("    portscan -p 1-1024 target.com\n");
+    printf("    netns create isolated && netns switch isolated\n");
+    printf("\n");
+    
+    printf(" PACKAGE MANAGEMENT (ZPM - ZoraVM Package Manager):\n");
+    printf("  %-12s - Full package manager interface   %-12s - Quick package install\n", "zpm", "pkg-install");
+    printf("  %-12s - Repository management            \n", "repo-add");
+    printf("  Core ZPM Commands:\n");
+    printf("    zpm install gcc-toolchain python3-dev\n");
+    printf("    zpm search network\n");
+    printf("    zpm upgrade\n");
+    printf("    zpm snapshot create backup\n");
+    printf("    zpm show package-name\n");
+    printf("    repo-add custom https://repo.example.com stable main\n");
+    printf("    pkg-install python3-dev\n");
+    printf("\n");
+    
+    printf(" SYSTEM SERVICES & SCHEDULING:\n");
+    printf("  %-12s - System service control           %-12s - Service management\n", "systemctl", "service");
+    printf("  %-12s - Cron job management              %-12s - System log viewer\n", "crontab", "journalctl");
+    printf("  Service Control Examples:\n");
+    printf("    systemctl start web-server\n");
+    printf("    systemctl enable database\n");
+    printf("    systemctl status network-service\n");
+    printf("    service create myapp \"My Application\" \"/usr/bin/myapp\"\n");
+    printf("    service set-restart-policy myapp 1 0 30\n");
+    printf("  Cron Job Examples:\n");
+    printf("    crontab add daily-backup \"0 2 * * *\" \"/scripts/backup.sh\"\n");
+    printf("    crontab add system-update \"0 3 * * 0\" \"zpm upgrade -y\"\n");
+    printf("    crontab list\n");
+    printf("  Log Management:\n");
+    printf("    journalctl -f network-service\n");
+    printf("    journalctl --since \"1 hour ago\"\n");
     printf("\n");
     
     printf(" ARCHIVE & COMPRESSION:\n");

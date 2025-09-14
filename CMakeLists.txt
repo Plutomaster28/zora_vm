@@ -139,7 +139,7 @@ endif()
 include_directories(include include/platform include/binary include/merl include/vfs 
                    include/syscall include/virtualization include/network include/lua 
                    include/python include/perl include/meisei include/sandbox
-                   include/terminal include/unix_core
+                   include/terminal include/unix_core include/package
                    MERL ${LUA_INCLUDE_DIR})
 
 # Source files - simple and direct
@@ -173,11 +173,17 @@ set(SOURCES
     src/syscall/syscall.c
     src/virtualization/virtualization.c
     src/network/network.c
+    src/network/network_advanced.c
+    src/network/network_commands.c
     src/lua/lua_vm.c
     src/meisei/virtual_silicon.c
     src/meisei/script_accelerator.c
     src/terminal/terminal_style.c
     src/terminal/terminal_detector.c
+    
+    # Package Management System
+    src/package/package_manager.c
+    src/package/package_commands.c
     
     # Research UNIX Core Subsystem
     src/unix_core/unix_core.c

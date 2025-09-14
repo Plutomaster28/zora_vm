@@ -1,0 +1,5 @@
+sed 's/test/demo/g'
+awk '{ print NR, $0 }'
+awk '{ print $1, $2 }'
+sed '2d'
+exit
