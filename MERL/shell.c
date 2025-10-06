@@ -6247,6 +6247,7 @@ void wget_command(int argc, char **argv) {
     InternetCloseHandle(hInternet);
 }
 
+// PLEASE IMPMEPLENT
 void curl_command(int argc, char **argv) {
     if (argc < 2) {
         printf("Usage: curl <url>\n");
