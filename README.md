@@ -1,40 +1,53 @@
-# Zora VM - **Complete Unix/Linux Shell** - 80+ commands working perfectly  
- **Beautiful User Interface** - Categorized help system with Unicode styling  
- **Pipeline Operations** - Full command chaining and redirection  
- **Lua Scripting** - Full Lua 5.4.6 VM with sandboxed APIs  
- **Virtual File System** - Persistent storage with Unix permissions  
- **Network Simulation** - Complete virtual networking stack  
- **Sandbox Security** - Isolated execution environment  
- **Command Help System** - Every command has `--help` documentation  
- **Professional Experience** - Clean startup modes and polished interface  
- **Build Configurations** - Release mode for clean startup, verbose mode for debugging Virtual Machine with MERL Shell
+# SeaBird OS (Zora v2.0)
 
 <div align="center">
 
 ![Zora VM Logo](proto_meisei_font.png)
 
-**A complete, production-ready Windows virtual machine environment with Unix/Linux compatibility**
+**A complete Unix-like operating system with 110+ commands, real process management, and native Windows integration**
 
 [![Build Status](https://img.shields.io/badge/build-stable-brightgreen)]()
 [![Platform](https://img.shields.io/badge/platform-Windows-blue)]()
-[![License](https://img.shields.io/badge/license-MIT-green)]()
-[![Status](https://img.shields.io/badge/status-fully_functional-success)]()
+[![License](https://img.shields.io/badge/license-Apache%202.0-green)](LICENSE)
+[![Status](https://img.shields.io/badge/status-production_ready-success)]()
 
 </div>
 
-##  ZoraVM is Now Fully Functional!
+---
 
-**ZoraVM has reached full production maturity** with enterprise-grade functionality:
+## About the Name: SeaBird OS (Zora v2.0)
 
- **Complete Unix/Linux Shell** - 80+ commands working perfectly  
- **Beautiful User Interface** - Categorized help system with Unicode styling  
- **Pipeline Operations** - Full command chaining and redirection  
- **Lua Scripting** - Full Lua 5.4.6 VM with sandboxed APIs  
- **Virtual File System** - Persistent storage with Unix permissions  
- **Network Simulation** - Complete virtual networking stack  
- **Sandbox Security** - Isolated execution environment  
- **Command Help System** - Every command has `--help` documentation  
- **Professional Experience** - Clean startup modes and polished interface  
+This project represents a major evolution. **SeaBird** is the technical name reflecting our Unix-like nature and professional positioning for developers and system administrators. **Zora** remains our brand identity, familiar to our community. This v2.0 release marks the transition to a fully-featured Unix operating system with enterprise-grade licensing under Apache 2.0.
+
+### License: Apache 2.0
+
+SeaBird OS is licensed under the Apache License 2.0, providing:
+
+- Freedom to use commercially and privately
+- Permissive modification and distribution rights
+- Patent protection for contributors
+- Enterprise-friendly legal framework
+- No copyleft requirements
+
+See the [LICENSE](LICENSE) file for complete terms.
+
+---
+
+## SeaBird OS is Feature-Complete
+
+**Production-ready Unix-like operating system** with enterprise-grade functionality:
+
+- **110+ Commands**: Complete Unix/Linux command suite
+- **Shell Scripting**: for/while loops, if/else conditionals, functions, aliases
+- **Real Process Management**: Windows CreateProcess API integration
+- **Job Control**: Background jobs (&), fg, bg, jobs
+- **Text Processing**: sed, awk, grep, cut, paste, tr, and more
+- **Parameter Expansion**: ${VAR:-default}, positional parameters
+- **Cron Scheduler**: Task scheduling with crontab
+- **Advanced Utilities**: pstree, nice, nohup, watch, timeout, xargs, tee
+- **Virtual File System**: Persistent storage with Unix permissions
+- **Network Stack**: Virtual networking with NAT, DNS, firewall
+- **Security**: Complete sandbox with resource isolation  
 
 ## Quick Start
 
@@ -74,50 +87,54 @@ cd build
 .\zora_vm.exe
 ```
 
-## What is Zora VM?
+## What is SeaBird OS?
 
-**Zora VM is a complete virtual machine environment** that provides a fully functional Unix-like operating system running natively on Windows. It's not an emulator or compatibility layer - it's a sophisticated virtual machine with its own kernel, memory management, and complete shell environment.
+**SeaBird OS is a complete Unix-like operating system** that runs natively on Windows. It's not an emulator or compatibility layer - it's a sophisticated virtual machine with its own kernel, memory management, and complete shell environment.
 
-Zora VM is a **standalone virtual machine environment** that provides:
+SeaBird OS (Zora v2.0) is a **standalone operating system** that provides:
 
 - **Complete Unix/Linux command compatibility** on Windows
 - **Isolated sandbox environment** for safe code execution
 - **Lua 5.4.6 scripting** with sandboxed VM APIs
 - **Virtual file system** with persistent storage
 - **Network simulation** with security features
+- **Real process management** using Windows APIs
 - **Desktop environment** with theming support
 
 ## Features
 
-###  Production-Ready Core Features
-- **Complete Unix Shell Experience**: 80+ working commands including `ls`, `cd`, `grep`, `tar`, `ssh`, `top`, `find`, `sort`, `uniq`, `wc`, `awk`, and many more
-- **Beautiful Interface**: Unicode-enhanced help system with categorized commands and professional styling
-- **Pipeline Operations**: Full support for command chaining (`|`), redirection (`>`, `<`, `>>`), and logical operators
-- **Command Documentation**: Every command includes comprehensive `--help` documentation with examples
+### Production-Ready Core Features
+
+- **Complete Unix Shell Experience**: 110+ working commands including ls, cd, grep, tar, ssh, top, find, sort, uniq, wc, awk, sed, and many more
+- **Shell Scripting**: for/while loops, if/then/else conditionals, functions, aliases, parameter expansion
+- **Pipeline Operations**: Full support for command chaining (|), redirection (>, <, >>), and logical operators
+- **Command Documentation**: Every command includes comprehensive --help documentation with examples
 - **Windows-Native**: Runs natively on Windows with no external dependencies after build
 - **Multi-language Scripting**: Full Lua 5.4.6 interpreter with sandboxed VFS, VM, and system APIs
 - **Virtual File System**: Complete filesystem with Unix-style permissions and persistent storage
 - **Network Stack**: Virtual networking with NAT, DNS, firewall simulation, and security features
-- **Process Management**: Background jobs, process monitoring, signals, and complete process control
+- **Process Management**: Real Windows process spawning, background jobs, signals, and complete process control
 
-###  User Experience
+### User Experience
+
 - **Clean Startup Modes**: Choose between minimal release mode or verbose debug mode
 - **Campbell Color Scheme**: Professional terminal styling inspired by modern development environments
 - **Command History**: Full command history with search and recall functionality
 - **Tab Completion**: Intelligent auto-completion for commands and file paths
-- **Exit Command**: Graceful VM shutdown with proper cleanup
+- **Exit Command**: Graceful shutdown with proper cleanup
 - **Error Handling**: Comprehensive error messages and recovery mechanisms
 
-###  Security & Isolation
+### Security & Isolation
+
 - **Complete Sandbox**: All code execution is fully sandboxed and isolated from the host system
 - **Memory Limits**: Configurable memory limits with out-of-memory protection
 - **Network Security**: Virtual firewall with configurable rules and safe mode
 - **File Permissions**: Complete Unix-style permission system
 - **Resource Monitoring**: CPU and memory usage monitoring with limits
 
-##  Getting Started - Your First Commands
+## Getting Started - Your First Commands
 
-Once ZoraVM is running, try these commands to explore:
+Once SeaBird OS is running, try these commands to explore:
 
 ```bash
 # Get beautiful categorized help
@@ -140,24 +157,24 @@ cat /etc/passwd | sort | uniq
 
 # File operations
 touch myfile.txt
-echo "Hello ZoraVM!" > myfile.txt
+echo "Hello SeaBird!" > myfile.txt
 cat myfile.txt
 
 # Process management
 ps aux
 top
 
-# Exit the VM cleanly
+# Exit cleanly
 exit
 ```
 
-##  Build Configuration Options
+## Build Configuration Options
 
-ZoraVM supports two build modes for different use cases:
+SeaBird OS supports two build modes for different use cases:
 
 ### Release Mode (Default - Recommended)
 - **Clean startup experience** with minimal output
-- **MERL-inspired boot sequence** with spinner animations  
+- **MERL-inspired boot sequence** with spinner animations
 - **Professional user interface** perfect for daily use
 - **Build command**: `build_release.bat` or cmake with `-DZORA_RELEASE_MODE=ON`
 
@@ -429,7 +446,14 @@ ctest
 
 ## License
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+This project is licensed under the Apache License 2.0 - see the [LICENSE](LICENSE) file for details.
+
+The Apache 2.0 license provides:
+- Commercial and private use rights
+- Freedom to modify and distribute
+- Patent protection for contributors
+- No copyleft requirements
+- Enterprise-friendly legal framework
 
 ## Acknowledgments
 
@@ -448,46 +472,13 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 <div align="center">
 
-**Made with ❤️ by Tomoko**
+**SeaBird OS (Zora v2.0) - Apache 2.0 Licensed**
+
+Made by Tomoko
 
 [Website](https://zoravirus.dev) • [Documentation](https://docs.zoravirus.dev) • [Community](https://discord.gg/zoravirus)
 
 </div>
-```
-zora_vm/
-├── src/               # Core VM implementation
-│   ├── cpu/          # CPU emulation
-│   ├── memory/       # Memory management
-│   ├── meisei/       # Meisei Virtual Silicon (script acceleration)
-│   ├── network/      # Virtual networking
-│   └── ...
-├── include/          # Header files
-├── MERL/            # MERL shell implementation
-└── docs/            # Documentation
-```
-
-### Contributing:
-1. Fork the repository
-2. Create feature branch: `git checkout -b feature-name`
-3. Make changes and test
-4. Submit pull request
-
-### Testing:
-```bash
-# Native testing
-ninja test
-```
-
----
-
-## Distribution
-
-- **Source**: `https://github.com/Plutomaster28/zora_vm`
-- **Releases**: Check GitHub releases for precompiled Windows binaries
-
----
-
-## Community
 
 - Report bugs via GitHub Issues
 - Discuss features in GitHub Discussions
