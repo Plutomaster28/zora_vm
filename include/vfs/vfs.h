@@ -34,6 +34,8 @@ typedef struct VirtualFS VirtualFS;
 struct VNode {
     char name[256];
     int is_directory;
+    int is_symlink;             // NEW: Is this a symbolic link?
+    char* symlink_target;       // NEW: Target path for symlinks
     size_t size;
     void* data;
     char* host_path;
@@ -71,6 +73,11 @@ int vfs_create_file(const char* path);
 int vfs_delete_file(const char* path);
 int vfs_write_file(const char* path, const void* data, size_t size);
 int vfs_read_file(const char* path, void** data, size_t* size);
+
+// Symlink operations
+int vfs_create_symlink(const char* link_path, const char* target_path);
+int vfs_readlink(const char* path, char* buffer, size_t size);
+VNode* vfs_resolve_symlink(VNode* node);  // Resolve symlink to target
 
 // Node operations
 VNode* vfs_find_node(const char* path);

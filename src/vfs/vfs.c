@@ -36,6 +36,8 @@ VNode* vfs_create_directory_node(const char* name) {
     strncpy(node->name, name, sizeof(node->name) - 1);
     node->name[sizeof(node->name) - 1] = '\0';
     node->is_directory = 1;
+    node->is_symlink = 0;
+    node->symlink_target = NULL;
     node->size = 0;
     node->data = NULL;
     node->host_path = NULL;
@@ -58,6 +60,8 @@ VNode* vfs_create_file_node(const char* name) {
     strncpy(node->name, name, sizeof(node->name) - 1);
     node->name[sizeof(node->name) - 1] = '\0';
     node->is_directory = 0;
+    node->is_symlink = 0;
+    node->symlink_target = NULL;
     node->size = 0;
     node->data = NULL;
     node->host_path = NULL;
@@ -925,6 +929,88 @@ void vfs_sync_all(void) {
     // Implementation for syncing all VFS files to host
     // For now, just print a message
     printf("Sync completed\n");
+}
+
+// ===== SYMLINK OPERATIONS =====
+
+// Create a symbolic link
+int vfs_create_symlink(const char* link_path, const char* target_path) {
+    if (!link_path || !target_path) return -1;
+    
+    // Parse the link path
+    char dir_path[512];
+    char link_name[256];
+    const char* last_slash = strrchr(link_path, '/');
+    
+    if (last_slash) {
+        size_t dir_len = last_slash - link_path;
+        if (dir_len >= sizeof(dir_path)) dir_len = sizeof(dir_path) - 1;
+        strncpy(dir_path, link_path, dir_len);
+        dir_path[dir_len] = '\0';
+        strncpy(link_name, last_slash + 1, sizeof(link_name) - 1);
+    } else {
+        strcpy(dir_path, "/");
+        strncpy(link_name, link_path, sizeof(link_name) - 1);
+    }
+    link_name[sizeof(link_name) - 1] = '\0';
+    
+    // Find parent directory
+    VNode* parent = vfs_find_node(dir_path);
+    if (!parent || !parent->is_directory) {
+        return -1;
+    }
+    
+    // Create symlink node
+    VNode* link = malloc(sizeof(VNode));
+    if (!link) return -1;
+    
+    strncpy(link->name, link_name, sizeof(link->name) - 1);
+    link->name[sizeof(link->name) - 1] = '\0';
+    link->is_directory = 0;
+    link->is_symlink = 1;
+    link->symlink_target = strdup(target_path);
+    link->size = strlen(target_path);
+    link->data = NULL;
+    link->host_path = NULL;
+    link->parent = NULL;
+    link->children = NULL;
+    link->next = NULL;
+    
+    // Set permissions for symlink (usually 777)
+    vfs_set_default_permissions(link, vfs_current_user, vfs_current_group);
+    link->mode = 0777;
+    
+    // Add to parent
+    vfs_add_child(parent, link);
+    
+    return 0;
+}
+
+// Read the target of a symbolic link
+int vfs_readlink(const char* path, char* buffer, size_t size) {
+    VNode* node = vfs_find_node(path);
+    if (!node || !node->is_symlink || !node->symlink_target) {
+        return -1;
+    }
+    
+    strncpy(buffer, node->symlink_target, size - 1);
+    buffer[size - 1] = '\0';
+    return 0;
+}
+
+// Resolve a symlink to its target node (follow the link)
+VNode* vfs_resolve_symlink(VNode* node) {
+    if (!node) return NULL;
+    
+    // Follow symlinks (max 10 levels to avoid loops)
+    int depth = 0;
+    while (node && node->is_symlink && depth < 10) {
+        if (!node->symlink_target) break;
+        node = vfs_find_node(node->symlink_target);
+        depth++;
+    }
+    
+    return node;
 }
 
 int vfs_set_host_root(const char* host_root) {

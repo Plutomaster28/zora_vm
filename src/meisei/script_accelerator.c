@@ -1,7 +1,5 @@
 #include "meisei/virtual_silicon.h"
 #include "lua/lua_vm.h"
-#include "python/python_vm.h"
-#include "perl/perl_vm.h"
 #include <string.h>  // Add this missing include
 
 // Universal script execution with auto-acceleration
@@ -21,10 +19,7 @@ int meisei_execute_script(const char* script, const char* language) {
     // Use the correct function names (as suggested by compiler)
     if (strcmp(language, "lua") == 0) {
         return lua_vm_execute_string(script);
-    } else if (strcmp(language, "python") == 0) {
-        return python_vm_execute_string(script);
-    } else if (strcmp(language, "perl") == 0) {
-        return perl_vm_execute_string(script);
+
     }
     
     printf("Meisei: Unsupported language: %s\n", language);
@@ -39,8 +34,6 @@ const char* meisei_detect_language(const char* filename) {
     if (!ext) return "unknown";
     
     if (strcmp(ext, ".lua") == 0) return "lua";
-    if (strcmp(ext, ".py") == 0) return "python";
-    if (strcmp(ext, ".pl") == 0 || strcmp(ext, ".perl") == 0) return "perl";
     
     return "unknown";
 }
@@ -48,14 +41,6 @@ const char* meisei_detect_language(const char* filename) {
 // Convenience functions for direct language execution
 int meisei_execute_lua(const char* script) {
     return meisei_execute_script(script, "lua");
-}
-
-int meisei_execute_python(const char* script) {
-    return meisei_execute_script(script, "python");
-}
-
-int meisei_execute_perl(const char* script) {
-    return meisei_execute_script(script, "perl");
 }
 
 // Execute script file with auto-detection

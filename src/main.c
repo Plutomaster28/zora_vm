@@ -28,13 +28,11 @@
 #include "unix_core.h"
 #include "unix_core/unix_embedded_compiler.h"
 #include "unix_core/unix_games.h"
+#include "system/process.h"  // Process management (old)
+#include "system/process_real.h"  // Real process management (new)
+#include "system/disk.h"     // Disk utilities
 
-#ifdef PYTHON_SCRIPTING
-#include "python/python_vm.h"
-#endif
-#ifdef PERL_SCRIPTING
-#include "perl/perl_vm.h"
-#endif
+
 
 static volatile int running = 1;
 static volatile int rebooting = 0;  // Flag for reboot
@@ -172,7 +170,7 @@ int main(int argc, char* argv[]) {
     signal(SIGTERM, signal_handler);
 
 #if ZORA_VERBOSE_BOOT
-    printf("Starting Zora VM...\n");
+    printf("Starting SeaBird OS...\n");
 #endif
 
     // Check for special command line modes
@@ -216,16 +214,13 @@ int main(int argc, char* argv[]) {
         // Create minimal VFS structure for games
         char executable_path[512];
         char executable_dir[512];
-        char zora_perl_path[512];
         
         GetModuleFileNameA(NULL, executable_path, sizeof(executable_path));
         strcpy(executable_dir, executable_path);
         char* last_backslash = strrchr(executable_dir, '\\');
         if (last_backslash) *last_backslash = '\0';
-        snprintf(zora_perl_path, sizeof(zora_perl_path), "%s\\ZoraPerl", executable_dir);
         
-        create_directory_recursive(zora_perl_path);
-        vfs_mount_root_autodiscover(zora_perl_path);
+        vfs_mount_root_autodiscover(executable_dir);
         
         // Initialize games system
         unix_games_init();
@@ -248,9 +243,9 @@ int main(int argc, char* argv[]) {
 
 #if ZORA_RELEASE_MODE && !ZORA_VERBOSE_BOOT
     // Clean release mode startup - minimal output
-    printf("=== ZORA VM ===\n");
-    printf("ZoraVM Boot v2.1.0\n");
-    printf("Firmware Version: %s\n", "ZoraVM-2.1.0");
+    printf("=== SEABIRD OS ===\n");
+    printf("SeaBird Boot v2.1.0\n");
+    printf("Firmware Version: %s\n", "SeaBird-2.1.0");
     
     // Simple boot sequence similar to MERL
     const char spinner[] = "/-\\|";
@@ -393,8 +388,20 @@ int main(int argc, char* argv[]) {
         goto cleanup;
     }
     
-    // Find ZoraPerl directory relative to executable location for portability
-    char zora_perl_path[512];
+    // Initialize real process management system
+#if ZORA_VERBOSE_BOOT
+    printf("Initializing real process management...\n");
+#endif
+    if (process_real_init() != 0) {
+        fprintf(stderr, "Failed to initialize process management\n");
+        goto cleanup;
+    }
+#if ZORA_VERBOSE_BOOT
+    printf("Process management initialized (PID 1 = ZoraVM)\n");
+#endif
+    
+    // Find ZoraVM directory relative to executable location for portability
+    char zora_vm_path[512];
     char executable_path[512];
     char executable_dir[512];
     
@@ -414,44 +421,37 @@ int main(int argc, char* argv[]) {
         strcpy(executable_dir, ".");  // Fallback to current directory
     }
     
-    // Construct ZoraPerl path next to executable
-    snprintf(zora_perl_path, sizeof(zora_perl_path), "%s\\ZoraPerl", executable_dir);
+    // Construct ZoraVM path next to executable
+    snprintf(zora_vm_path, sizeof(zora_vm_path), "%s\\ZoraVM", executable_dir);
     
-    // Debug: Uncomment the next line if you need to see the executable and ZoraPerl paths
-    // printf("Executable at: %s\n", executable_path);
-    // printf("ZoraPerl path: %s\n", zora_perl_path);
-    
-    // Check if ZoraPerl directory exists, create if not
-    DWORD attrib = GetFileAttributesA(zora_perl_path);
+    // Check if ZoraVM directory exists, create if not
+    DWORD attrib = GetFileAttributesA(zora_vm_path);
     if (attrib == INVALID_FILE_ATTRIBUTES || !(attrib & FILE_ATTRIBUTE_DIRECTORY)) {
 #if ZORA_VERBOSE_BOOT
-        printf("Creating ZoraPerl directory at: %s\n", zora_perl_path);
+        printf("Creating ZoraVM directory at: %s\n", zora_vm_path);
 #endif
-        if (create_directory_recursive(zora_perl_path) != 0) {
-            fprintf(stderr, "ERROR: Failed to create ZoraPerl directory!\n");
+        if (create_directory_recursive(zora_vm_path) != 0) {
+            fprintf(stderr, "ERROR: Failed to create ZoraVM directory!\n");
             goto cleanup;
         }
 #if ZORA_VERBOSE_BOOT
-        printf("Successfully created ZoraPerl directory at: %s\n", zora_perl_path);
+        printf("Successfully created ZoraVM directory at: %s\n", zora_vm_path);
 #endif
-    } else {
-        // Debug: Uncomment the next line if you need to see the ZoraPerl path
-        // printf("Found existing ZoraPerl directory at: %s\n", zora_perl_path);
     }
     
-    // Ensure the entire ZoraPerl directory structure exists
-    create_directory_recursive(zora_perl_path);
+    // Ensure the entire ZoraVM directory structure exists
+    create_directory_recursive(zora_vm_path);
     
     // Create subdirectories using the found path
     char subdir_path[600];
     const char* subdirs[] = {"documents", "scripts", "data", "projects", "bin", "home", "tmp", "etc", "usr", "var"};
     for (int i = 0; i < 10; i++) {
-        snprintf(subdir_path, sizeof(subdir_path), "%s\\%s", zora_perl_path, subdirs[i]);
+        snprintf(subdir_path, sizeof(subdir_path), "%s\\%s", zora_vm_path, subdirs[i]);
         create_directory_recursive(subdir_path);
     }
     
     // Autodiscover host root-style directories directly under /
-    vfs_mount_root_autodiscover(zora_perl_path);
+    vfs_mount_root_autodiscover(zora_vm_path);
 
     // Initialize network virtualization
 #if ZORA_VERBOSE_BOOT
@@ -521,6 +521,22 @@ int main(int argc, char* argv[]) {
 #endif
     if (unix_core_init() != 0) {
         fprintf(stderr, "Failed to initialize UNIX core environment\n");
+        goto cleanup;
+    }
+
+#if ZORA_VERBOSE_BOOT
+    printf("Initializing process management system...\n");
+#endif
+    if (process_init() != 0) {
+        fprintf(stderr, "Failed to initialize process management\n");
+        goto cleanup;
+    }
+
+#if ZORA_VERBOSE_BOOT
+    printf("Initializing disk utilities...\n");
+#endif
+    if (disk_init() != 0) {
+        fprintf(stderr, "Failed to initialize disk utilities\n");
         goto cleanup;
     }
 
@@ -616,7 +632,7 @@ cleanup:
     
     // Clean up resources before exiting
 #if ZORA_VERBOSE_BOOT
-    printf("\nShutting down Zora VM...\n");
+    printf("\nShutting down SeaBird OS...\n");
 #endif
     
     // If there was an error during initialization, pause to show the error
@@ -651,7 +667,7 @@ cleanup:
 #endif
     
 #if ZORA_VERBOSE_BOOT
-    printf("Zora VM shutdown complete.\n");
+    printf("SeaBird OS shutdown complete.\n");
 #endif
     return 0;
 }

@@ -160,13 +160,120 @@ int network_http_request(const char* url, const char* method) {
         return -1;
     }
     
+    // Parse URL to extract host and path
+    char host[256] = {0};
+    char path[512] = {0};
+    int port = is_https ? 443 : 80;
+    
+    const char* url_start = url + (is_https ? 8 : 7);  // Skip protocol
+    const char* slash = strchr(url_start, '/');
+    const char* colon = strchr(url_start, ':');
+    
+    // Extract host
+    int host_len;
+    if (colon && (!slash || colon < slash)) {
+        // Port specified
+        host_len = colon - url_start;
+        port = atoi(colon + 1);
+    } else if (slash) {
+        host_len = slash - url_start;
+    } else {
+        host_len = strlen(url_start);
+    }
+    
+    if (host_len >= sizeof(host)) host_len = sizeof(host) - 1;
+    strncpy(host, url_start, host_len);
+    host[host_len] = '\0';
+    
+    // Extract path
+    if (slash) {
+        strncpy(path, slash, sizeof(path) - 1);
+    } else {
+        strcpy(path, "/");
+    }
+    
     printf("Virtual NAT: %s request to %s\n", method, url);
-    printf("Request routed through secure virtual gateway (%s)\n", vnet->gateway_ip);
+    printf("Connecting to %s:%d through gateway %s\n", host, port, vnet->gateway_ip);
     
-    // TODO: Implement actual HTTP client with security restrictions
-    printf("[SIMULATED] Response: 200 OK\n");
-    printf("[SIMULATED] Content: Virtual response data\n");
+    // Create socket
+    SOCKET sock = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+    if (sock == INVALID_SOCKET) {
+        printf("Failed to create socket: %d\n", WSAGetLastError());
+        return -1;
+    }
     
+    // Set timeout (5 seconds)
+    DWORD timeout = 5000;
+    setsockopt(sock, SOL_SOCKET, SO_RCVTIMEO, (char*)&timeout, sizeof(timeout));
+    setsockopt(sock, SOL_SOCKET, SO_SNDTIMEO, (char*)&timeout, sizeof(timeout));
+    
+    // Resolve hostname
+    struct addrinfo hints = {0}, *result = NULL;
+    hints.ai_family = AF_INET;
+    hints.ai_socktype = SOCK_STREAM;
+    hints.ai_protocol = IPPROTO_TCP;
+    
+    char port_str[16];
+    sprintf(port_str, "%d", port);
+    
+    if (getaddrinfo(host, port_str, &hints, &result) != 0) {
+        printf("Failed to resolve hostname: %s\n", host);
+        closesocket(sock);
+        return -1;
+    }
+    
+    // Connect to server
+    if (connect(sock, result->ai_addr, (int)result->ai_addrlen) == SOCKET_ERROR) {
+        printf("Failed to connect: %d\n", WSAGetLastError());
+        freeaddrinfo(result);
+        closesocket(sock);
+        return -1;
+    }
+    
+    freeaddrinfo(result);
+    
+    // Build HTTP request
+    char request[2048];
+    int req_len = sprintf(request,
+        "%s %s HTTP/1.1\r\n"
+        "Host: %s\r\n"
+        "User-Agent: ZoraVM/3.12\r\n"
+        "Connection: close\r\n"
+        "\r\n",
+        method, path, host);
+    
+    // Send request
+    if (send(sock, request, req_len, 0) == SOCKET_ERROR) {
+        printf("Failed to send request: %d\n", WSAGetLastError());
+        closesocket(sock);
+        return -1;
+    }
+    
+    printf("Request sent successfully\n");
+    
+    // Receive response
+    char buffer[4096];
+    int total_received = 0;
+    int bytes_received;
+    
+    printf("\n--- HTTP Response ---\n");
+    while ((bytes_received = recv(sock, buffer, sizeof(buffer) - 1, 0)) > 0) {
+        buffer[bytes_received] = '\0';
+        printf("%s", buffer);
+        total_received += bytes_received;
+        
+        // Limit output to 8KB to avoid flooding console
+        if (total_received > 8192) {
+            printf("\n... [truncated, received %d bytes total] ...\n", total_received);
+            break;
+        }
+    }
+    
+    if (total_received == 0) {
+        printf("No response received\n");
+    }
+    
+    closesocket(sock);
     return 0;
 }
 

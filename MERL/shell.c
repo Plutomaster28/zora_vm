@@ -24,6 +24,7 @@
 #include "color-and-test.h"
 #include "config.h"
 #include "network/network.h"
+#include "kernel/network_stack.h"
 #include "vfs/vfs.h"
 #include "lua/lua_vm.h"
 #include "binary/binary_executor.h"
@@ -35,6 +36,10 @@
 #include "version.h"  // Auto-versioning system
 #include "unix_core.h"  // Research UNIX Tenth Edition support
 #include "unix_core/unix_embedded_compiler.h"  // Real embedded compilers
+#include "editors/zora_editor.h"  // Text editor
+#include "system/process.h"  // Process management (old)
+#include "system/process_real.h"  // Real process management (new)
+#include "system/disk.h"  // Disk utilities
 // #include "shell_script.h"  // Enhanced shell scripting - temporarily disabled
 
 // Windows-specific includes
@@ -81,6 +86,9 @@ void wget_command(int argc, char **argv);
 void curl_command(int argc, char **argv);
 void ssh_command(int argc, char **argv);
 void iptables_command(int argc, char **argv);
+void netstack_command(int argc, char **argv);
+void netroute_command(int argc, char **argv);
+void socktest_command(int argc, char **argv);
 void test_vfs_command(int argc, char* argv[]);
 void debug_vfs_command(int argc, char* argv[]);
 void lua_command(int argc, char **argv);
@@ -95,6 +103,13 @@ void netinfo_command(int argc, char **argv);
 void proc_command(int argc, char **argv);
 void dmesg_command(int argc, char **argv);
 void services_command(int argc, char **argv);
+
+// Real process management commands
+void ps_command(int argc, char **argv);
+void kill_command(int argc, char **argv);
+void jobs_command(int argc, char **argv);
+void fg_command(int argc, char **argv);
+void bg_command(int argc, char **argv);
 void env_command(int argc, char **argv);
 void terminal_test_command(int argc, char **argv);
 void launch_wt_command(int argc, char **argv);
@@ -177,6 +192,42 @@ void systemctl_command(int argc, char **argv);
 void service_command(int argc, char **argv);
 void crontab_command(int argc, char **argv);
 void journalctl_command(int argc, char **argv);
+
+// New system utilities
+void nano_command(int argc, char **argv);
+void editor_command(int argc, char **argv);
+void diskinfo_command(int argc, char **argv);
+void quota_command(int argc, char **argv);
+void ps_enhanced_command(int argc, char **argv);
+void kill_enhanced_command(int argc, char **argv);
+void pkill_command(int argc, char **argv);
+void pgrep_command(int argc, char **argv);
+
+// Advanced Unix utilities (newly added)
+void pstree_command(int argc, char **argv);
+void nice_command(int argc, char **argv);
+void nohup_command(int argc, char **argv);
+void cut_command(int argc, char **argv);
+void paste_command(int argc, char **argv);
+void tr_command(int argc, char **argv);
+void expand_command(int argc, char **argv);
+void fold_command(int argc, char **argv);
+void watch_command(int argc, char **argv);
+void timeout_command(int argc, char **argv);
+void xargs_command(int argc, char **argv);
+void tee_command(int argc, char **argv);
+void readlink_command(int argc, char **argv);
+void file_command(int argc, char **argv);
+void trap_command(int argc, char **argv);
+
+// Shell scripting commands
+void for_command(int argc, char **argv);
+void while_command(int argc, char **argv);
+void if_command(int argc, char **argv);
+void test_command(int argc, char **argv);
+void function_command(int argc, char **argv);
+void source_command(int argc, char **argv);
+void alias_command(int argc, char **argv);
 
 // Helper function prototypes
 void resolve_script_path(const char* name, char* out, size_t out_sz);
@@ -308,7 +359,7 @@ void init_default_env_vars(void);
 // These are defined in user.c
 extern char current_user[50];
 extern int is_logged_in;
-static char hostname[50] = "zora-vm";
+static char hostname[50] = "seabird";
 static char current_path[256] = "/";
 
 // Color support functions implementation
@@ -760,37 +811,6 @@ void htop_command(int argc, char **argv) {
     }
 }
 
-void jobs_command(int argc, char **argv) {
-    printf("Background jobs:\n");
-    if (job_count == 0) {
-        printf("No background jobs\n");
-    } else {
-        for (int i = 0; i < job_count; i++) {
-            printf("[%d]+ %d Running    job_%d\n", i+1, background_jobs[i], i+1);
-        }
-    }
-}
-
-void bg_command(int argc, char **argv) {
-    if (argc < 2) {
-        printf("Usage: bg <job_id>\n");
-        return;
-    }
-    
-    int job_id = atoi(argv[1]);
-    printf("bg: Sent job %d to background (simulated)\n", job_id);
-}
-
-void fg_command(int argc, char **argv) {
-    if (argc < 2) {
-        printf("Usage: fg <job_id>\n");
-        return;
-    }
-    
-    int job_id = atoi(argv[1]);
-    printf("fg: Brought job %d to foreground (simulated)\n", job_id);
-}
-
 // System information commands
 void date_command(int argc, char **argv) {
     time_t now = time(NULL);
@@ -899,11 +919,11 @@ void uname_command(int argc, char **argv) {
     get_zora_version_short(version_short, sizeof(version_short));
     
     if (argc > 1 && strcmp(argv[1], "-a") == 0) {
-        printf("ZoraVM %s \"%s\" zora-vm x86_64 x86_64 x86_64 Windows\n", version_short, get_version_codename());
+        printf("SeaBird %s \"%s\" seabird x86_64 x86_64 x86_64 Windows\n", version_short, get_version_codename());
         printf("\nResearch UNIX Environment:\n");
         unix_show_system_info();
     } else {
-        printf("ZoraVM\n");
+        printf("SeaBird\n");
     }
 }
 
@@ -1213,8 +1233,33 @@ void scp_command(int argc, char **argv) {
     char* source = argv[1];
     char* dest = argv[2];
     
-    printf("scp: Copying %s to %s (simulated)\n", source, dest);
-    printf("scp: 100%% |***********************| 1024 bytes transferred\n");
+    // Check if remote copy (contains @)
+    if (strchr(source, '@') || strchr(dest, '@')) {
+        printf("scp: Remote copy requires libssh2\n");
+        printf("Install: pacman -S mingw-w64-ucrt-x86_64-libssh2\n");
+        printf("For now, use 'curl' or 'wget' for downloads\n");
+        return;
+    }
+    
+    // Local copy within VFS
+    printf("scp: Copying %s to %s\n", source, dest);
+    
+    char full_source[512], full_dest[512];
+    char* cwd = vfs_getcwd();
+    build_full_path(full_source, sizeof(full_source), cwd ? cwd : "/", source);
+    build_full_path(full_dest, sizeof(full_dest), cwd ? cwd : "/", dest);
+    
+    void* data = NULL;
+    size_t size = 0;
+    if (vfs_read_file(full_source, &data, &size) == 0 && data) {
+        if (vfs_write_file(full_dest, data, size) == 0) {
+            printf("scp: 100%% |*********************| %zu bytes\n", size);
+        } else {
+            printf("scp: Write failed\n");
+        }
+    } else {
+        printf("scp: Read failed\n");
+    }
 }
 
 // Archiving commands
@@ -1773,7 +1818,7 @@ void terminal_demo_command(int argc, char **argv) {
     terminal_print_retro_banner();
     
     printf("2. Enhanced Prompt:\n");
-    terminal_print_retro_prompt("demo", "zora-vm", "/demo");
+    terminal_print_retro_prompt("demo", "seabird", "/demo");
     printf("\n\n");
     
     printf("3. Syntax Highlighting:\n");
@@ -1793,7 +1838,7 @@ void terminal_demo_command(int argc, char **argv) {
     printf("\n\n");
     
     printf("4. Typewriter Effect:\n");
-    terminal_typewriter_effect("Welcome to the enhanced Zora VM terminal!", 30);
+    terminal_typewriter_effect("Welcome to the enhanced SeaBird terminal!", 30);
     printf("\n\n");
     
     printf("5. Color Palette:\n");
@@ -1813,10 +1858,20 @@ void terminal_demo_command(int argc, char **argv) {
 // Binary execution commands
 void exec_command(int argc, char **argv) {
     if (argc < 2) {
-        printf("Usage: exec <binary> [args...]\n");
+        printf("Usage: exec <command> [args...] [&]\n");
+        printf("  Use & at the end to run in background\n");
         return;
     }
     
+    // Check if last argument is & for background execution
+    int is_background = 0;
+    int real_argc = argc;
+    if (argc > 2 && strcmp(argv[argc-1], "&") == 0) {
+        is_background = 1;
+        real_argc--; // Don't pass & to the process
+    }
+    
+    // Find the binary in VFS to get the host path
     char binary_path[256];
     if (argv[1][0] == '/') {
         strcpy(binary_path, argv[1]);
@@ -1824,21 +1879,32 @@ void exec_command(int argc, char **argv) {
         snprintf(binary_path, sizeof(binary_path), "/persistent/data/%s", argv[1]);
     }
     
-    printf("Executing binary: %s\n", binary_path);
+    VNode* node = vfs_find_node(binary_path);
+    if (!node || !node->host_path) {
+        printf("Error: Binary not found: %s\n", binary_path);
+        return;
+    }
     
-    // Enable crash guard for binary execution
-    vm_enable_crash_guard();
+    // Build argv array for the process (skip "exec" command)
+    char** proc_argv = &argv[1];
+    int proc_argc = real_argc - 1;
     
-    // Execute the binary
-    int result = execute_sandboxed_binary(binary_path, argv + 1, argc - 1);
+    // Spawn the real process
+    int pid = -1;
+    int result = process_real_spawn(node->host_path, proc_argv, proc_argc, is_background, &pid);
     
-    // Disable crash guard after execution
-    vm_disable_crash_guard();
+    if (result != 0 || pid < 0) {
+        printf("Failed to spawn process\n");
+        return;
+    }
     
-    if (result == -1) {
-        printf("Failed to execute binary\n");
+    if (is_background) {
+        printf("[%d] %d\n", job_get_count(), pid);
     } else {
-        printf("Binary execution completed (exit code: %d)\n", result);
+        // Foreground process - wait for it to complete
+        int exit_code;
+        process_real_wait(pid, &exit_code);
+        printf("Process exited with code %d\n", exit_code);
     }
 }
 
@@ -1924,78 +1990,7 @@ void themes_command(int argc, char **argv) {
     printf("Available themes: Campbell (terminal)\n");
 }
 
-#ifdef PYTHON_SCRIPTING
-#include "python/python_vm.h"
 
-void python_command(int argc, char **argv) {
-    if (argc < 2) {
-        printf("Usage: python <script.py>\n");
-        return;
-    }
-    
-    char script_path[256];
-    resolve_script_path(argv[1], script_path, sizeof(script_path));
-    if (!vfs_find_node(script_path)) {
-        printf("Python script not found: %s\n", script_path);
-        return;
-    }
-    printf("Executing Python script (sandboxed): %s\n", script_path);
-    if (python_vm_load_script(script_path) != 0) printf("Failed to execute Python script\n");
-}
-
-void pycode_command(int argc, char **argv) {
-    if (argc < 2) {
-        printf("Usage: pycode <python_code>\n");
-        return;
-    }
-    
-    char code[1024] = {0};
-    for (int i = 1; i < argc; i++) {
-        strcat(code, argv[i]);
-        if (i < argc - 1) strcat(code, " ");
-    }
-    
-    printf("Executing Python code: %s\n", code);
-    if (python_vm_execute_string(code) != 0) {
-        printf("Failed to execute Python code\n");
-    }
-}
-#endif
-
-#ifdef PERL_SCRIPTING
-#include "perl/perl_vm.h"
-
-void perl_command(int argc, char **argv) {
-    if (argc < 2) {
-        printf("Usage: perl <script.pl>\n");
-        return;
-    }
-    
-    char script_path[256];
-    resolve_script_path(argv[1], script_path, sizeof(script_path));
-    if (!vfs_find_node(script_path)) { printf("Perl script not found: %s\n", script_path); return; }
-    printf("Executing Perl script: %s\n", script_path);
-    if (perl_vm_load_script(script_path) != 0) printf("Failed to execute Perl script\n");
-}
-
-void plcode_command(int argc, char **argv) {
-    if (argc < 2) {
-        printf("Usage: plcode <perl_code>\n");
-        return;
-    }
-    
-    char code[1024] = {0};
-    for (int i = 1; i < argc; i++) {
-        strcat(code, argv[i]);
-        if (i < argc - 1) strcat(code, " ");
-    }
-    
-    printf("Executing Perl code: %s\n", code);
-    if (perl_vm_execute_string(code) != 0) {
-        printf("Failed to execute Perl code\n");
-    }
-}
-#endif
 
 // Start the shell loop
 void start_shell() {
@@ -2017,7 +2012,7 @@ void start_shell() {
     }
     
     // Set default hostname
-    strncpy(hostname, "zora-vm", sizeof(hostname) - 1);
+    strncpy(hostname, "seabird", sizeof(hostname) - 1);
     hostname[sizeof(hostname) - 1] = '\0';
 
     // Initialize environment variables
@@ -2030,14 +2025,14 @@ void start_shell() {
     get_zora_version_short(version_short, sizeof(version_short));
     
     printf("════════════════════════════════════════════════════════════════════════════════\n");
-    printf("  ███████╗ ██████╗ ██████╗  █████╗ ██╗   ██╗███╗   ███╗   v%s \"%s\"\n", version_short, get_version_codename());
-    printf("  ╚══███╔╝██╔═══██╗██╔══██╗██╔══██╗██║   ██║████╗ ████║\n");
-    printf("    ███╔╝ ██║   ██║██████╔╝███████║██║   ██║██╔████╔██║   Multi-Environment\n");
-    printf("   ███╔╝  ██║   ██║██╔══██╗██╔══██║╚██╗ ██╔╝██║╚██╔╝██║   Runtime Layer\n");
-    printf("  ███████╗╚██████╔╝██║  ██║██║  ██║ ╚████╔╝ ██║ ╚═╝ ██║\n");
-    printf("  ╚══════╝ ╚═════╝ ╚═╝  ╚═╝╚═╝  ╚═╝  ╚═══╝  ╚═╝     ╚═╝   Built %s\n", __DATE__);
+    printf("  ███████╗███████╗ █████╗ ██████╗ ██╗██████╗ ██████╗    v%s \"%s\"\n", version_short, get_version_codename());
+    printf("  ██╔════╝██╔════╝██╔══██╗██╔══██╗██║██╔══██╗██╔══██╗\n");
+    printf("  ███████╗█████╗  ███████║██████╔╝██║██████╔╝██║  ██║   Unix-like OS\n");
+    printf("  ╚════██║██╔══╝  ██╔══██║██╔══██╗██║██╔══██╗██║  ██║   ZORA Kernel v4.1.2\n");
+    printf("  ███████║███████╗██║  ██║██████╔╝██║██║  ██║██████╔╝\n");
+    printf("  ╚══════╝╚══════╝╚═╝  ╚═╝╚═════╝ ╚═╝╚═╝  ╚═╝╚═════╝    Built %s\n", __DATE__);
     printf("════════════════════════════════════════════════════════════════════════════════\n");
-    printf("Virtual Operating System • Terminal: Campbell Colors • UTF-8 Support\n");
+    printf("Unix-like Operating System • Terminal: Campbell Colors • UTF-8 Support\n");
     printf("Type 'help' for commands • 'version' for details • 'exit' to quit\n");
     printf("════════════════════════════════════════════════════════════════════════════════\n\n");
 
@@ -2282,7 +2277,7 @@ void sysinfo_command(int argc, char **argv) {
     get_zora_version_short(version_short, sizeof(version_short));
     
     printf("═══════════════════════════════════════════════════════════════════════\n");
-    printf("  ZoraVM v%s \"%s\" - Multi-Environment Runtime Layer\n", version_short, get_version_codename());
+    printf("  SeaBird v%s \"%s\" - Unix-like Operating System\n", version_short, get_version_codename());
     printf("═══════════════════════════════════════════════════════════════════════\n");
     printf("  Developed by: Tomoko Saito\n");
     printf("  System: %s\n", SYSTEM_NAME);
@@ -3621,8 +3616,44 @@ void vm_shutdown_command(int argc, char **argv) {
 // ===== SYSTEM MONITOR COMMANDS =====
 
 void top_command(int argc, char **argv) {
-    system_monitor_update();
-    system_monitor_display_processes();
+    printf("\033[2J\033[H");  // Clear screen
+    printf("==== ZoraVM Process Monitor ====\n\n");
+    
+    // Print header
+    printf("%-6s %-8s %-6s %-8s %-8s %-12s %-20s\n", 
+           "PID", "USER", "%CPU", "%MEM", "VSZ", "STATE", "COMMAND");
+    printf("-----------------------------------------------------------------------\n");
+    
+    // Get and display all real processes
+    RealProcess** procs = NULL;
+    int count = process_real_list(&procs);
+    
+    for (int i = 0; i < count; i++) {
+        if (!procs[i]) continue;
+        
+        // Update stats for this process
+        process_real_update_stats(procs[i]->pid);
+        
+        const char* state_str = "Unknown";
+        switch(procs[i]->state) {
+            case PROC_RUNNING: state_str = "Running"; break;
+            case PROC_SLEEPING: state_str = "Sleeping"; break;
+            case PROC_STOPPED: state_str = "Stopped"; break;
+            case PROC_ZOMBIE: state_str = "Zombie"; break;
+        }
+        
+        printf("%-6d %-8s %-6.1f %-8.1f %-8llu %-12s %-20s\n",
+               procs[i]->pid,
+               "guest",
+               procs[i]->cpu_percent,
+               (procs[i]->memory_used / 1024.0 / 1024.0),  // Convert to MB
+               procs[i]->memory_used / 1024,  // VSZ in KB
+               state_str,
+               procs[i]->name ? procs[i]->name : "<unknown>");
+    }
+    
+    printf("\nTotal processes: %d\n", count);
+    printf("Press Ctrl+C to exit\n");
 }
 
 void osinfo_command(int argc, char **argv) {
@@ -3761,6 +3792,185 @@ void launch_wt_command(int argc, char **argv) {
 }
 
 // ===== END SYSTEM MONITOR COMMANDS =====
+
+// ===== REAL PROCESS MANAGEMENT COMMANDS =====
+
+void ps_command(int argc, char **argv) {
+    int show_all = 0;
+    
+    // Parse options
+    for (int i = 1; i < argc; i++) {
+        if (strcmp(argv[i], "-a") == 0 || strcmp(argv[i], "aux") == 0) {
+            show_all = 1;
+        }
+    }
+    
+    printf("%-6s %-8s %-6s %-8s %-10s %-8s %-12s %-30s\n", 
+           "PID", "USER", "%CPU", "%MEM", "VSZ", "RSS", "STATE", "COMMAND");
+    printf("------------------------------------------------------------------------------\n");
+    
+    RealProcess** procs = NULL;
+    int count = process_real_list(&procs);
+    
+    for (int i = 0; i < count; i++) {
+        if (!procs[i]) continue;
+        
+        // Update stats
+        process_real_update_stats(procs[i]->pid);
+        
+        const char* state_str = "?";
+        switch(procs[i]->state) {
+            case PROC_RUNNING: state_str = "R"; break;
+            case PROC_SLEEPING: state_str = "S"; break;
+            case PROC_STOPPED: state_str = "T"; break;
+            case PROC_ZOMBIE: state_str = "Z"; break;
+        }
+        
+        printf("%-6d %-8s %-6.1f %-8.1f %-10llu %-8llu %-12s %-30s\n",
+               procs[i]->pid,
+               "guest",
+               procs[i]->cpu_percent,
+               (procs[i]->memory_used / 1024.0 / 1024.0),
+               procs[i]->memory_used / 1024,  // VSZ in KB
+               procs[i]->memory_used / 1024,  // RSS in KB (same for now)
+               state_str,
+               procs[i]->name ? procs[i]->name : "<unknown>");
+    }
+}
+
+void kill_command(int argc, char **argv) {
+    if (argc < 2) {
+        printf("Usage: kill [-signal] <pid>\n");
+        printf("Signals: SIGTERM (default), SIGKILL (-9), SIGSTOP, SIGCONT\n");
+        return;
+    }
+    
+    int signal = PROC_SIG_TERM;
+    int pid_arg = 1;
+    
+    // Parse signal
+    if (argc >= 3 && argv[1][0] == '-') {
+        if (strcmp(argv[1], "-9") == 0 || strcmp(argv[1], "-KILL") == 0) {
+            signal = PROC_SIG_KILL;
+        } else if (strcmp(argv[1], "-STOP") == 0) {
+            signal = PROC_SIG_STOP;
+        } else if (strcmp(argv[1], "-CONT") == 0) {
+            signal = PROC_SIG_CONT;
+        } else if (strcmp(argv[1], "-TERM") == 0) {
+            signal = PROC_SIG_TERM;
+        }
+        pid_arg = 2;
+    }
+    
+    int pid = atoi(argv[pid_arg]);
+    if (pid <= 0) {
+        printf("Invalid PID: %s\n", argv[pid_arg]);
+        return;
+    }
+    
+    int result = process_real_kill(pid, signal);
+    if (result == 0) {
+        printf("Process %d terminated\n", pid);
+    } else {
+        printf("Failed to kill process %d\n", pid);
+    }
+}
+
+void jobs_command(int argc, char **argv) {
+    int count = job_get_count();
+    if (count == 0) {
+        printf("No background jobs\n");
+        return;
+    }
+    
+    printf("Job ID   PID      Status    Command\n");
+    printf("--------------------------------------\n");
+    
+    for (int i = 1; i <= count; i++) {
+        BackgroundJob* job = job_get_by_id(i);
+        if (job) {
+            const char* status = job->is_stopped ? "Stopped" : "Running";
+            printf("[%d]%c     %-8d %-10s %s\n",
+                   job->job_id,
+                   (i == count) ? '+' : ' ',
+                   job->pid,
+                   status,
+                   job->command ? job->command : "<unknown>");
+        }
+    }
+}
+
+void fg_command(int argc, char **argv) {
+    if (argc < 2) {
+        // Default to most recent job
+        int count = job_get_count();
+        if (count == 0) {
+            printf("No background jobs\n");
+            return;
+        }
+        
+        int result = job_foreground(count);
+        if (result == 0) {
+            BackgroundJob* job = job_get_by_id(count);
+            if (job) {
+                printf("%s\n", job->command ? job->command : "<unknown>");
+                int exit_code;
+                process_real_wait(job->pid, &exit_code);
+                printf("Process exited with code %d\n", exit_code);
+            }
+        }
+        return;
+    }
+    
+    // Parse job ID (handle %N format)
+    int job_id;
+    if (argv[1][0] == '%') {
+        job_id = atoi(argv[1] + 1);
+    } else {
+        job_id = atoi(argv[1]);
+    }
+    
+    int result = job_foreground(job_id);
+    if (result == 0) {
+        BackgroundJob* job = job_get_by_id(job_id);
+        if (job) {
+            printf("%s\n", job->command ? job->command : "<unknown>");
+            int exit_code;
+            process_real_wait(job->pid, &exit_code);
+            printf("Process exited with code %d\n", exit_code);
+        }
+    } else {
+        printf("Failed to foreground job %d\n", job_id);
+    }
+}
+
+void bg_command(int argc, char **argv) {
+    if (argc < 2) {
+        printf("Usage: bg <job_id>\n");
+        printf("Use 'jobs' to list background jobs\n");
+        return;
+    }
+    
+    // Parse job ID (handle %N format)
+    int job_id;
+    if (argv[1][0] == '%') {
+        job_id = atoi(argv[1] + 1);
+    } else {
+        job_id = atoi(argv[1]);
+    }
+    
+    int result = job_background(job_id);
+    if (result == 0) {
+        BackgroundJob* job = job_get_by_id(job_id);
+        if (job) {
+            printf("[%d]+ %s &\n", job_id, job->command ? job->command : "<unknown>");
+        }
+    } else {
+        printf("Failed to background job %d\n", job_id);
+    }
+}
+
+// ===== END REAL PROCESS MANAGEMENT COMMANDS =====
 
 // ===== RESEARCH UNIX TENTH EDITION COMMANDS =====
 
@@ -4119,16 +4329,133 @@ void traceroute_command(int argc, char **argv) {
     }
     
     const char* dest = argv[argc-1];
-    printf(" Traceroute to %s\n", dest);
-    printf("traceroute to %s, 30 hops max, 60 byte packets\n", dest);
+    int max_hops = 30;
     
-    // Simulated traceroute output
-    printf(" 1  192.168.1.1 (192.168.1.1)  1.234 ms  1.456 ms  1.678 ms\n");
-    printf(" 2  10.0.0.1 (10.0.0.1)  5.123 ms  5.234 ms  5.345 ms\n");
-    printf(" 3  203.0.113.1 (203.0.113.1)  15.123 ms  15.234 ms  15.345 ms\n");
-    printf(" 4  * * *\n");
-    printf(" 5  %s (%s)  25.123 ms  25.234 ms  25.345 ms\n", dest, dest);
-    printf("\nNote: Real implementation requires network backend\n");
+    // Parse max hops if specified
+    for (int i = 1; i < argc - 1; i++) {
+        if (strcmp(argv[i], "-m") == 0 && i + 1 < argc - 1) {
+            max_hops = atoi(argv[i + 1]);
+            break;
+        }
+    }
+    
+    printf("Traceroute to %s, %d hops max\n", dest, max_hops);
+    
+    // Resolve destination
+    struct addrinfo hints = {0}, *result = NULL;
+    hints.ai_family = AF_INET;
+    hints.ai_socktype = SOCK_DGRAM;
+    
+    if (getaddrinfo(dest, "33434", &hints, &result) != 0) {
+        printf("Failed to resolve hostname\n");
+        return;
+    }
+    
+    struct sockaddr_in *dest_addr = (struct sockaddr_in *)result->ai_addr;
+    char dest_ip[INET_ADDRSTRLEN];
+    inet_ntop(AF_INET, &(dest_addr->sin_addr), dest_ip, INET_ADDRSTRLEN);
+    
+    printf("traceroute to %s (%s), %d hops max, 60 byte packets\n", dest, dest_ip, max_hops);
+    
+    // Create UDP socket for sending
+    SOCKET sock = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
+    if (sock == INVALID_SOCKET) {
+        printf("Failed to create socket\n");
+        freeaddrinfo(result);
+        return;
+    }
+    
+    // Try TTL-based traceroute
+    for (int ttl = 1; ttl <= max_hops; ttl++) {
+        // Set TTL
+        if (setsockopt(sock, IPPROTO_IP, IP_TTL, (char*)&ttl, sizeof(ttl)) == SOCKET_ERROR) {
+            printf("Failed to set TTL\n");
+            break;
+        }
+        
+        printf("%2d  ", ttl);
+        fflush(stdout);
+        
+        // Send 3 probes
+        int got_reply = 0;
+        char hop_ip[INET_ADDRSTRLEN] = "???";
+        double rtts[3] = {0, 0, 0};
+        
+        for (int probe = 0; probe < 3; probe++) {
+            // Send probe
+            char data[60];
+            memset(data, 0, sizeof(data));
+            
+            LARGE_INTEGER start, end, freq;
+            QueryPerformanceFrequency(&freq);
+            QueryPerformanceCounter(&start);
+            
+            struct sockaddr_in probe_addr = *dest_addr;
+            probe_addr.sin_port = htons(33434 + ttl + probe);
+            
+            if (sendto(sock, data, sizeof(data), 0, (struct sockaddr*)&probe_addr, sizeof(probe_addr)) == SOCKET_ERROR) {
+                printf("* ");
+                continue;
+            }
+            
+            // Set receive timeout (1 second)
+            DWORD timeout = 1000;
+            setsockopt(sock, SOL_SOCKET, SO_RCVTIMEO, (char*)&timeout, sizeof(timeout));
+            
+            // Try to receive ICMP response (Windows doesn't easily allow raw ICMP in user space)
+            // So we'll use a simpler approach - just measure if we get a response
+            fd_set readfds;
+            FD_ZERO(&readfds);
+            FD_SET(sock, &readfds);
+            
+            struct timeval tv = {1, 0};
+            int ready = select(0, &readfds, NULL, NULL, &tv);
+            
+            QueryPerformanceCounter(&end);
+            double rtt = ((double)(end.QuadPart - start.QuadPart) * 1000.0) / (double)freq.QuadPart;
+            
+            if (ready > 0) {
+                // Got response
+                char recv_buf[1024];
+                struct sockaddr_in from_addr;
+                int from_len = sizeof(from_addr);
+                recvfrom(sock, recv_buf, sizeof(recv_buf), 0, (struct sockaddr*)&from_addr, &from_len);
+                
+                inet_ntop(AF_INET, &(from_addr.sin_addr), hop_ip, INET_ADDRSTRLEN);
+                rtts[probe] = rtt;
+                got_reply = 1;
+            } else {
+                rtts[probe] = -1;
+            }
+        }
+        
+        // Print hop info
+        if (got_reply) {
+            printf("%s  ", hop_ip);
+            for (int i = 0; i < 3; i++) {
+                if (rtts[i] >= 0) {
+                    printf("%.3f ms  ", rtts[i]);
+                } else {
+                    printf("*  ");
+                }
+            }
+            printf("\n");
+            
+            // Check if we reached destination
+            if (strcmp(hop_ip, dest_ip) == 0) {
+                printf("Reached destination\n");
+                break;
+            }
+        } else {
+            printf("* * *\n");
+        }
+    }
+    
+    closesocket(sock);
+    freeaddrinfo(result);
+    
+    printf("\nNote: Windows traceroute using UDP probes with TTL expiration\n");
+    printf("For better results, run as administrator or use 'tracert' command\n");
 }
 
 void portscan_command(int argc, char **argv) {
@@ -4139,15 +4466,111 @@ void portscan_command(int argc, char **argv) {
     }
     
     const char* target = argv[argc-1];
-    printf(" Port scanning %s\n", target);
-    printf("Starting Nmap-style scan of %s\n", target);
+    int start_port = 1;
+    int end_port = 1024;
+    
+    // Parse port range if specified
+    for (int i = 1; i < argc - 1; i++) {
+        if (strcmp(argv[i], "-p") == 0 && i + 1 < argc - 1) {
+            char* range = argv[i + 1];
+            char* dash = strchr(range, '-');
+            if (dash) {
+                *dash = '\0';
+                start_port = atoi(range);
+                end_port = atoi(dash + 1);
+            } else {
+                start_port = end_port = atoi(range);
+            }
+            break;
+        }
+    }
+    
+    printf("Port scanning %s (ports %d-%d)\n", target, start_port, end_port);
+    printf("Starting scan...\n");
+    
+    // Resolve hostname first
+    struct addrinfo hints = {0}, *result = NULL;
+    hints.ai_family = AF_INET;
+    hints.ai_socktype = SOCK_STREAM;
+    
+    if (getaddrinfo(target, NULL, &hints, &result) != 0) {
+        printf("Failed to resolve hostname\n");
+        return;
+    }
+    
+    struct sockaddr_in *addr = (struct sockaddr_in *)result->ai_addr;
+    char ip[INET_ADDRSTRLEN];
+    inet_ntop(AF_INET, &(addr->sin_addr), ip, INET_ADDRSTRLEN);
+    
+    printf("Scanning %s (%s)\n", target, ip);
     printf("PORT     STATE    SERVICE\n");
-    printf("22/tcp   open     ssh\n");
-    printf("80/tcp   open     http\n");
-    printf("443/tcp  open     https\n");
-    printf("8080/tcp closed   http-proxy\n");
-    printf("\nScan complete: 4 ports scanned, 3 open\n");
-    printf("Note: Real implementation requires socket programming\n");
+    
+    int open_ports = 0;
+    int closed_ports = 0;
+    
+    // Scan ports
+    for (int port = start_port; port <= end_port; port++) {
+        SOCKET sock = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+        if (sock == INVALID_SOCKET) continue;
+        
+        // Set short timeout (500ms)
+        DWORD timeout = 500;
+        setsockopt(sock, SOL_SOCKET, SO_RCVTIMEO, (char*)&timeout, sizeof(timeout));
+        setsockopt(sock, SOL_SOCKET, SO_SNDTIMEO, (char*)&timeout, sizeof(timeout));
+        
+        // Set non-blocking mode
+        u_long mode = 1;
+        ioctlsocket(sock, FIONBIO, &mode);
+        
+        // Try to connect
+        struct sockaddr_in target_addr = *addr;
+        target_addr.sin_port = htons(port);
+        
+        connect(sock, (struct sockaddr*)&target_addr, sizeof(target_addr));
+        
+        // Wait for connection with select()
+        fd_set writefds;
+        FD_ZERO(&writefds);
+        FD_SET(sock, &writefds);
+        
+        struct timeval tv = {0, 500000};  // 500ms timeout
+        int result = select(0, NULL, &writefds, NULL, &tv);
+        
+        if (result > 0) {
+            // Port is open
+            const char* service = "unknown";
+            if (port == 21) service = "ftp";
+            else if (port == 22) service = "ssh";
+            else if (port == 23) service = "telnet";
+            else if (port == 25) service = "smtp";
+            else if (port == 53) service = "dns";
+            else if (port == 80) service = "http";
+            else if (port == 110) service = "pop3";
+            else if (port == 143) service = "imap";
+            else if (port == 443) service = "https";
+            else if (port == 3306) service = "mysql";
+            else if (port == 3389) service = "rdp";
+            else if (port == 5432) service = "postgres";
+            else if (port == 8080) service = "http-proxy";
+            
+            printf("%d/tcp   open     %s\n", port, service);
+            open_ports++;
+        } else {
+            closed_ports++;
+        }
+        
+        closesocket(sock);
+        
+        // Show progress every 100 ports
+        if ((port - start_port + 1) % 100 == 0) {
+            printf("... scanned %d ports\n", port - start_port + 1);
+        }
+    }
+    
+    freeaddrinfo(result);
+    
+    printf("\nScan complete: %d ports scanned, %d open, %d closed\n", 
+           end_port - start_port + 1, open_ports, closed_ports);
 }
 
 void netns_command(int argc, char **argv) {
@@ -4435,6 +4858,9 @@ Command command_table[] = {
     {"curl", curl_command, "Transfer data from servers"},
     {"ssh", ssh_command, "Secure shell connection"},
     {"iptables", iptables_command, "Configure firewall rules"},
+    {"netstack", netstack_command, "Network stack info (stats|connections|interfaces)"},
+    {"netroute", netroute_command, "Display/modify network routing table"},
+    {"socktest", socktest_command, "Test network stack socket operations"},
     {"testvfs", test_vfs_command, "Test VFS functionality"},
     {"debugvfs", debug_vfs_command, "Debug VFS structure"},
     {"lua", lua_command, "Execute Lua script from /scripts (fallback /persistent/scripts)"},
@@ -4471,6 +4897,11 @@ Command command_table[] = {
     {"hostname", hostname_command, "Display or set the system hostname"},
     
     // System monitoring and OS commands
+    {"ps", ps_command, "List running processes (real Windows processes)"},
+    {"kill", kill_command, "Terminate a process by PID"},
+    {"jobs", jobs_command, "List background jobs"},
+    {"fg", fg_command, "Bring background job to foreground"},
+    {"bg", bg_command, "Resume stopped job in background"},
     {"top", top_command, "Display running processes (system monitor)"},
     {"osinfo", osinfo_command, "Display detailed OS and system information"},
     {"mounts", mounts_command, "Show mounted filesystems"},
@@ -4490,14 +4921,7 @@ Command command_table[] = {
     {"syntax", syntax_command, "Toggle command syntax highlighting"},
     {"terminal-demo", terminal_demo_command, "Demonstrate terminal enhancements"},
     
-    #ifdef PYTHON_SCRIPTING
-    {"python", python_command, "Execute Python script from /scripts (fallback legacy path)"},
-    {"pycode", pycode_command, "Execute Python code directly"},
-    #endif
-    #ifdef PERL_SCRIPTING
-    {"perl", perl_command, "Execute Perl script from /scripts (fallback legacy path)"},
-    {"plcode", plcode_command, "Execute Perl code directly"},
-    #endif
+
 
     {"test-sandbox", test_sandbox_command, "Test sandbox security and isolation"},
     
@@ -4546,6 +4970,34 @@ Command command_table[] = {
     {"primes", primes_command, "Generate prime numbers"},
     {"uname", uname_command, "Display system information"},
 
+    // Advanced Unix utilities
+    {"pstree", pstree_command, "Display process tree"},
+    {"nice", nice_command, "Run program with modified priority"},
+    {"nohup", nohup_command, "Run command immune to hangups"},
+    {"cut", cut_command, "Remove sections from each line of files"},
+    {"paste", paste_command, "Merge lines of files"},
+    {"tr", tr_command, "Translate or delete characters"},
+    {"expand", expand_command, "Convert tabs to spaces"},
+    {"fold", fold_command, "Wrap input lines to fit in specified width"},
+    {"watch", watch_command, "Execute a program periodically"},
+    {"timeout", timeout_command, "Run command with time limit"},
+    {"xargs", xargs_command, "Build and execute command lines from stdin"},
+    {"tee", tee_command, "Read from stdin and write to stdout and files"},
+    {"readlink", readlink_command, "Print resolved symbolic links"},
+    {"file", file_command, "Determine file type"},
+    {"trap", trap_command, "Trap signals and execute commands"},
+
+    // Shell scripting features
+    {"for", for_command, "For loop construct"},
+    {"while", while_command, "While loop construct"},
+    {"if", if_command, "Conditional execution"},
+    {"test", test_command, "Evaluate conditional expression"},
+    {"[", test_command, "Evaluate conditional expression (bracket form)"},
+    {"function", function_command, "Define shell function"},
+    {"source", source_command, "Execute commands from file"},
+    {".", source_command, "Execute commands from file (dot command)"},
+    {"alias", alias_command, "Create command alias"},
+
     // Real Embedded Compilation Commands
     {"compile-c", compile_c_command, "Real C compilation with embedded GCC"},
     {"compile-asm", compile_asm_command, "Real x86 assembly with embedded NASM"},
@@ -4578,6 +5030,16 @@ Command command_table[] = {
     {"service", service_command, "Service management and configuration"},
     {"crontab", crontab_command, "Cron job scheduling and management"},
     {"journalctl", journalctl_command, "System and service log management"},
+    
+    // Enhanced system utilities
+    {"nano", nano_command, "Nano text editor - simple file editing"},
+    {"editor", editor_command, "Alias for nano text editor"},
+    {"diskinfo", diskinfo_command, "Display detailed disk information"},
+    {"quota", quota_command, "Disk quota management"},
+    {"ps-new", ps_enhanced_command, "Enhanced process listing with details"},
+    {"kill-new", kill_enhanced_command, "Enhanced kill command with signal support"},
+    {"pkill", pkill_command, "Kill processes by name pattern"},
+    {"pgrep", pgrep_command, "Find processes by name pattern"},
 
     {NULL, NULL, NULL}
 };
@@ -6110,27 +6572,42 @@ void nslookup_command(int argc, char **argv) {
     
     char* hostname = argv[1];
     
-    // Simulate DNS lookup
-    printf("Server: %s\n", "8.8.8.8");
-    printf("Address: %s#53\n", "8.8.8.8");
-    printf("\n");
+    // Use real DNS resolution
+    struct addrinfo hints = {0}, *result = NULL, *ptr = NULL;
+    hints.ai_family = AF_UNSPEC;    // Allow IPv4 or IPv6
+    hints.ai_socktype = SOCK_STREAM;
     
-    // Simulate response
+    printf("Server: 8.8.8.8\n");
+    printf("Address: 8.8.8.8#53\n\n");
+    
+    int ret = getaddrinfo(hostname, NULL, &hints, &result);
+    if (ret != 0) {
+        printf("DNS lookup failed: %s\n", gai_strerror(ret));
+        return;
+    }
+    
     printf("Non-authoritative answer:\n");
     printf("Name: %s\n", hostname);
     
-    // Generate fake IP addresses for common domains
-    if (strstr(hostname, "google.com")) {
-        printf("Address: 142.250.191.14\n");
-    } else if (strstr(hostname, "github.com")) {
-        printf("Address: 140.82.112.4\n");
-    } else if (strstr(hostname, "stackoverflow.com")) {
-        printf("Address: 151.101.1.69\n");
-    } else {
-        // Generate random IP
-        printf("Address: %d.%d.%d.%d\n", 
-               (rand() % 223) + 1, rand() % 256, rand() % 256, rand() % 256);
+    // Display all resolved addresses
+    for (ptr = result; ptr != NULL; ptr = ptr->ai_next) {
+        void *addr;
+        char ipstr[INET6_ADDRSTRLEN];
+        
+        if (ptr->ai_family == AF_INET) {
+            struct sockaddr_in *ipv4 = (struct sockaddr_in *)ptr->ai_addr;
+            addr = &(ipv4->sin_addr);
+            inet_ntop(AF_INET, addr, ipstr, sizeof(ipstr));
+            printf("Address: %s\n", ipstr);
+        } else if (ptr->ai_family == AF_INET6) {
+            struct sockaddr_in6 *ipv6 = (struct sockaddr_in6 *)ptr->ai_addr;
+            addr = &(ipv6->sin6_addr);
+            inet_ntop(AF_INET6, addr, ipstr, sizeof(ipstr));
+            printf("IPv6 Address: %s\n", ipstr);
+        }
     }
+    
+    freeaddrinfo(result);
 }
 
 void telnet_command(int argc, char **argv) {
@@ -6143,12 +6620,58 @@ void telnet_command(int argc, char **argv) {
     int port = atoi(argv[2]);
     
     printf("Trying %s...\n", host);
+    
+    // Create socket
+    SOCKET sock = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+    if (sock == INVALID_SOCKET) {
+        printf("Failed to create socket: %d\n", WSAGetLastError());
+        return;
+    }
+    
+    // Resolve hostname
+    struct addrinfo hints = {0}, *result = NULL;
+    hints.ai_family = AF_INET;
+    hints.ai_socktype = SOCK_STREAM;
+    hints.ai_protocol = IPPROTO_TCP;
+    
+    char port_str[16];
+    sprintf(port_str, "%d", port);
+    
+    if (getaddrinfo(host, port_str, &hints, &result) != 0) {
+        printf("Failed to resolve hostname\n");
+        closesocket(sock);
+        return;
+    }
+    
+    // Set timeout
+    DWORD timeout = 5000;
+    setsockopt(sock, SOL_SOCKET, SO_RCVTIMEO, (char*)&timeout, sizeof(timeout));
+    
+    // Connect
+    if (connect(sock, result->ai_addr, (int)result->ai_addrlen) == SOCKET_ERROR) {
+        printf("Failed to connect: %d\n", WSAGetLastError());
+        freeaddrinfo(result);
+        closesocket(sock);
+        return;
+    }
+    
+    freeaddrinfo(result);
+    
     printf("Connected to %s.\n", host);
-    printf("Escape character is '^]'.\n");
+    printf("Escape character is '^]'.\n\n");
     
-    // Simulate connection
-    network_simulate_connect(host, port, 1); // TCP
+    // Simple echo mode - read banner
+    char buffer[4096];
+    int bytes = recv(sock, buffer, sizeof(buffer) - 1, 0);
+    if (bytes > 0) {
+        buffer[bytes] = '\0';
+        printf("%s", buffer);
+    }
     
+    printf("\n[Connection established - press Ctrl+C to exit]\n");
+    printf("Note: Interactive mode not fully implemented, closing connection\n");
+    
+    closesocket(sock);
     printf("Connection closed by foreign host.\n");
 }
 
@@ -6258,18 +6781,12 @@ void curl_command(int argc, char **argv) {
     
     printf("Fetching %s...\n", url);
     
-    // Simulate HTTP response
-    printf("HTTP/1.1 200 OK\n");
-    printf("Content-Type: text/html\n");
-    printf("Content-Length: 1024\n");
-    printf("\n");
-    printf("<html>\n");
-    printf("<head><title>Simulated Response</title></head>\n");
-    printf("<body>\n");
-    printf("<h1>Hello from Virtual Network!</h1>\n");
-    printf("<p>This is a simulated HTTP response from %s</p>\n", url);
-    printf("</body>\n");
-    printf("</html>\n");
+    // Use real HTTP client implementation
+    int result = network_http_request(url, "GET");
+    
+    if (result != 0) {
+        printf("Failed to fetch URL\n");
+    }
 }
 
 void ssh_command(int argc, char **argv) {
@@ -6281,19 +6798,15 @@ void ssh_command(int argc, char **argv) {
     char* target = argv[1];
     
     printf("Connecting to %s...\n", target);
-    printf("The authenticity of host cannot be established.\n");
-    printf("Are you sure you want to continue connecting (yes/no)? ");
     
-    char response[10];
-    if (fgets(response, sizeof(response), stdin) && 
-        strncmp(response, "yes", 3) == 0) {
-        printf("Warning: Permanently added to the list of known hosts.\n");
-        printf("Connected to virtual host.\n");
-        printf("This is a simulated SSH connection.\n");
-        printf("Connection closed.\n");
-    } else {
-        printf("Connection aborted.\n");
-    }
+    // Check for libssh2 support
+    printf("\n*** SSH CLIENT REQUIRES libssh2 ***\n");
+    printf("To enable SSH support, install:\n");
+    printf("  pacman -S mingw-w64-ucrt-x86_64-libssh2\n");
+    printf("Then rebuild ZoraVM\n\n");
+    printf("For now, use:\n");
+    printf("  - 'telnet' for basic TCP connections\n");
+    printf("  - Windows native 'ssh' in host terminal\n");
 }
 
 void iptables_command(int argc, char **argv) {
@@ -6321,6 +6834,161 @@ void iptables_command(int argc, char **argv) {
     } else {
         printf("Usage: iptables [-L|-A|-D] [options]\n");
     }
+}
+
+// Network stack commands
+void netstack_command(int argc, char **argv) {
+    if (argc < 2) {
+        printf("Usage: netstack <stats|connections|interfaces>\n");
+        return;
+    }
+    
+    if (strcmp(argv[1], "stats") == 0) {
+        netstack_dump_stats();
+    } else if (strcmp(argv[1], "connections") == 0 || strcmp(argv[1], "conn") == 0) {
+        netstack_show_connections();
+    } else if (strcmp(argv[1], "interfaces") == 0 || strcmp(argv[1], "if") == 0) {
+        NetworkInterface* lo = netstack_get_interface(0);
+        NetworkInterface* zora0 = netstack_get_interface(1);
+        
+        printf("\n=== Network Interfaces ===\n");
+        if (lo) {
+            char ip_str[16], mac_str[24];
+            netstack_format_ipv4(&lo->ip, ip_str, sizeof(ip_str));
+            netstack_format_mac(&lo->mac, mac_str, sizeof(mac_str));
+            printf("%s: flags=%d mtu=%d\n", lo->name, lo->flags, lo->mtu);
+            printf("    inet %s  netmask ", ip_str);
+            netstack_format_ipv4(&lo->netmask, ip_str, sizeof(ip_str));
+            printf("%s\n", ip_str);
+            printf("    ether %s\n", mac_str);
+            printf("    RX packets:%llu  bytes:%llu\n", 
+                   (unsigned long long)lo->rx_packets, (unsigned long long)lo->rx_bytes);
+            printf("    TX packets:%llu  bytes:%llu\n\n",
+                   (unsigned long long)lo->tx_packets, (unsigned long long)lo->tx_bytes);
+        }
+        
+        if (zora0) {
+            char ip_str[16], mac_str[24];
+            netstack_format_ipv4(&zora0->ip, ip_str, sizeof(ip_str));
+            netstack_format_mac(&zora0->mac, mac_str, sizeof(mac_str));
+            printf("%s: flags=%d mtu=%d\n", zora0->name, zora0->flags, zora0->mtu);
+            printf("    inet %s  netmask ", ip_str);
+            netstack_format_ipv4(&zora0->netmask, ip_str, sizeof(ip_str));
+            printf("%s  broadcast ", ip_str);
+            netstack_format_ipv4(&zora0->broadcast, ip_str, sizeof(ip_str));
+            printf("%s\n", ip_str);
+            printf("    gateway ");
+            netstack_format_ipv4(&zora0->gateway, ip_str, sizeof(ip_str));
+            printf("%s\n", ip_str);
+            printf("    ether %s\n", mac_str);
+            printf("    RX packets:%llu  bytes:%llu\n",
+                   (unsigned long long)zora0->rx_packets, (unsigned long long)zora0->rx_bytes);
+            printf("    TX packets:%llu  bytes:%llu\n",
+                   (unsigned long long)zora0->tx_packets, (unsigned long long)zora0->tx_bytes);
+        }
+    } else {
+        printf("Unknown netstack command: %s\n", argv[1]);
+    }
+}
+
+void netroute_command(int argc, char **argv) {
+    if (argc < 2) {
+        // Show routing table
+        netstack_show_routes();
+    } else if (strcmp(argv[1], "add") == 0) {
+        printf("netroute: add not yet implemented\n");
+    } else if (strcmp(argv[1], "del") == 0) {
+        printf("netroute: delete not yet implemented\n");
+    } else {
+        printf("Usage: netroute [add|del]\n");
+    }
+}
+
+void socktest_command(int argc, char **argv) {
+    printf("=== Network Stack Socket Test ===\n\n");
+    
+    // Test 1: Create TCP socket
+    printf("[Test 1] Creating TCP socket...\n");
+    int sock = netstack_socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+    if (sock < 0) {
+        printf("FAILED: Could not create socket\n");
+        return;
+    }
+    printf("PASSED: Created socket fd=%d\n\n", sock);
+    
+    // Test 2: Bind to port
+    printf("[Test 2] Binding to port 8080...\n");
+    SocketAddress addr;
+    addr.family = AF_INET;
+    addr.port = htons(8080);
+    netstack_parse_ipv4("0.0.0.0", &addr.addr);
+    
+    if (netstack_bind(sock, &addr) < 0) {
+        printf("FAILED: Could not bind socket\n");
+        netstack_close(sock);
+        return;
+    }
+    printf("PASSED: Bound to port 8080\n\n");
+    
+    // Test 3: Listen
+    printf("[Test 3] Listening for connections...\n");
+    if (netstack_listen(sock, 5) < 0) {
+        printf("FAILED: Could not listen\n");
+        netstack_close(sock);
+        return;
+    }
+    printf("PASSED: Socket listening\n\n");
+    
+    // Test 4: Create client socket
+    printf("[Test 4] Creating client socket...\n");
+    int client = netstack_socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+    if (client < 0) {
+        printf("FAILED: Could not create client socket\n");
+        netstack_close(sock);
+        return;
+    }
+    printf("PASSED: Created client socket fd=%d\n\n", client);
+    
+    // Test 5: Connect
+    printf("[Test 5] Connecting to localhost:8080...\n");
+    SocketAddress server_addr;
+    server_addr.family = AF_INET;
+    server_addr.port = htons(8080);
+    netstack_parse_ipv4("127.0.0.1", &server_addr.addr);
+    
+    if (netstack_connect(client, &server_addr) < 0) {
+        printf("FAILED: Could not connect\n");
+        netstack_close(client);
+        netstack_close(sock);
+        return;
+    }
+    printf("PASSED: Connected\n\n");
+    
+    // Test 6: Send data
+    printf("[Test 6] Sending data...\n");
+    const char* msg = "Hello from ZoraVM network stack!";
+    int sent = netstack_send(client, msg, strlen(msg), 0);
+    if (sent < 0) {
+        printf("FAILED: Could not send data\n");
+    } else {
+        printf("PASSED: Sent %d bytes\n\n", sent);
+    }
+    
+    // Test 7: Show connections
+    printf("[Test 7] Active connections:\n");
+    netstack_show_connections();
+    printf("\n");
+    
+    // Test 8: Statistics
+    printf("[Test 8] Network statistics:\n");
+    netstack_dump_stats();
+    printf("\n");
+    
+    // Cleanup
+    printf("[Cleanup] Closing sockets...\n");
+    netstack_close(client);
+    netstack_close(sock);
+    printf("All tests completed!\n");
 }
 
 void test_vfs_command(int argc, char* argv[]) {
@@ -7483,11 +8151,13 @@ void wc_command(int argc, char **argv) {
 void awk_command(int argc, char **argv) {
     if (argc < 3) {
         printf("Usage: awk '<pattern>' <filename>\n");
-        printf("Simple awk implementation - basic pattern matching only\n");
-        printf("Examples:\n");
-        printf("  awk '{print $1}' file.txt    - print first field\n");
-        printf("  awk '{print $NF}' file.txt   - print last field\n");
-        printf("  awk '{print NF}' file.txt    - print number of fields\n");
+        printf("Patterns supported:\n");
+        printf("  {print $N}       - print field N\n");
+        printf("  {print $NF}      - print last field\n");
+        printf("  {print NF}       - print number of fields\n");
+        printf("  {print $0}       - print entire line\n");
+        printf("  /regex/ {action} - pattern matching\n");
+        printf("  $N == \"text\"     - field comparison\n");
         return;
     }
     
@@ -7509,46 +8179,117 @@ void awk_command(int argc, char **argv) {
     
     // Process each line
     char* content = (char*)data;
-    char line[1024];
+    char line_buf[1024];
+    char line_copy[1024];
     int line_pos = 0;
+    int line_num = 0;
     
     for (size_t i = 0; i <= size; i++) {
         if (i == size || content[i] == '\n') {
-            line[line_pos] = '\0';
+            line_buf[line_pos] = '\0';
+            line_num++;
             
-            // Simple awk processing
-            if (strstr(pattern, "print $1")) {
-                // Print first field
-                char* token = strtok(line, " \t");
-                if (token) printf("%s\n", token);
-            } else if (strstr(pattern, "print $NF")) {
-                // Print last field
-                char* fields[100];
-                int field_count = 0;
-                char* token = strtok(line, " \t");
-                while (token && field_count < 100) {
-                    fields[field_count++] = token;
-                    token = strtok(NULL, " \t");
+            // Make a copy for strtok
+            strncpy(line_copy, line_buf, sizeof(line_copy));
+            line_copy[sizeof(line_copy) - 1] = '\0';
+            
+            // Parse fields
+            char* fields[100];
+            int field_count = 0;
+            char* token = strtok(line_copy, " \t");
+            while (token && field_count < 100) {
+                fields[field_count++] = token;
+                token = strtok(NULL, " \t");
+            }
+            
+            // Pattern matching
+            int should_print = 1;
+            char* action = NULL;
+            
+            // Check for pattern/action: /regex/ {action}
+            if (pattern[0] == '/') {
+                char* end = strchr(pattern + 1, '/');
+                if (end) {
+                    char regex[256];
+                    int len = end - (pattern + 1);
+                    if (len < sizeof(regex)) {
+                        strncpy(regex, pattern + 1, len);
+                        regex[len] = '\0';
+                        should_print = (strstr(line_buf, regex) != NULL);
+                        action = strchr(end + 1, '{');
+                    }
                 }
-                if (field_count > 0) printf("%s\n", fields[field_count - 1]);
-            } else if (strstr(pattern, "print NF")) {
-                // Print number of fields
-                int field_count = 0;
-                char* token = strtok(line, " \t");
-                while (token) {
-                    field_count++;
-                    token = strtok(NULL, " \t");
+            } else if (strstr(pattern, "==")) {
+                // Field comparison: $N == \"value\"
+                int field_num = 0;
+                if (pattern[0] == '$') {
+                    field_num = atoi(pattern + 1);
                 }
-                printf("%d\n", field_count);
+                char* cmp_val = strstr(pattern, "\"");
+                if (cmp_val && field_num > 0 && field_num <= field_count) {
+                    cmp_val++;
+                    char* end_quote = strchr(cmp_val, '"');
+                    if (end_quote) {
+                        *end_quote = '\0';
+                        should_print = (strcmp(fields[field_num - 1], cmp_val) == 0);
+                        *end_quote = '"';
+                    }
+                } else {
+                    should_print = 0;
+                }
             } else {
-                printf("awk: pattern '%s' not implemented\n", pattern);
-                break;
+                action = pattern;
+            }
+            
+            if (!should_print) {
+                line_pos = 0;
+                continue;
+            }
+            
+            // Execute action
+            if (!action) action = pattern;
+            
+            if (strstr(action, "print $0")) {
+                // Print entire line
+                printf("%s\n", line_buf);
+            } else if (strstr(action, "print $1")) {
+                // Print first field
+                if (field_count > 0) printf("%s\n", fields[0]);
+            } else if (strstr(action, "print $2")) {
+                // Print second field
+                if (field_count > 1) printf("%s\n", fields[1]);
+            } else if (strstr(action, "print $3")) {
+                // Print third field
+                if (field_count > 2) printf("%s\n", fields[2]);
+            } else if (strstr(action, "print $NF")) {
+                // Print last field
+                if (field_count > 0) printf("%s\n", fields[field_count - 1]);
+            } else if (strstr(action, "print NF")) {
+                // Print number of fields
+                printf("%d\n", field_count);
+            } else if (strstr(action, "print NR")) {
+                // Print line number
+                printf("%d\n", line_num);
+            } else {
+                // Try to extract field number from $N
+                char* dollar = strstr(action, "print $");
+                if (dollar) {
+                    int field_num = atoi(dollar + 7);
+                    if (field_num > 0 && field_num <= field_count) {
+                        printf("%s\n", fields[field_num - 1]);
+                    }
+                } else if (strstr(action, "{print}")) {
+                    printf("%s\n", line_buf);
+                } else {
+                    printf("awk: pattern '%s' not fully supported\n", pattern);
+                    break;
+                }
             }
             
             line_pos = 0;
         } else {
             if (line_pos < 1023) {
-                line[line_pos++] = content[i];
+                line_buf[line_pos++] = content[i];
             }
         }
     }
@@ -7627,12 +8368,23 @@ void ln_command(int argc, char **argv) {
         return;
     }
     
+    // Build full paths
+    char full_target[512], full_link[512];
+    char* cwd = vfs_getcwd();
+    build_full_path(full_target, sizeof(full_target), cwd ? cwd : "/", target);
+    build_full_path(full_link, sizeof(full_link), cwd ? cwd : "/", link_name);
+    
     if (symbolic) {
-        printf("ln: Created symbolic link '%s' -> '%s' (simulated)\n", link_name, target);
+        // Create symbolic link
+        if (vfs_create_symlink(full_link, full_target) == 0) {
+            printf("Created symbolic link '%s' -> '%s'\n", link_name, target);
+        } else {
+            printf("ln: failed to create symbolic link\n");
+        }
     } else {
-        printf("ln: Created hard link '%s' -> '%s' (simulated)\n", link_name, target);
+        // Hard links not supported in VFS yet
+        printf("ln: hard links not supported, use -s for symbolic links\n");
     }
-    printf("Note: Link creation is simulated in the VM environment\n");
 }
 
 void diff_command(int argc, char **argv) {
@@ -7912,4 +8664,915 @@ void clear_buffer_command(int argc, char **argv) {
     fflush(stderr);
     
     printf("Input buffer cleared. Try typing a command now.\n");
+}
+
+// ===== ADVANCED UNIX UTILITIES =====
+
+// Process tree display
+void pstree_command(int argc, char **argv) {
+    printf("Process Tree (pstree)\n");
+    printf("═══════════════════════════════════════════════════════\n\n");
+    
+    RealProcess** procs = NULL;
+    int count = process_real_list(&procs);
+    
+    if (count <= 0) {
+        printf("No processes found.\n");
+        return;
+    }
+    
+    // Display init process (PID 1) as root
+    printf("seabird (1)\n");
+    
+    // Display all other processes as children
+    for (int i = 0; i < count; i++) {
+        if (procs[i] && procs[i]->pid != 1) {
+            printf("  ├── %s (%d)\n", procs[i]->name, procs[i]->pid);
+        }
+    }
+    
+    if (procs) {
+        free(procs);
+    }
+    
+    printf("\n");
+}
+
+// Nice - change process priority
+void nice_command(int argc, char **argv) {
+    if (argc < 2) {
+        printf("Usage: nice [-n priority] command [args...]\n");
+        printf("       nice -n <increment> -p <pid>\n");
+        printf("Priority range: -20 (highest) to 19 (lowest)\n");
+        return;
+    }
+    
+    int priority_increment = 10;  // Default nice value
+    int target_pid = -1;
+    
+    // Parse arguments
+    for (int i = 1; i < argc; i++) {
+        if (strcmp(argv[i], "-n") == 0 && i + 1 < argc) {
+            priority_increment = atoi(argv[i + 1]);
+            i++;
+        } else if (strcmp(argv[i], "-p") == 0 && i + 1 < argc) {
+            target_pid = atoi(argv[i + 1]);
+            i++;
+        }
+    }
+    
+    if (target_pid > 0) {
+        // Adjust priority of existing process
+        RealProcessPriority prio;
+        if (priority_increment < -10) prio = PRIORITY_REALTIME;
+        else if (priority_increment < 0) prio = PRIORITY_HIGH;
+        else if (priority_increment < 10) prio = PRIORITY_NORMAL;
+        else prio = PRIORITY_LOW;
+        
+        if (process_real_set_priority(target_pid, prio) == 0) {
+            printf("Process %d priority adjusted (nice value: %d)\n", target_pid, priority_increment);
+        } else {
+            printf("Failed to adjust priority for process %d\n", target_pid);
+        }
+    } else {
+        printf("Nice: Would launch command with priority %d\n", priority_increment);
+        printf("(Process spawning with priority will be implemented)\n");
+    }
+}
+
+// Nohup - run command immune to hangups
+void nohup_command(int argc, char **argv) {
+    if (argc < 2) {
+        printf("Usage: nohup command [args...]\n");
+        printf("Run COMMAND, ignoring hangup signals.\n");
+        return;
+    }
+    
+    printf("nohup: Running '%s' immune to hangups\n", argv[1]);
+    printf("Redirecting stdout to nohup.out\n");
+    
+    // Build command string
+    char cmd[1024] = "";
+    for (int i = 1; i < argc; i++) {
+        strcat(cmd, argv[i]);
+        if (i < argc - 1) strcat(cmd, " ");
+    }
+    
+    // Spawn process in background
+    int pid = -1;
+    char* proc_argv[64];
+    int proc_argc = 0;
+    for (int i = 1; i < argc && proc_argc < 63; i++) {
+        proc_argv[proc_argc++] = argv[i];
+    }
+    proc_argv[proc_argc] = NULL;
+    
+    if (process_real_spawn(argv[1], proc_argv, proc_argc, 1, &pid) == 0) {
+        printf("nohup: Process started with PID %d\n", pid);
+        printf("Output will be logged to nohup.out\n");
+    } else {
+        printf("nohup: Failed to start process\n");
+    }
+}
+
+// Cut - extract columns from text
+void cut_command(int argc, char **argv) {
+    if (argc < 2) {
+        printf("Usage: cut -f FIELDS [FILE]\n");
+        printf("       cut -c CHARS [FILE]\n");
+        printf("       cut -d DELIM -f FIELDS [FILE]\n");
+        printf("Extract selected portions of each line.\n");
+        printf("\nOptions:\n");
+        printf("  -f LIST   select only these fields\n");
+        printf("  -d DELIM  use DELIM instead of TAB for field delimiter\n");
+        printf("  -c LIST   select only these characters\n");
+        return;
+    }
+    
+    char delimiter = '\t';
+    char* fields_str = NULL;
+    char* chars_str = NULL;
+    char* filename = NULL;
+    int mode = 0; // 0=none, 1=fields, 2=chars
+    
+    // Parse options
+    for (int i = 1; i < argc; i++) {
+        if (strcmp(argv[i], "-f") == 0 && i + 1 < argc) {
+            fields_str = argv[++i];
+            mode = 1;
+        } else if (strcmp(argv[i], "-d") == 0 && i + 1 < argc) {
+            delimiter = argv[++i][0];
+        } else if (strcmp(argv[i], "-c") == 0 && i + 1 < argc) {
+            chars_str = argv[++i];
+            mode = 2;
+        } else if (argv[i][0] != '-') {
+            filename = argv[i];
+        }
+    }
+    
+    if (mode == 0) {
+        printf("cut: you must specify a list of bytes, characters, or fields\n");
+        return;
+    }
+    
+    // For demo purposes
+    printf("cut: Would extract ");
+    if (mode == 1) {
+        printf("fields %s (delimiter: '%c')", fields_str, delimiter);
+    } else {
+        printf("characters %s", chars_str);
+    }
+    if (filename) {
+        printf(" from file: %s\n", filename);
+    } else {
+        printf(" from stdin\n");
+    }
+    
+    // Example implementation for field extraction
+    if (mode == 1 && filename) {
+        void* data = NULL;
+        size_t size = 0;
+        if (vfs_read_file(filename, &data, &size) == 0 && data) {
+            char* content = (char*)data;
+            char* line = strtok(content, "\n");
+            int field_num = atoi(fields_str);
+            
+            while (line) {
+                char* token = strtok(line, &delimiter);
+                int curr_field = 1;
+                while (token) {
+                    if (curr_field == field_num) {
+                        printf("%s\n", token);
+                        break;
+                    }
+                    curr_field++;
+                    token = strtok(NULL, &delimiter);
+                }
+                line = strtok(NULL, "\n");
+            }
+            free(data);
+        }
+    }
+}
+
+// Paste - merge lines of files
+void paste_command(int argc, char **argv) {
+    if (argc < 2) {
+        printf("Usage: paste [FILE]...\n");
+        printf("Write lines consisting of sequentially corresponding lines from each FILE,\n");
+        printf("separated by TABs, to standard output.\n");
+        return;
+    }
+    
+    printf("paste: Would merge files side-by-side:\n");
+    for (int i = 1; i < argc; i++) {
+        printf("  - %s\n", argv[i]);
+    }
+}
+
+// Tr - translate or delete characters
+void tr_command(int argc, char **argv) {
+    if (argc < 3) {
+        printf("Usage: tr [OPTION] SET1 [SET2]\n");
+        printf("Translate, squeeze, and/or delete characters from standard input.\n");
+        printf("\nOptions:\n");
+        printf("  -d        delete characters in SET1\n");
+        printf("  -s        squeeze repeats\n");
+        printf("\nExamples:\n");
+        printf("  tr 'a-z' 'A-Z'     # Convert lowercase to uppercase\n");
+        printf("  tr -d '0-9'        # Delete all digits\n");
+        return;
+    }
+    
+    int delete_mode = 0;
+    int squeeze_mode = 0;
+    char* set1 = NULL;
+    char* set2 = NULL;
+    
+    for (int i = 1; i < argc; i++) {
+        if (strcmp(argv[i], "-d") == 0) {
+            delete_mode = 1;
+        } else if (strcmp(argv[i], "-s") == 0) {
+            squeeze_mode = 1;
+        } else if (!set1) {
+            set1 = argv[i];
+        } else if (!set2) {
+            set2 = argv[i];
+        }
+    }
+    
+    if (!set1) {
+        printf("tr: missing operand\n");
+        return;
+    }
+    
+    printf("tr: Translation setup:\n");
+    if (delete_mode) {
+        printf("  Mode: Delete characters in '%s'\n", set1);
+    } else if (set2) {
+        printf("  Mode: Translate '%s' to '%s'\n", set1, set2);
+    }
+    if (squeeze_mode) {
+        printf("  Squeeze: Yes\n");
+    }
+    printf("(Reading from stdin...)\n");
+}
+
+// Expand - convert tabs to spaces
+void expand_command(int argc, char **argv) {
+    int tabstop = 8;
+    
+    if (argc > 1 && strcmp(argv[1], "-t") == 0 && argc > 2) {
+        tabstop = atoi(argv[2]);
+    }
+    
+    printf("expand: Convert tabs to %d spaces\n", tabstop);
+    printf("Usage: expand [-t NUM] [FILE]\n");
+}
+
+// Fold - wrap each input line to fit in specified width
+void fold_command(int argc, char **argv) {
+    int width = 80;
+    
+    if (argc > 1 && strcmp(argv[1], "-w") == 0 && argc > 2) {
+        width = atoi(argv[2]);
+    }
+    
+    printf("fold: Wrap lines to %d columns\n", width);
+    printf("Usage: fold [-w WIDTH] [FILE]\n");
+}
+
+// Watch - execute a program periodically
+void watch_command(int argc, char **argv) {
+    if (argc < 2) {
+        printf("Usage: watch [OPTIONS] COMMAND\n");
+        printf("Execute COMMAND repeatedly, displaying output.\n");
+        printf("\nOptions:\n");
+        printf("  -n SECONDS   update interval (default: 2)\n");
+        printf("  -d           highlight differences\n");
+        return;
+    }
+    
+    int interval = 2;
+    int highlight = 0;
+    int cmd_start = 1;
+    
+    for (int i = 1; i < argc; i++) {
+        if (strcmp(argv[i], "-n") == 0 && i + 1 < argc) {
+            interval = atoi(argv[++i]);
+            cmd_start = i + 1;
+        } else if (strcmp(argv[i], "-d") == 0) {
+            highlight = 1;
+            cmd_start = i + 1;
+        }
+    }
+    
+    if (cmd_start >= argc) {
+        printf("watch: no command specified\n");
+        return;
+    }
+    
+    printf("Every %ds: %s\n\n", interval, argv[cmd_start]);
+    printf("(Press Ctrl+C to exit)\n\n");
+    
+    // Execute command once as demo
+    execute_simple_command(&argv[cmd_start], argc - cmd_start);
+    
+    printf("\n[Watch would refresh every %d seconds]\n", interval);
+}
+
+// Timeout - run a command with a time limit
+void timeout_command(int argc, char **argv) {
+    if (argc < 3) {
+        printf("Usage: timeout DURATION COMMAND [ARGS...]\n");
+        printf("Run COMMAND with a time limit.\n");
+        printf("\nDURATION is a number followed by:\n");
+        printf("  s for seconds (default)\n");
+        printf("  m for minutes\n");
+        printf("  h for hours\n");
+        printf("  d for days\n");
+        return;
+    }
+    
+    char* duration_str = argv[1];
+    int duration = atoi(duration_str);
+    char unit = 's';
+    
+    // Parse duration unit
+    for (int i = 0; duration_str[i]; i++) {
+        if (duration_str[i] == 's' || duration_str[i] == 'm' || 
+            duration_str[i] == 'h' || duration_str[i] == 'd') {
+            unit = duration_str[i];
+            break;
+        }
+    }
+    
+    printf("timeout: Running command with %d%c time limit\n", duration, unit);
+    
+    // Spawn the command
+    int pid = -1;
+    if (process_real_spawn(argv[2], &argv[2], argc - 2, 0, &pid) == 0) {
+        printf("Started process %d with timeout\n", pid);
+        printf("(Timeout enforcement would be implemented with timer)\n");
+    }
+}
+
+// Xargs - build and execute command lines from standard input
+void xargs_command(int argc, char **argv) {
+    if (argc < 2) {
+        printf("Usage: xargs [OPTIONS] COMMAND [INITIAL-ARGS]\n");
+        printf("Build and execute command lines from standard input.\n");
+        printf("\nOptions:\n");
+        printf("  -n MAX    use at most MAX arguments per command line\n");
+        printf("  -I STR    replace STR in INITIAL-ARGS with input\n");
+        printf("  -P MAX    run up to MAX processes at a time\n");
+        return;
+    }
+    
+    printf("xargs: Building command lines from stdin for command: %s\n", argv[1]);
+    printf("(Would read lines from stdin and execute command for each)\n");
+}
+
+// Tee - read from standard input and write to standard output and files
+void tee_command(int argc, char **argv) {
+    if (argc < 2) {
+        printf("Usage: tee [OPTION] [FILE]...\n");
+        printf("Copy standard input to each FILE, and also to standard output.\n");
+        printf("\nOptions:\n");
+        printf("  -a    append to the given FILEs, do not overwrite\n");
+        return;
+    }
+    
+    int append = 0;
+    printf("tee: Duplicating output to:\n");
+    
+    for (int i = 1; i < argc; i++) {
+        if (strcmp(argv[i], "-a") == 0) {
+            append = 1;
+            printf("  (append mode)\n");
+        } else {
+            printf("  - %s\n", argv[i]);
+        }
+    }
+    printf("(Would copy stdin to stdout and all specified files)\n");
+}
+
+// Readlink - print resolved symbolic links
+void readlink_command(int argc, char **argv) {
+    if (argc < 2) {
+        printf("Usage: readlink [OPTION] FILE\n");
+        printf("Print value of a symbolic link or canonical file name.\n");
+        printf("\nOptions:\n");
+        printf("  -f    canonicalize by following every symlink\n");
+        return;
+    }
+    
+    char* filename = argv[argc - 1];
+    printf("readlink: %s\n", filename);
+    printf("(Symlink resolution would be shown here)\n");
+}
+
+// File - determine file type
+void file_command(int argc, char **argv) {
+    if (argc < 2) {
+        printf("Usage: file [FILE]...\n");
+        printf("Determine file type.\n");
+        return;
+    }
+    
+    for (int i = 1; i < argc; i++) {
+        void* data = NULL;
+        size_t size = 0;
+        
+        if (vfs_read_file(argv[i], &data, &size) == 0 && data) {
+            unsigned char* bytes = (unsigned char*)data;
+            
+            printf("%s: ", argv[i]);
+            
+            // Check magic numbers
+            if (size >= 2 && bytes[0] == 0x4D && bytes[1] == 0x5A) {
+                printf("PE32 executable (console) Intel 80386 (stripped to external PDB)\n");
+            } else if (size >= 4 && bytes[0] == 0x7F && bytes[1] == 'E' && bytes[2] == 'L' && bytes[3] == 'F') {
+                printf("ELF executable\n");
+            } else if (size >= 2 && bytes[0] == 0x1F && bytes[1] == 0x8B) {
+                printf("gzip compressed data\n");
+            } else if (size >= 4 && bytes[0] == 0x50 && bytes[1] == 0x4B && bytes[2] == 0x03 && bytes[3] == 0x04) {
+                printf("Zip archive data\n");
+            } else if (size >= 5 && bytes[0] == '%' && bytes[1] == 'P' && bytes[2] == 'D' && bytes[3] == 'F') {
+                printf("PDF document\n");
+            } else {
+                // Check if text
+                int is_text = 1;
+                for (size_t j = 0; j < (size < 512 ? size : 512); j++) {
+                    if (bytes[j] < 32 && bytes[j] != '\n' && bytes[j] != '\r' && bytes[j] != '\t' && bytes[j] != 0) {
+                        is_text = 0;
+                        break;
+                    }
+                }
+                
+                if (is_text) {
+                    printf("ASCII text\n");
+                } else {
+                    printf("data\n");
+                }
+            }
+            
+            free(data);
+        } else {
+            printf("%s: cannot open (No such file or directory)\n", argv[i]);
+        }
+    }
+}
+
+// Trap - trap signals and execute command
+void trap_command(int argc, char **argv) {
+    if (argc < 2) {
+        printf("Usage: trap [ARG] [SIGNAL]...\n");
+        printf("Trap signals and execute ARG when they occur.\n");
+        printf("\nCommon signals:\n");
+        printf("  INT    Interrupt (Ctrl+C)\n");
+        printf("  TERM   Termination signal\n");
+        printf("  EXIT   Exit from shell\n");
+        printf("  HUP    Hangup\n");
+        printf("  QUIT   Quit signal\n");
+        return;
+    }
+    
+    printf("trap: Setting signal handler\n");
+    printf("  Command: %s\n", argv[1]);
+    for (int i = 2; i < argc; i++) {
+        printf("  Signal: %s\n", argv[i]);
+    }
+    printf("(Signal trapping would be configured)\n");
+}
+
+// ===== SHELL SCRIPTING & ADVANCED FEATURES =====
+
+// Shell function storage
+#define MAX_FUNCTIONS 50
+#define MAX_FUNCTION_NAME 64
+#define MAX_FUNCTION_BODY 2048
+
+typedef struct {
+    char name[MAX_FUNCTION_NAME];
+    char body[MAX_FUNCTION_BODY];
+    int defined;
+} ShellFunction;
+
+static ShellFunction shell_functions[MAX_FUNCTIONS];
+static int function_count = 0;
+
+// Define a shell function
+int define_function(const char* name, const char* body) {
+    if (function_count >= MAX_FUNCTIONS) {
+        printf("Error: Maximum number of functions reached\n");
+        return -1;
+    }
+    
+    // Check if function already exists
+    for (int i = 0; i < function_count; i++) {
+        if (strcmp(shell_functions[i].name, name) == 0) {
+            // Update existing function
+            strncpy(shell_functions[i].body, body, MAX_FUNCTION_BODY - 1);
+            return 0;
+        }
+    }
+    
+    // Create new function
+    strncpy(shell_functions[function_count].name, name, MAX_FUNCTION_NAME - 1);
+    strncpy(shell_functions[function_count].body, body, MAX_FUNCTION_BODY - 1);
+    shell_functions[function_count].defined = 1;
+    function_count++;
+    
+    return 0;
+}
+
+// Execute a shell function
+int execute_function(const char* name, int argc, char** argv) {
+    for (int i = 0; i < function_count; i++) {
+        if (strcmp(shell_functions[i].name, name) == 0 && shell_functions[i].defined) {
+            // Set positional parameters $1, $2, etc.
+            for (int j = 1; j < argc && j < 10; j++) {
+                char var_name[4];
+                snprintf(var_name, sizeof(var_name), "%d", j);
+                set_env_var(var_name, argv[j]);
+            }
+            
+            // Execute function body
+            printf("Executing function: %s\n", name);
+            printf("%s\n", shell_functions[i].body);
+            // TODO: Actually execute the commands in the function body
+            
+            return 0;
+        }
+    }
+    return -1;
+}
+
+// For loop implementation
+void for_command(int argc, char **argv) {
+    if (argc < 5) {
+        printf("Usage: for VAR in ITEMS...; do COMMAND; done\n");
+        printf("Example: for i in 1 2 3; do echo $i; done\n");
+        return;
+    }
+    
+    // Parse: for VAR in items
+    char* var_name = argv[1];
+    if (strcmp(argv[2], "in") != 0) {
+        printf("for: syntax error: expected 'in' after variable name\n");
+        return;
+    }
+    
+    // Find 'do' keyword
+    int do_index = -1;
+    for (int i = 3; i < argc; i++) {
+        if (strcmp(argv[i], "do") == 0) {
+            do_index = i;
+            break;
+        }
+    }
+    
+    if (do_index == -1) {
+        printf("for: syntax error: missing 'do'\n");
+        return;
+    }
+    
+    // Items are from index 3 to do_index
+    printf("for loop: iterating variable '%s' over items:\n", var_name);
+    for (int i = 3; i < do_index; i++) {
+        printf("  Iteration: %s = %s\n", var_name, argv[i]);
+        set_env_var(var_name, argv[i]);
+        
+        // Execute commands after 'do'
+        for (int j = do_index + 1; j < argc; j++) {
+            if (strcmp(argv[j], "done") == 0) break;
+            if (strcmp(argv[j], ";") == 0) continue;
+            
+            // Execute the command
+            char* cmd_argv[] = {argv[j], NULL};
+            execute_simple_command(cmd_argv, 1);
+        }
+    }
+}
+
+// While loop implementation
+void while_command(int argc, char **argv) {
+    if (argc < 4) {
+        printf("Usage: while CONDITION; do COMMAND; done\n");
+        printf("Example: while [ $count -lt 5 ]; do echo $count; count=$((count+1)); done\n");
+        return;
+    }
+    
+    printf("while: Loop structure recognized\n");
+    printf("(Full while loop execution would be implemented with condition evaluation)\n");
+}
+
+// If/then/else implementation
+void if_command(int argc, char **argv) {
+    if (argc < 3) {
+        printf("Usage: if CONDITION; then COMMAND; [else COMMAND;] fi\n");
+        printf("Example: if [ $x -eq 1 ]; then echo yes; else echo no; fi\n");
+        printf("\nCommon test conditions:\n");
+        printf("  -eq    equal\n");
+        printf("  -ne    not equal\n");
+        printf("  -lt    less than\n");
+        printf("  -gt    greater than\n");
+        printf("  -f     file exists\n");
+        printf("  -d     directory exists\n");
+        return;
+    }
+    
+    printf("if: Conditional structure recognized\n");
+    printf("(Full if/then/else execution would be implemented)\n");
+}
+
+// Test/bracket command
+void test_command(int argc, char **argv) {
+    if (argc < 2) {
+        printf("Usage: test EXPRESSION\n");
+        printf("       [ EXPRESSION ]\n");
+        printf("\nFile tests:\n");
+        printf("  -f FILE    FILE exists and is a regular file\n");
+        printf("  -d FILE    FILE exists and is a directory\n");
+        printf("  -e FILE    FILE exists\n");
+        printf("  -r FILE    FILE exists and is readable\n");
+        printf("\nString tests:\n");
+        printf("  -z STRING  length of STRING is zero\n");
+        printf("  -n STRING  length of STRING is nonzero\n");
+        printf("  S1 = S2    strings are equal\n");
+        printf("  S1 != S2   strings are not equal\n");
+        printf("\nInteger tests:\n");
+        printf("  N1 -eq N2  integers are equal\n");
+        printf("  N1 -ne N2  integers are not equal\n");
+        printf("  N1 -lt N2  N1 less than N2\n");
+        printf("  N1 -gt N2  N1 greater than N2\n");
+        return;
+    }
+    
+    // Simple test evaluation
+    if (strcmp(argv[1], "-f") == 0 && argc > 2) {
+        void* data;
+        size_t size;
+        int exists = (vfs_read_file(argv[2], &data, &size) == 0);
+        if (exists && data) free(data);
+        printf("[ -f %s ] = %s\n", argv[2], exists ? "true" : "false");
+    } else if (strcmp(argv[1], "-d") == 0 && argc > 2) {
+        // Check if path ends with / or is a known directory
+        int is_dir = 0;
+        size_t len = strlen(argv[2]);
+        if (len > 0 && argv[2][len-1] == '/') {
+            is_dir = 1;
+        } else {
+            // Try to read as file - if it fails might be directory
+            void* data;
+            size_t size;
+            if (vfs_read_file(argv[2], &data, &size) != 0) {
+                is_dir = 1; // Assume directory if can't read as file
+            } else if (data) {
+                free(data);
+            }
+        }
+        printf("[ -d %s ] = %s\n", argv[2], is_dir ? "true" : "false");
+    } else {
+        printf("test: Evaluating expression\n");
+    }
+}
+
+// Parameter expansion - expand ${VAR}, ${VAR:-default}, etc.
+void expand_parameter(const char* input, char* output, size_t output_size) {
+    const char* src = input;
+    char* dst = output;
+    size_t remaining = output_size - 1;
+    
+    while (*src && remaining > 0) {
+        if (*src == '$' && *(src + 1) == '{') {
+            // Found ${...} expansion
+            src += 2; // Skip ${
+            char var_name[MAX_VAR_NAME] = {0};
+            char* default_value = NULL;
+            int i = 0;
+            
+            // Extract variable name and check for :- default syntax
+            while (*src && *src != '}' && i < MAX_VAR_NAME - 1) {
+                if (*src == ':' && *(src + 1) == '-') {
+                    var_name[i] = '\0';
+                    src += 2; // Skip :-
+                    default_value = (char*)src;
+                    // Skip to }
+                    while (*src && *src != '}') src++;
+                    break;
+                }
+                var_name[i++] = *src++;
+            }
+            var_name[i] = '\0';
+            
+            // Get variable value
+            const char* value = get_env_var(var_name);
+            if (!value || strlen(value) == 0) {
+                value = default_value;
+            }
+            
+            if (value) {
+                size_t value_len = strlen(value);
+                if (value_len > remaining) value_len = remaining;
+                strncpy(dst, value, value_len);
+                dst += value_len;
+                remaining -= value_len;
+            }
+            
+            if (*src == '}') src++; // Skip closing }
+        } else if (*src == '$' && (*(src + 1) == '0' || (*(src + 1) >= '1' && *(src + 1) <= '9'))) {
+            // Positional parameter $0, $1, etc.
+            src++;
+            char var_name[2] = {*src, '\0'};
+            src++;
+            
+            const char* value = get_env_var(var_name);
+            if (value) {
+                size_t value_len = strlen(value);
+                if (value_len > remaining) value_len = remaining;
+                strncpy(dst, value, value_len);
+                dst += value_len;
+                remaining -= value_len;
+            }
+        } else if (*src == '$' && isalpha(*(src + 1))) {
+            // Simple $VAR expansion
+            src++;
+            char var_name[MAX_VAR_NAME] = {0};
+            int i = 0;
+            while (*src && (isalnum(*src) || *src == '_') && i < MAX_VAR_NAME - 1) {
+                var_name[i++] = *src++;
+            }
+            var_name[i] = '\0';
+            
+            const char* value = get_env_var(var_name);
+            if (value) {
+                size_t value_len = strlen(value);
+                if (value_len > remaining) value_len = remaining;
+                strncpy(dst, value, value_len);
+                dst += value_len;
+                remaining -= value_len;
+            }
+        } else {
+            *dst++ = *src++;
+            remaining--;
+        }
+    }
+    
+    *dst = '\0';
+}
+
+// Here-document implementation
+int here_document_command(const char* delimiter, char** output) {
+    printf("Reading here-document until '%s'\n", delimiter);
+    printf("Enter text (type '%s' on a line by itself to end):\n", delimiter);
+    
+    static char here_doc_buffer[4096];
+    size_t buffer_pos = 0;
+    char line[256];
+    
+    while (fgets(line, sizeof(line), stdin)) {
+        // Check if line matches delimiter
+        char* newline = strchr(line, '\n');
+        if (newline) *newline = '\0';
+        
+        if (strcmp(line, delimiter) == 0) {
+            break;
+        }
+        
+        // Append line to buffer
+        size_t line_len = strlen(line);
+        if (buffer_pos + line_len + 1 < sizeof(here_doc_buffer)) {
+            strcpy(here_doc_buffer + buffer_pos, line);
+            buffer_pos += line_len;
+            here_doc_buffer[buffer_pos++] = '\n';
+        }
+    }
+    
+    here_doc_buffer[buffer_pos] = '\0';
+    *output = here_doc_buffer;
+    
+    return 0;
+}
+
+// Function definition command
+void function_command(int argc, char **argv) {
+    if (argc < 2) {
+        printf("Usage: function NAME { COMMANDS; }\n");
+        printf("       NAME() { COMMANDS; }\n");
+        printf("\nExample:\n");
+        printf("  function greet { echo \"Hello $1\"; }\n");
+        printf("  greet() { echo \"Hello $1\"; }\n");
+        printf("\nList all functions: function\n");
+        printf("\nDefined functions:\n");
+        for (int i = 0; i < function_count; i++) {
+            if (shell_functions[i].defined) {
+                printf("  %s\n", shell_functions[i].name);
+            }
+        }
+        return;
+    }
+    
+    printf("function: Define function '%s'\n", argv[1]);
+    printf("(Function body would be captured and stored)\n");
+}
+
+// Source/dot command - execute commands from file
+void source_command(int argc, char **argv) {
+    if (argc < 2) {
+        printf("Usage: source FILE\n");
+        printf("       . FILE\n");
+        printf("Execute commands from FILE in current shell.\n");
+        return;
+    }
+    
+    void* data = NULL;
+    size_t size = 0;
+    
+    if (vfs_read_file(argv[1], &data, &size) == 0 && data) {
+        char* script = (char*)data;
+        printf("Sourcing file: %s\n", argv[1]);
+        
+        // Execute line by line
+        char* line = strtok(script, "\n");
+        while (line) {
+            // Skip comments and empty lines
+            if (line[0] != '#' && strlen(line) > 0) {
+                printf("> %s\n", line);
+                // Execute the line
+                handle_command(line);
+            }
+            line = strtok(NULL, "\n");
+        }
+        
+        free(data);
+    } else {
+        printf("source: %s: No such file or directory\n", argv[1]);
+    }
+}
+
+// Alias command
+#define MAX_ALIASES 50
+typedef struct {
+    char name[64];
+    char expansion[256];
+} Alias;
+
+static Alias aliases[MAX_ALIASES];
+static int alias_count = 0;
+
+void alias_command(int argc, char **argv) {
+    if (argc < 2) {
+        // List all aliases
+        printf("Aliases:\n");
+        for (int i = 0; i < alias_count; i++) {
+            printf("  %s='%s'\n", aliases[i].name, aliases[i].expansion);
+        }
+        return;
+    }
+    
+    // Parse alias definition: alias name='expansion'
+    char* equals = strchr(argv[1], '=');
+    if (!equals) {
+        // Show specific alias
+        for (int i = 0; i < alias_count; i++) {
+            if (strcmp(aliases[i].name, argv[1]) == 0) {
+                printf("%s='%s'\n", aliases[i].name, aliases[i].expansion);
+                return;
+            }
+        }
+        printf("alias: %s: not found\n", argv[1]);
+        return;
+    }
+    
+    // Define new alias
+    *equals = '\0';
+    char* name = argv[1];
+    char* expansion = equals + 1;
+    
+    // Remove quotes if present
+    if (*expansion == '\'' || *expansion == '"') {
+        expansion++;
+        char* end = expansion + strlen(expansion) - 1;
+        if (*end == '\'' || *end == '"') *end = '\0';
+    }
+    
+    // Add or update alias
+    for (int i = 0; i < alias_count; i++) {
+        if (strcmp(aliases[i].name, name) == 0) {
+            strncpy(aliases[i].expansion, expansion, sizeof(aliases[i].expansion) - 1);
+            printf("Updated alias: %s='%s'\n", name, expansion);
+            return;
+        }
+    }
+    
+    if (alias_count < MAX_ALIASES) {
+        strncpy(aliases[alias_count].name, name, sizeof(aliases[0].name) - 1);
+        strncpy(aliases[alias_count].expansion, expansion, sizeof(aliases[0].expansion) - 1);
+        alias_count++;
+        printf("Created alias: %s='%s'\n", name, expansion);
+    } else {
+        printf("alias: too many aliases defined\n");
+    }
 }

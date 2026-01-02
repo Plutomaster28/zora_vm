@@ -2,8 +2,6 @@
 #include "meisei/virtual_silicon.h"
 #include "sandbox.h"
 #include "lua/lua_vm.h"
-#include "python/python_vm.h" 
-#include "perl/perl_vm.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>

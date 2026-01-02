@@ -1,7 +1,7 @@
 # Zora VM - **Complete Unix/Linux Shell** - 80+ commands working perfectly  
  **Beautiful User Interface** - Categorized help system with Unicode styling  
  **Pipeline Operations** - Full command chaining and redirection  
- **Multi-language Support** - Python, Lua, and Perl interpreters  
+ **Lua Scripting** - Full Lua 5.4.6 VM with sandboxed APIs  
  **Virtual File System** - Persistent storage with Unix permissions  
  **Network Simulation** - Complete virtual networking stack  
  **Sandbox Security** - Isolated execution environment  
@@ -29,7 +29,7 @@
  **Complete Unix/Linux Shell** - 80+ commands working perfectly  
  **Beautiful User Interface** - Categorized help system with Unicode styling  
  **Pipeline Operations** - Full command chaining and redirection  
- **Multi-language Support** - Python, Lua, and Perl interpreters  
+ **Lua Scripting** - Full Lua 5.4.6 VM with sandboxed APIs  
  **Virtual File System** - Persistent storage with Unix permissions  
  **Network Simulation** - Complete virtual networking stack  
  **Sandbox Security** - Isolated execution environment  
@@ -82,7 +82,7 @@ Zora VM is a **standalone virtual machine environment** that provides:
 
 - **Complete Unix/Linux command compatibility** on Windows
 - **Isolated sandbox environment** for safe code execution
-- **Multi-language scripting support** (Python, Lua, Perl)
+- **Lua 5.4.6 scripting** with sandboxed VM APIs
 - **Virtual file system** with persistent storage
 - **Network simulation** with security features
 - **Desktop environment** with theming support
@@ -95,7 +95,7 @@ Zora VM is a **standalone virtual machine environment** that provides:
 - **Pipeline Operations**: Full support for command chaining (`|`), redirection (`>`, `<`, `>>`), and logical operators
 - **Command Documentation**: Every command includes comprehensive `--help` documentation with examples
 - **Windows-Native**: Runs natively on Windows with no external dependencies after build
-- **Multi-language Scripting**: Built-in Python, Lua, and Perl interpreters with security restrictions
+- **Multi-language Scripting**: Full Lua 5.4.6 interpreter with sandboxed VFS, VM, and system APIs
 - **Virtual File System**: Complete filesystem with Unix-style permissions and persistent storage
 - **Network Stack**: Virtual networking with NAT, DNS, firewall simulation, and security features
 - **Process Management**: Background jobs, process monitoring, signals, and complete process control
@@ -305,8 +305,8 @@ grep "hello" hello.txt
 
 ### 3. Running Scripts
 ```bash
-# Run a Python script
-python /scripts/example.py
+# Run a Lua script
+lua /scripts/example.lua
 
 # Execute Lua code directly
 luacode "print('Hello from Lua!')"
@@ -367,9 +367,6 @@ A: Check available RAM. VM requires minimum 2GB free memory for optimal performa
 **Q: Network commands don't work**
 A: Network features are simulated for security. They demonstrate functionality without actual network access.
 
-**Q: Python/Lua scripts fail**
-A: Ensure scripts are placed in `/scripts/` directory and have proper syntax.
-
 **Q: Colors don't show properly**
 A: Ensure your terminal supports ANSI escape sequences. On Windows 10+, this should work automatically.
 
@@ -394,8 +391,8 @@ cat /var/log/zora_vm.log
 ├─────────────────────────────────────┤
 │    Command Parser & Dispatcher     │
 ├─────────────────────────────────────┤
-│  Python │  Lua  │  Perl │ Binary   │
-│   VM    │  VM   │  VM   │ Executor │
+│   Lua VM  │ Binary  │ Compilers    │
+│  (5.4.6)  │Executor │ (C/ASM/F77)  │
 ├─────────────────────────────────────┤
 │         Virtual File System        │
 ├─────────────────────────────────────┤

@@ -8,8 +8,6 @@ set(CMAKE_C_STANDARD_REQUIRED ON)
 option(ZORA_VERBOSE_BOOT "Enable verbose boot messages and debug output" OFF)
 option(ZORA_RELEASE_MODE "Enable clean release mode startup (minimal messages)" ON)
 option(ENABLE_LUA_SCRIPTING "Enable Lua scripting support" ON)
-option(ENABLE_PYTHON_SCRIPTING "Enable Python scripting support" ON)
-option(ENABLE_PERL_SCRIPTING "Enable Perl scripting support" ON)
 
 # Set preprocessor definitions based on build options
 if(ZORA_VERBOSE_BOOT)
@@ -32,20 +30,6 @@ if(ENABLE_LUA_SCRIPTING)
     message(STATUS "Lua scripting enabled")
 else()
     message(STATUS "Lua scripting disabled")
-endif()
-
-if(ENABLE_PYTHON_SCRIPTING)
-    add_definitions(-DPYTHON_SCRIPTING=1)
-    message(STATUS "Python scripting enabled")
-else()
-    message(STATUS "Python scripting disabled")
-endif()
-
-if(ENABLE_PERL_SCRIPTING)
-    add_definitions(-DPERL_SCRIPTING=1)
-    message(STATUS "Perl scripting enabled")
-else()
-    message(STATUS "Perl scripting disabled")
 endif()
 
 # Windows-only build (including MSYS2/MinGW environments)
@@ -138,8 +122,9 @@ endif()
 # Include directories
 include_directories(include include/platform include/binary include/merl include/vfs 
                    include/syscall include/virtualization include/network include/lua 
-                   include/python include/perl include/meisei include/sandbox
-                   include/terminal include/unix_core include/package
+                   include/meisei include/sandbox
+                   include/terminal include/unix_core include/package include/system
+                   include/editors include/scripting include/kernel
                    MERL ${LUA_INCLUDE_DIR})
 
 # Source files - simple and direct
@@ -156,6 +141,12 @@ set(SOURCES
     src/kernel/system_monitor.c
     src/kernel/init.c
     src/kernel/java_detector.c
+    src/kernel/privilege.c
+    src/kernel/scheduler.c
+    src/kernel/mmu.c
+    src/kernel/interrupts.c
+    src/kernel/syscall_table.c
+    src/kernel/network_stack.c
     
     # Binary execution
     src/binary/binary_executor.c
@@ -196,11 +187,20 @@ set(SOURCES
     src/unix_core/unix_games_snake.c
     src/unix_core/unix_games_hangman.c
     
+    # System utilities and management
+    src/system/process.c
+    src/system/process_real.c
+    src/system/disk.c
+    
+    # Text editor
+    src/editors/zora_editor.c
+    
     # MERL shell
     MERL/color-and-test.c
     MERL/crash.c
     MERL/kernel.c
     MERL/shell.c
+    MERL/system_commands.c
     # MERL/shell_script.c  # Temporarily disabled
     MERL/tetra.c
     MERL/user.c
@@ -210,17 +210,7 @@ set(SOURCES
     resources.rc
 )
 
-# Conditionally add Python support
-if(ENABLE_PYTHON_SCRIPTING)
-    list(APPEND SOURCES src/python/python_vm.c)
-    message(STATUS "Python VM source added to build")
-endif()
 
-# Conditionally add Perl support  
-if(ENABLE_PERL_SCRIPTING)
-    list(APPEND SOURCES src/perl/perl_vm.c)
-    message(STATUS "Perl VM source added to build")
-endif()
 
 # Create executable
 add_executable(zora_vm ${SOURCES})

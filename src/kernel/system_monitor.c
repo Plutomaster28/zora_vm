@@ -4,6 +4,7 @@
 #include <time.h>
 #include <windows.h>
 #include "kernel.h"
+#include "kernel/network_stack.h"
 #include "terminal/terminal_detector.h"
 #include "version.h"  // Auto-versioning system
 
@@ -294,19 +295,75 @@ void system_monitor_display_filesystems(void) {
 }
 
 void system_monitor_display_network_status(void) {
+    // Get real network statistics
+    NetworkStats* stats = netstack_get_stats();
+    
     printf("╔══════════════════════════════════════════════════════════════════════════════╗\n");
     printf("║                              Network Interfaces                             ║\n");
-    printf("╠════════════╤══════════════╤═══════════╤════════════╤═════════════╤══════════╣\n");
-    printf("║ Interface  │ IP Address   │ Status    │ RX Bytes   │ TX Bytes    │ MTU      ║\n");
-    printf("╠════════════╪══════════════╪═══════════╪════════════╪═════════════╪══════════╣\n");
-    printf("║ lo         │ 127.0.0.1    │ UP        │ 2.1K       │ 2.1K        │ 65536    ║\n");
-    printf("║ veth0      │ 10.0.2.15    │ UP        │ 15.2M      │ 8.4M        │ 1500     ║\n");
-    printf("║ vnet0      │ 192.168.1.10 │ UP        │ 45.8K      │ 23.1K       │ 1500     ║\n");
-    printf("╚════════════╧══════════════╧═══════════╧════════════╧═════════════╧══════════╝\n");
+    printf("╠════════════╤══════════════════╤═══════════╤════════════╤═════════════╤══════╣\n");
+    printf("║ Interface  │ IP Address       │ Status    │ RX Bytes   │ TX Bytes    │ MTU  ║\n");
+    printf("╠════════════╪══════════════════╪═══════════╪════════════╪═════════════╪══════╣\n");
     
-    printf("\nNetwork Configuration:\n");
-    printf("• Gateway: 10.0.2.1\n");
-    printf("• DNS: 8.8.8.8, 8.8.4.4\n");
-    printf("• Hostname: zora-vm\n");
-    printf("• Domain: local\n");
+    // Display real interfaces from network stack
+    for (int i = 0; i < 8; i++) {
+        NetworkInterface* iface = netstack_get_interface(i);
+        if (!iface || iface->name[0] == '\0') break;
+        
+        char ip_str[16];
+        netstack_format_ipv4(&iface->ip, ip_str, sizeof(ip_str));
+        
+        const char* status = (iface->flags & 0x1) ? "UP" : "DOWN";
+        
+        // Format bytes (K, M, G)
+        char rx_str[16], tx_str[16];
+        if (iface->rx_bytes < 1024) {
+            snprintf(rx_str, sizeof(rx_str), "%lluB", (unsigned long long)iface->rx_bytes);
+        } else if (iface->rx_bytes < 1024*1024) {
+            snprintf(rx_str, sizeof(rx_str), "%.1fK", iface->rx_bytes / 1024.0);
+        } else if (iface->rx_bytes < 1024*1024*1024) {
+            snprintf(rx_str, sizeof(rx_str), "%.1fM", iface->rx_bytes / (1024.0*1024.0));
+        } else {
+            snprintf(rx_str, sizeof(rx_str), "%.1fG", iface->rx_bytes / (1024.0*1024.0*1024.0));
+        }
+        
+        if (iface->tx_bytes < 1024) {
+            snprintf(tx_str, sizeof(tx_str), "%lluB", (unsigned long long)iface->tx_bytes);
+        } else if (iface->tx_bytes < 1024*1024) {
+            snprintf(tx_str, sizeof(tx_str), "%.1fK", iface->tx_bytes / 1024.0);
+        } else if (iface->tx_bytes < 1024*1024*1024) {
+            snprintf(tx_str, sizeof(tx_str), "%.1fM", iface->tx_bytes / (1024.0*1024.0));
+        } else {
+            snprintf(tx_str, sizeof(tx_str), "%.1fG", iface->tx_bytes / (1024.0*1024.0*1024.0));
+        }
+        
+        printf("║ %-10s │ %-16s │ %-9s │ %-10s │ %-11s │ %-4d ║\n",
+               iface->name, ip_str, status, rx_str, tx_str, iface->mtu);
+    }
+    
+    printf("╚════════════╧══════════════════╧═══════════╧════════════╧═════════════╧══════╝\n");
+    
+    // Display real gateway info
+    NetworkInterface* eth0 = netstack_get_interface(1);
+    if (eth0) {
+        char gw_str[16];
+        netstack_format_ipv4(&eth0->gateway, gw_str, sizeof(gw_str));
+        
+        printf("\nNetwork Configuration:\n");
+        printf("• Gateway: %s\n", gw_str);
+        printf("• DNS: 8.8.8.8, 8.8.4.4\n");
+        printf("• Hostname: zora-vm\n");
+        printf("• Domain: local\n");
+        
+        printf("\nNetwork Statistics:\n");
+        printf("• Packets sent:     %llu\n", (unsigned long long)stats->packets_sent);
+        printf("• Packets received: %llu\n", (unsigned long long)stats->packets_received);
+        printf("• Bytes sent:       %llu\n", (unsigned long long)stats->bytes_sent);
+        printf("• Bytes received:   %llu\n", (unsigned long long)stats->bytes_received);
+        printf("• TCP connections:  %llu\n", (unsigned long long)stats->tcp_connections);
+        printf("• UDP datagrams:    %llu\n", (unsigned long long)stats->udp_datagrams);
+        printf("• ICMP messages:    %llu\n", (unsigned long long)stats->icmp_messages);
+        printf("• Errors:           %llu\n", (unsigned long long)stats->errors);
+        printf("• Packets dropped:  %llu\n", (unsigned long long)stats->packets_dropped);
+    }
 }
+

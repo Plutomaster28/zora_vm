@@ -4,6 +4,7 @@
 #include "syscall.h"
 #include "vfs/vfs.h"
 #include "sandbox.h"
+#include "kernel/syscall_table.h"
 
 // Blocked system calls when sandboxed
 static const char* blocked_syscalls[] = {
@@ -24,6 +25,9 @@ int syscall_init(void) {
     if (syscall_initialized) {
         return 0;
     }
+    
+    // Initialize syscall dispatch table
+    syscall_table_init();
     
 #if ZORA_VERBOSE_BOOT
     printf("System call interception initialized\n");

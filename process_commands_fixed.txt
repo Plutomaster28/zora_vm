@@ -1,0 +1,178 @@
+// ===== REAL PROCESS MANAGEMENT COMMANDS =====
+
+void ps_command(int argc, char **argv) {
+    int show_all = 0;
+    
+    // Parse options
+    for (int i = 1; i < argc; i++) {
+        if (strcmp(argv[i], "-a") == 0 || strcmp(argv[i], "aux") == 0) {
+            show_all = 1;
+        }
+    }
+    
+    printf("%-6s %-8s %-6s %-8s %-10s %-8s %-12s %-30s\n", 
+           "PID", "USER", "%CPU", "%MEM", "VSZ", "RSS", "STATE", "COMMAND");
+    printf("------------------------------------------------------------------------------\n");
+    
+    RealProcess** procs = NULL;
+    int count = process_real_list(&procs);
+    
+    for (int i = 0; i < count; i++) {
+        if (!procs[i]) continue;
+        
+        // Update stats
+        process_real_update_stats(procs[i]->pid);
+        
+        const char* state_str = "?";
+        switch(procs[i]->state) {
+            case PROC_RUNNING: state_str = "R"; break;
+            case PROC_SLEEPING: state_str = "S"; break;
+            case PROC_STOPPED: state_str = "T"; break;
+            case PROC_ZOMBIE: state_str = "Z"; break;
+        }
+        
+        printf("%-6d %-8s %-6.1f %-8.1f %-10llu %-8llu %-12s %-30s\n",
+               procs[i]->pid,
+               "guest",
+               procs[i]->cpu_percent,
+               (procs[i]->memory_used / 1024.0 / 1024.0),
+               procs[i]->memory_used / 1024,  // VSZ in KB
+               procs[i]->memory_used / 1024,  // RSS in KB (same for now)
+               state_str,
+               procs[i]->name ? procs[i]->name : "<unknown>");
+    }
+}
+
+void kill_command(int argc, char **argv) {
+    if (argc < 2) {
+        printf("Usage: kill [-signal] <pid>\n");
+        printf("Signals: SIGTERM (default), SIGKILL (-9), SIGSTOP, SIGCONT\n");
+        return;
+    }
+    
+    int signal = SIGTERM;
+    int pid_arg = 1;
+    
+    // Parse signal
+    if (argc >= 3 && argv[1][0] == '-') {
+        if (strcmp(argv[1], "-9") == 0 || strcmp(argv[1], "-KILL") == 0) {
+            signal = SIGKILL;
+        } else if (strcmp(argv[1], "-STOP") == 0) {
+            signal = SIGSTOP;
+        } else if (strcmp(argv[1], "-CONT") == 0) {
+            signal = SIGCONT;
+        } else if (strcmp(argv[1], "-TERM") == 0) {
+            signal = SIGTERM;
+        }
+        pid_arg = 2;
+    }
+    
+    int pid = atoi(argv[pid_arg]);
+    if (pid <= 0) {
+        printf("Invalid PID: %s\n", argv[pid_arg]);
+        return;
+    }
+    
+    int result = process_real_kill(pid, signal);
+    if (result == 0) {
+        printf("Process %d terminated\n", pid);
+    } else {
+        printf("Failed to kill process %d\n", pid);
+    }
+}
+
+void jobs_command(int argc, char **argv) {
+    int count = job_get_count();
+    if (count == 0) {
+        printf("No background jobs\n");
+        return;
+    }
+    
+    printf("Job ID   PID      Status    Command\n");
+    printf("--------------------------------------\n");
+    
+    for (int i = 1; i <= count; i++) {
+        BackgroundJob* job = job_get_by_id(i);
+        if (job) {
+            const char* status = job->is_stopped ? "Stopped" : "Running";
+            printf("[%d]%c     %-8d %-10s %s\n",
+                   job->job_id,
+                   (i == count) ? '+' : ' ',
+                   job->pid,
+                   status,
+                   job->command ? job->command : "<unknown>");
+        }
+    }
+}
+
+void fg_command(int argc, char **argv) {
+    if (argc < 2) {
+        // Default to most recent job
+        int count = job_get_count();
+        if (count == 0) {
+            printf("No background jobs\n");
+            return;
+        }
+        
+        int result = job_foreground(count);
+        if (result == 0) {
+            BackgroundJob* job = job_get_by_id(count);
+            if (job) {
+                printf("%s\n", job->command ? job->command : "<unknown>");
+                int exit_code;
+                process_real_wait(job->pid, &exit_code);
+                printf("Process exited with code %d\n", exit_code);
+            }
+        }
+        return;
+    }
+    
+    // Parse job ID (handle %N format)
+    int job_id;
+    if (argv[1][0] == '%') {
+        job_id = atoi(argv[1] + 1);
+    } else {
+        job_id = atoi(argv[1]);
+    }
+    
+    int result = job_foreground(job_id);
+    if (result == 0) {
+        BackgroundJob* job = job_get_by_id(job_id);
+        if (job) {
+            printf("%s\n", job->command ? job->command : "<unknown>");
+            int exit_code;
+            process_real_wait(job->pid, &exit_code);
+            printf("Process exited with code %d\n", exit_code);
+        }
+    } else {
+        printf("Failed to foreground job %d\n", job_id);
+    }
+}
+
+void bg_command(int argc, char **argv) {
+    if (argc < 2) {
+        printf("Usage: bg <job_id>\n");
+        printf("Use 'jobs' to list background jobs\n");
+        return;
+    }
+    
+    // Parse job ID (handle %N format)
+    int job_id;
+    if (argv[1][0] == '%') {
+        job_id = atoi(argv[1] + 1);
+    } else {
+        job_id = atoi(argv[1]);
+    }
+    
+    int result = job_background(job_id);
+    if (result == 0) {
+        BackgroundJob* job = job_get_by_id(job_id);
+        if (job) {
+            printf("[%d]+ %s &\n", job_id, job->command ? job->command : "<unknown>");
+        }
+    } else {
+        printf("Failed to background job %d\n", job_id);
+    }
+}
+
+// ===== END REAL PROCESS MANAGEMENT COMMANDS =====

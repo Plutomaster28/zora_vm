@@ -10,6 +10,11 @@
 #include "device.h"
 #include "version.h"  // Auto-versioning system
 #include "../../include/kernel/java_detector.h"
+#include "kernel/privilege.h"
+#include "kernel/scheduler.h"
+#include "kernel/mmu.h"
+#include "kernel/interrupts.h"
+#include "kernel/network_stack.h"
 
 // Global kernel state
 static KernelState g_kernel_state = KERNEL_STATE_INITIALIZING;
@@ -49,7 +54,7 @@ static void kernel_display_boot_splash(void) {
     }
     
     printf("[KERNEL]  Boot sequence initiating...\n");
-    printf("[KERNEL] ⚠️  WARNING: Automatic Java detection enabled!\n");
+    printf("[KERNEL]  WARNING: Automatic Java detection enabled!\n");
     printf("[KERNEL]  System will PANIC if Java contamination is detected!\n");
 }
 
@@ -136,6 +141,12 @@ int kernel_init_memory_manager(void) {
 int kernel_init_scheduler(void) {
     kernel_log("SCHED", "Initializing process scheduler...");
     
+    // Initialize real scheduler
+    if (scheduler_init() != 0) {
+        kernel_error("Failed to initialize scheduler");
+        return -1;
+    }
+    
     // Initialize scheduler data structures
     g_kernel_stats.process_count = 1; // Kernel process
     g_kernel_stats.thread_count = 1;  // Main kernel thread
@@ -178,8 +189,14 @@ int kernel_init_network_stack(void) {
     }
     
     kernel_log("NET", "Initializing network stack...");
-    // Network stack initialization would go here
-    kernel_log("NET", "Network stack ready");
+    
+    // Initialize real network stack
+    if (netstack_init() != 0) {
+        kernel_error("Failed to initialize network stack");
+        return -1;
+    }
+    
+    kernel_log("NET", "Network stack ready - interfaces: lo (127.0.0.1), zora0 (10.0.2.15)");
     return 0;
 }
 
@@ -203,6 +220,25 @@ int kernel_early_init(uint32_t boot_flags) {
 int kernel_late_init(void) {
     kernel_log("INIT", "Starting late initialization phase...");
     
+    // Initialize privilege system
+    kernel_log("INIT", "Initializing privilege system...");
+    privilege_init();
+    
+    // Initialize MMU and paging - TEMPORARILY DISABLED FOR TESTING
+    kernel_log("INIT", "Skipping MMU initialization (temporary)...");
+    //if (mmu_init() != 0) {
+    //    kernel_error("Failed to initialize MMU");
+    //    return -1;
+    //}
+    //mmu_enable_paging();
+    
+    // Initialize interrupt system
+    kernel_log("INIT", "Initializing interrupt system...");
+    if (interrupts_init() != 0) {
+        kernel_error("Failed to initialize interrupts");
+        return -1;
+    }
+    
     // Initialize all major subsystems
     if (kernel_init_memory_manager() != 0) return -1;
     if (kernel_init_scheduler() != 0) return -1;
@@ -216,6 +252,14 @@ int kernel_late_init(void) {
         return -1;
     }
     
+    // Start scheduler
+    kernel_log("INIT", "Starting scheduler...");
+    scheduler_start();
+    
+    // Enable interrupts
+    kernel_log("INIT", "Enabling interrupts...");
+    interrupts_enable();
+    
     kernel_log("INIT", "Late initialization completed successfully");
     return 0;
 }
@@ -226,15 +270,15 @@ void kernel_timer_tick(void) {
     g_kernel_stats.uptime_ticks = g_tick_counter;
     LeaveCriticalSection(&g_kernel_lock);
     
-    // Trigger scheduler every 10ms
-    if (g_tick_counter % 10 == 0) {
-        kernel_schedule();
-    }
+    // Trigger scheduler tick
+    scheduler_tick();
 }
 
 void kernel_schedule(void) {
     g_kernel_stats.context_switches++;
-    // Actual scheduling logic would go here
+    
+    // Call real scheduler
+    scheduler_schedule();
 }
 
 uint64_t kernel_get_tick_count(void) {
